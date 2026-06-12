@@ -9,6 +9,7 @@ from pydantic import Field
 from uniprot_link.mcp.annotations import READ_ONLY_OPEN_WORLD
 from uniprot_link.mcp.envelope import McpErrorContext, run_mcp_tool
 from uniprot_link.mcp.next_commands import cmd
+from uniprot_link.mcp.schemas import TAXON_SCHEMA
 from uniprot_link.mcp.service_adapters import get_sparql_service
 
 if TYPE_CHECKING:
@@ -20,6 +21,7 @@ def register_taxonomy_tools(mcp: FastMCP) -> None:
 
     @mcp.tool(
         name="get_taxon",
+        output_schema=TAXON_SCHEMA,
         title="Get Taxon",
         annotations=READ_ONLY_OPEN_WORLD,
         tags={"taxonomy"},

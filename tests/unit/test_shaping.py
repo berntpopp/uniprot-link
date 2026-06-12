@@ -347,26 +347,47 @@ def test_shape_features_emits_only_filterable_types() -> None:
     body = make_select_json(
         ["type", "begin", "end", "comment"],
         [
-            {"type": "http://purl.uniprot.org/core/Natural_Variant_Annotation",
-             "begin": 176, "end": 176, "comment": "In MCSZ."},
-            {"type": "http://purl.uniprot.org/core/Alternative_Sequence_Annotation",
-             "begin": 1, "end": 50, "comment": "In isoform 2."},
-            {"type": "http://purl.uniprot.org/core/Sequence_Conflict_Annotation",
-             "begin": 6, "end": 6, "comment": ""},
+            {
+                "type": "http://purl.uniprot.org/core/Natural_Variant_Annotation",
+                "begin": 176,
+                "end": 176,
+                "comment": "In MCSZ.",
+            },
+            {
+                "type": "http://purl.uniprot.org/core/Alternative_Sequence_Annotation",
+                "begin": 1,
+                "end": 50,
+                "comment": "In isoform 2.",
+            },
+            {
+                "type": "http://purl.uniprot.org/core/Sequence_Conflict_Annotation",
+                "begin": 6,
+                "end": 6,
+                "comment": "",
+            },
         ],
     )
     out = S.shape_features(body)
     for f in out:
         assert f["type"] in FEATURE_TYPES, f"{f['type']} not filterable"
     assert {f["type"] for f in out} == {
-        "natural_variant", "alternative_sequence", "sequence_conflict"}
+        "natural_variant",
+        "alternative_sequence",
+        "sequence_conflict",
+    }
 
 
 def test_shape_features_flags_unmapped_class() -> None:
     body = make_select_json(
         ["type", "begin", "end", "comment"],
-        [{"type": "http://purl.uniprot.org/core/Totally_New_Annotation",
-          "begin": 1, "end": 2, "comment": ""}],
+        [
+            {
+                "type": "http://purl.uniprot.org/core/Totally_New_Annotation",
+                "begin": 1,
+                "end": 2,
+                "comment": "",
+            }
+        ],
     )
     out = S.shape_features(body)
     assert out[0]["type"].startswith("_unmapped:")

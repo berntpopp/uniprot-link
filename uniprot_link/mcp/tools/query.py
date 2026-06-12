@@ -9,6 +9,11 @@ from pydantic import Field
 from uniprot_link.mcp.annotations import READ_ONLY_OPEN_WORLD
 from uniprot_link.mcp.envelope import McpErrorContext, run_mcp_tool
 from uniprot_link.mcp.next_commands import after_get_example, cmd
+from uniprot_link.mcp.schemas import (
+    EXAMPLE_DETAIL_SCHEMA,
+    EXAMPLE_LIST_SCHEMA,
+    SPARQL_RESULT_SCHEMA,
+)
 from uniprot_link.mcp.service_adapters import get_sparql_service
 
 if TYPE_CHECKING:
@@ -20,6 +25,7 @@ def register_query_tools(mcp: FastMCP) -> None:
 
     @mcp.tool(
         name="run_sparql_query",
+        output_schema=SPARQL_RESULT_SCHEMA,
         title="Run SPARQL Query",
         annotations=READ_ONLY_OPEN_WORLD,
         tags={"sparql", "power"},
@@ -73,6 +79,7 @@ def register_query_tools(mcp: FastMCP) -> None:
 
     @mcp.tool(
         name="search_example_queries",
+        output_schema=EXAMPLE_LIST_SCHEMA,
         title="Search Example Queries",
         annotations=READ_ONLY_OPEN_WORLD,
         tags={"sparql", "examples"},
@@ -106,6 +113,7 @@ def register_query_tools(mcp: FastMCP) -> None:
 
     @mcp.tool(
         name="get_example_query",
+        output_schema=EXAMPLE_DETAIL_SCHEMA,
         title="Get Example Query",
         annotations=READ_ONLY_OPEN_WORLD,
         tags={"sparql", "examples"},

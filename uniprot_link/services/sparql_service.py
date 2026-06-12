@@ -195,7 +195,9 @@ class SparqlService:
         offset maps across the two segments. Most selective anchors are fully
         served by the reviewed segment in a single fill query.
         """
-        cr_json, m_count = await self._select_timed(Q.find_proteins(reviewed=True, count=True, **anchors))
+        cr_json, m_count = await self._select_timed(
+            Q.find_proteins(reviewed=True, count=True, **anchors)
+        )
         cr_rows = S.rows(cr_json)
         cr = int(cr_rows[0]["n"]) if cr_rows and "n" in cr_rows[0] else 0
         elapsed = m_count["elapsed_ms"]

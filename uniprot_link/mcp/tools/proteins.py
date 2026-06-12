@@ -14,6 +14,17 @@ from uniprot_link.mcp.next_commands import (
     after_get_protein,
     cmd,
 )
+from uniprot_link.mcp.schemas import (
+    CROSS_REFERENCES_SCHEMA,
+    DISEASES_SCHEMA,
+    FEATURES_SCHEMA,
+    FIND_PROTEINS_SCHEMA,
+    GO_TERMS_SCHEMA,
+    MAP_IDENTIFIERS_SCHEMA,
+    PROTEIN_SCHEMA,
+    SEQUENCE_SCHEMA,
+    VARIANTS_SCHEMA,
+)
 from uniprot_link.mcp.service_adapters import get_sparql_service
 
 if TYPE_CHECKING:
@@ -43,6 +54,7 @@ def register_protein_tools(mcp: FastMCP) -> None:
 def _register_find_and_summary(mcp: FastMCP) -> None:
     @mcp.tool(
         name="find_proteins",
+        output_schema=FIND_PROTEINS_SCHEMA,
         title="Find Proteins",
         annotations=READ_ONLY_OPEN_WORLD,
         tags={"protein", "search"},
@@ -104,6 +116,7 @@ def _register_find_and_summary(mcp: FastMCP) -> None:
 
     @mcp.tool(
         name="get_protein",
+        output_schema=PROTEIN_SCHEMA,
         title="Get Protein",
         annotations=READ_ONLY_OPEN_WORLD,
         tags={"protein"},
@@ -138,6 +151,7 @@ def _register_find_and_summary(mcp: FastMCP) -> None:
 def _register_sequence_and_features(mcp: FastMCP) -> None:
     @mcp.tool(
         name="get_protein_sequence",
+        output_schema=SEQUENCE_SCHEMA,
         title="Get Protein Sequence",
         annotations=READ_ONLY_OPEN_WORLD,
         tags={"protein", "sequence"},
@@ -169,6 +183,7 @@ def _register_sequence_and_features(mcp: FastMCP) -> None:
 
     @mcp.tool(
         name="get_protein_features",
+        output_schema=FEATURES_SCHEMA,
         title="Get Protein Features",
         annotations=READ_ONLY_OPEN_WORLD,
         tags={"protein", "features"},
@@ -206,6 +221,7 @@ def _register_sequence_and_features(mcp: FastMCP) -> None:
 def _register_annotations(mcp: FastMCP) -> None:
     @mcp.tool(
         name="get_protein_variants",
+        output_schema=VARIANTS_SCHEMA,
         title="Get Protein Variants",
         annotations=READ_ONLY_OPEN_WORLD,
         tags={"protein", "variants"},
@@ -241,6 +257,7 @@ def _register_annotations(mcp: FastMCP) -> None:
 
     @mcp.tool(
         name="get_protein_diseases",
+        output_schema=DISEASES_SCHEMA,
         title="Get Protein Diseases",
         annotations=READ_ONLY_OPEN_WORLD,
         tags={"protein", "disease"},
@@ -268,6 +285,7 @@ def _register_annotations(mcp: FastMCP) -> None:
 
     @mcp.tool(
         name="get_protein_cross_references",
+        output_schema=CROSS_REFERENCES_SCHEMA,
         title="Get Protein Cross-References",
         annotations=READ_ONLY_OPEN_WORLD,
         tags={"protein", "xref"},
@@ -305,6 +323,7 @@ def _register_annotations(mcp: FastMCP) -> None:
 
     @mcp.tool(
         name="get_protein_go_terms",
+        output_schema=GO_TERMS_SCHEMA,
         title="Get Protein GO Terms",
         annotations=READ_ONLY_OPEN_WORLD,
         tags={"protein", "go"},
@@ -331,6 +350,7 @@ def _register_annotations(mcp: FastMCP) -> None:
 
     @mcp.tool(
         name="map_identifiers",
+        output_schema=MAP_IDENTIFIERS_SCHEMA,
         title="Map Identifiers",
         annotations=READ_ONLY_OPEN_WORLD,
         tags={"protein", "xref", "mapping"},
