@@ -66,7 +66,9 @@ def register_query_tools(mcp: FastMCP) -> None:
             )
 
         return await run_mcp_tool(
-            "run_sparql_query", call, context=McpErrorContext("run_sparql_query")
+            "run_sparql_query",
+            call,
+            context=McpErrorContext("run_sparql_query", fallback=cmd("search_example_queries")),
         )
 
     @mcp.tool(

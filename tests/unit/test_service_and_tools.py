@@ -350,3 +350,22 @@ async def test_annotation_tool_attaches_next_commands(service_factory: Any) -> N
         assert next_commands[0]["tool"] == "get_protein_variants"
     finally:
         service_adapters.set_sparql_service(None)
+
+
+@pytest.mark.asyncio
+async def test_run_sparql_query_error_offers_examples_fallback() -> None:
+    from uniprot_link.exceptions import QuerySyntaxError
+    from uniprot_link.mcp.envelope import McpErrorContext, run_mcp_tool
+    from uniprot_link.mcp.next_commands import cmd
+
+    async def boom() -> dict[str, Any]:
+        raise QuerySyntaxError("Malformed SPARQL query.")
+
+    env = await run_mcp_tool(
+        "run_sparql_query",
+        boom,
+        context=McpErrorContext("run_sparql_query", fallback=cmd("search_example_queries")),
+    )
+    assert env["success"] is False
+    assert env["error_code"] == "query_syntax_error"
+    assert any(c["tool"] == "search_example_queries" for c in env["_meta"]["next_commands"])
