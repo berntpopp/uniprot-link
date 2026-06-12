@@ -11,7 +11,7 @@ import time
 from typing import TYPE_CHECKING, Any
 
 from uniprot_link.api.client import RESULT_FORMATS, SparqlClient
-from uniprot_link.exceptions import InvalidInputError, NotFoundError
+from uniprot_link.exceptions import InvalidInputError, NotFoundError, ObsoleteEntryError
 from uniprot_link.services import queries as Q
 from uniprot_link.services import shaping as S
 from uniprot_link.services.constants import (
@@ -254,9 +254,15 @@ class SparqlService:
         return S.apply_response_mode(payload, response_mode, kind="protein")
 
     async def get_sequence(self, accession: str, response_mode: str = "compact") -> dict[str, Any]:
-        """Return the canonical sequence (and additional isoforms) for an entry."""
+        """Return the canonical sequence (and additional isoforms) for an entry.
+
+        Runs the obsolete-aware gate in parallel so an obsolete accession yields
+        the family-consistent obsolete error instead of a bare "no sequence" 404.
+        """
         query = Q.protein_sequence(accession)
-        sequences_json, qmeta = await self._select_timed(query)
+        _, (sequences_json, qmeta) = await asyncio.gather(
+            self.require_entry(accession), self._select_timed(query)
+        )
         sequences = S.shape_sequences(sequences_json)
         if not sequences:
             raise NotFoundError(f"No sequence found for accession '{accession}'.")
@@ -281,12 +287,21 @@ class SparqlService:
         }
 
     async def require_entry(self, accession: str) -> None:
-        """Raise NotFoundError if the UniProtKB entry does not exist (cached)."""
-        ask_json = await self._select(Q.entry_exists_ask(accession))
-        if not (ask_json or {}).get("boolean", False):
+        """Gate annotation lookups: raise on absent or obsolete entries (cached).
+
+        Obsolete entries retain ``a up:Protein`` so a bare existence check passes
+        them through; entry_status separates active / obsolete / absent and lets
+        the whole tool family emit one consistent obsolete signal (F-OBS).
+        """
+        status = S.shape_entry_status(await self._select(Q.entry_status(accession)), accession)
+        if not status.exists:
             raise NotFoundError(
                 f"No UniProtKB entry found for accession '{accession}'. "
                 "Resolve a gene/organism via find_proteins first."
+            )
+        if status.obsolete:
+            raise ObsoleteEntryError(
+                Q.validate_accession(accession).split("-")[0], status.replaced_by
             )
 
     async def get_features(

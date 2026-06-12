@@ -27,6 +27,9 @@ _SUMMARY = make_select_json(
     ],
 )
 _EMPTY = make_select_json([], [])
+# entry_status probe result for a live (non-obsolete) entry -- the gate every
+# data tool now runs (replaces the old existence ASK).
+_ACTIVE_STATUS = make_select_json(["obsolete"], [{"obsolete": False}])
 
 
 @pytest.mark.asyncio
@@ -73,7 +76,7 @@ async def test_get_sequence_dedupes_canonical_and_minimal_strips_sequence(
             },
         ],
     )
-    svc = service_factory([("up:sequence", body)])
+    svc = service_factory([("up:obsolete ?obsolete", _ACTIVE_STATUS), ("up:sequence", body)])
     res = await svc.get_sequence("P05067")
     assert res["canonical"]["isoform"] == "P05067-1"
     assert all(s["isoform"] != "P05067-1" for s in res["isoforms"])  # canonical excluded
@@ -98,7 +101,7 @@ async def test_get_sequence_single_isoform_has_empty_isoforms(service_factory: A
             }
         ],
     )
-    svc = service_factory([("up:sequence", body)])
+    svc = service_factory([("up:obsolete ?obsolete", _ACTIVE_STATUS), ("up:sequence", body)])
     res = await svc.get_sequence("P05067")
     assert res["isoforms"] == []
     assert res["isoform_count"] == 1
@@ -124,7 +127,7 @@ async def test_get_features_zero_match_echoes_accepted_keys(service_factory: Any
     # empty result for the features query -> filter_hint with accepted keys
     svc = service_factory(
         [
-            ("ASK", {"head": {}, "boolean": True}),
+            ("up:obsolete ?obsolete", _ACTIVE_STATUS),
             ("up:annotation", {"head": {"vars": []}, "results": {"bindings": []}}),
         ]
     )
@@ -136,7 +139,7 @@ async def test_get_features_zero_match_echoes_accepted_keys(service_factory: Any
 @pytest.mark.asyncio
 async def test_typed_tools_report_elapsed_ms_and_cached(service_factory: Any) -> None:
     routes = [
-        ("ASK", {"head": {}, "boolean": True}),
+        ("up:obsolete ?obsolete", _ACTIVE_STATUS),
         ("up:annotation", make_select_json(["type", "begin", "end", "comment"], [])),
     ]
     svc = service_factory(routes)
@@ -158,7 +161,7 @@ async def test_get_variants_truncated_when_limit_reached(service_factory: Any) -
         for i in range(2)
     ]
     routes = [
-        ("ASK", {"head": {}, "boolean": True}),
+        ("up:obsolete ?obsolete", _ACTIVE_STATUS),
         (
             "Natural_Variant_Annotation",
             make_select_json(["begin", "end", "substitution", "comment", "disease"], rows),
@@ -181,7 +184,7 @@ async def test_get_variants_truncation_uses_raw_row_count(service_factory: Any) 
         for d in ("D1", "D2", "D3")
     ]
     routes = [
-        ("ASK", {"head": {}, "boolean": True}),
+        ("up:obsolete ?obsolete", _ACTIVE_STATUS),
         (
             "Natural_Variant_Annotation",
             make_select_json(["begin", "end", "substitution", "comment", "disease"], rows),
@@ -195,7 +198,8 @@ async def test_get_variants_truncation_uses_raw_row_count(service_factory: Any) 
 
 @pytest.mark.asyncio
 async def test_annotation_tools_not_found_when_entry_absent(service_factory: Any) -> None:
-    routes = [("ASK", {"head": {}, "boolean": False})]
+    # entry_status returns zero rows -> absent -> NotFoundError on every data tool.
+    routes = [("up:obsolete ?obsolete", {"head": {"vars": []}, "results": {"bindings": []}})]
     service = service_factory(routes)
     for call in (
         service.get_features,
@@ -203,9 +207,32 @@ async def test_annotation_tools_not_found_when_entry_absent(service_factory: Any
         service.get_diseases,
         service.get_go_terms,
         service.get_cross_references,
+        service.get_sequence,
     ):
         with pytest.raises(NotFoundError):
             await call("Q9ZZZ9")
+
+
+@pytest.mark.asyncio
+async def test_data_subtools_raise_obsolete_on_obsolete_entry(service_factory: Any) -> None:
+    from uniprot_link.exceptions import ObsoleteEntryError
+
+    status = make_select_json(
+        ["obsolete", "replacedBy"],
+        [{"obsolete": True, "replacedBy": "http://purl.uniprot.org/uniprot/A0A9P2UQ24"}],
+    )
+    svc = service_factory([("up:obsolete ?obsolete", status)])
+    for call in (
+        svc.get_features,
+        svc.get_variants,
+        svc.get_diseases,
+        svc.get_go_terms,
+        svc.get_cross_references,
+        svc.get_sequence,
+    ):
+        with pytest.raises(ObsoleteEntryError) as ei:
+            await call("A0A009K1D9")
+        assert ei.value.replaced_by == ["A0A9P2UQ24"]
 
 
 @pytest.mark.asyncio
@@ -220,7 +247,7 @@ async def test_cross_references_short_by_default_full_on_request(service_factory
             }
         ],
     )
-    routes = [("ASK", {"head": {}, "boolean": True}), ("rdfs:seeAlso", body)]
+    routes = [("up:obsolete ?obsolete", _ACTIVE_STATUS), ("rdfs:seeAlso", body)]
     svc = service_factory(routes)
     compact = await svc.get_cross_references("P05067")
     assert compact["by_database"]["PDB"] == ["1AAP"]
@@ -345,7 +372,7 @@ async def test_annotation_tool_attaches_next_commands(service_factory: Any) -> N
     from uniprot_link.mcp.facade import create_uniprot_mcp
 
     routes = [
-        ("ASK", {"head": {}, "boolean": True}),
+        ("up:obsolete ?obsolete", _ACTIVE_STATUS),
         (
             "Disease_Annotation",
             make_select_json(
@@ -410,7 +437,7 @@ async def test_map_identifiers_defaults_to_curated_dbs(service_factory: Any) -> 
             },
         ],
     )
-    service = service_factory([("rdfs:seeAlso", body), ("ASK", {"head": {}, "boolean": True})])
+    service = service_factory([("rdfs:seeAlso", body), ("up:obsolete ?obsolete", _ACTIVE_STATUS)])
     res = await service.map_identifiers("P38398")
     assert res["requested_databases"] == COMMON_XREF_DATABASES
     assert "by_database" in res and "mapped_databases" in res
@@ -518,7 +545,7 @@ async def test_get_sequence_compact_is_windowed(service_factory: Any) -> None:
             }
         ],
     )
-    svc = service_factory([("up:sequence", body)])
+    svc = service_factory([("up:obsolete ?obsolete", _ACTIVE_STATUS), ("up:sequence", body)])
     compact = await svc.get_sequence("P05067", response_mode="compact")
     assert "sequence" not in compact["canonical"]
     assert compact["canonical"]["sequence_truncated"] is True
@@ -570,7 +597,7 @@ async def test_features_domain_without_region_hints(service_factory: Any) -> Non
             }
         ],
     )
-    svc = service_factory([("ASK", {"head": {}, "boolean": True}), ("up:range", feats)])
+    svc = service_factory([("up:obsolete ?obsolete", _ACTIVE_STATUS), ("up:range", feats)])
     out = await svc.get_features("Q96T60", ["domain"])
     hint = out["domain_region_hint"]
     assert hint["suggestion"]["arguments"]["feature_types"] == ["domain", "region"]

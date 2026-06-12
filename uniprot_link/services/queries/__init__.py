@@ -11,7 +11,6 @@ from uniprot_link.services.queries.examples import (
     search_example_queries,
 )
 from uniprot_link.services.queries.proteins import (
-    entry_exists_ask,
     entry_status,
     find_proteins,
     map_identifiers,
@@ -40,7 +39,6 @@ from uniprot_link.services.queries.validation import (
 __all__ = [
     "clamp_limit",
     "classify_sparql_operation",
-    "entry_exists_ask",
     "entry_status",
     "escape_literal",
     "find_proteins",

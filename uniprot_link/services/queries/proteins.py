@@ -146,17 +146,6 @@ WHERE {{
 LIMIT {limit} OFFSET {offset}"""
 
 
-def entry_exists_ask(accession: str) -> str:
-    """Build an ASK that is true iff the UniProtKB entry exists.
-
-    Deprecated: cannot distinguish obsolete entries (they keep ``a up:Protein``).
-    Use :func:`entry_status` for the obsolete-aware gate.
-    """
-    base = validate_accession(accession).split("-")[0]
-    return f"""{prefix_block()}
-ASK {{ uniprotkb:{base} a up:Protein }}"""
-
-
 def entry_status(accession: str) -> str:
     """Build a SELECT classifying an entry as active / obsolete / absent.
 
