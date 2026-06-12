@@ -20,6 +20,26 @@ if TYPE_CHECKING:
     from uniprot_link.config import SparqlEndpointConfig
 
 
+_SEQUENCE_PREVIEW = 30
+
+
+def _window_sequence(seq: dict[str, Any]) -> dict[str, Any]:
+    """Replace a full sequence string with a first/last-N preview (compact mode).
+
+    Short sequences (<= 2*N) are returned whole; longer ones become
+    ``sequence_preview`` + ``sequence_truncated: True`` and drop ``sequence``.
+    """
+    s = seq.get("sequence") or ""
+    out = {k: v for k, v in seq.items() if k != "sequence"}
+    if len(s) <= 2 * _SEQUENCE_PREVIEW:
+        if "sequence" in seq:
+            out["sequence"] = s
+        return out
+    out["sequence_preview"] = f"{s[:_SEQUENCE_PREVIEW]}...{s[-_SEQUENCE_PREVIEW:]}"
+    out["sequence_truncated"] = True
+    return out
+
+
 class _TTLCache:
     """Tiny in-process TTL cache for ``(query, format)`` -> result payloads."""
 
@@ -178,6 +198,12 @@ class SparqlService:
         if response_mode == "minimal":
             canonical = {k: v for k, v in canonical.items() if k != "sequence"}
             others = [{k: v for k, v in s.items() if k != "sequence"} for s in others]
+        elif response_mode == "compact":
+            # Default: a windowed preview, not the full string. A large protein
+            # (titin, ~34,350 aa) otherwise dumps tens of KB on every call (Bug 6).
+            canonical = _window_sequence(canonical)
+            others = [_window_sequence(s) for s in others]
+        # standard / full keep the full `sequence` string unchanged.
         return {
             "accession": acc,
             "canonical": canonical,

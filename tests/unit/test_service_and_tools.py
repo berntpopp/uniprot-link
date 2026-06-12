@@ -456,3 +456,29 @@ async def test_get_taxon_by_name_has_timing_and_matches(service_factory: Any) ->
     out = await svc.get_taxon("Homo sapiens")
     assert "elapsed_ms" in out and "cached" in out
     assert out["matches"][0]["taxon_id"] == "9606"
+
+
+@pytest.mark.asyncio
+async def test_get_sequence_compact_is_windowed(service_factory: Any) -> None:
+    from tests.conftest import make_select_json
+
+    seq = "M" + "A" * 600 + "K"
+    body = make_select_json(
+        ["isoform", "length", "mass", "value"],
+        [
+            {
+                "isoform": "http://purl.uniprot.org/isoforms/P05067-1",
+                "length": len(seq),
+                "mass": 1,
+                "value": seq,
+            }
+        ],
+    )
+    svc = service_factory([("up:sequence", body)])
+    compact = await svc.get_sequence("P05067", response_mode="compact")
+    assert "sequence" not in compact["canonical"]
+    assert compact["canonical"]["sequence_truncated"] is True
+    assert compact["canonical"]["sequence_preview"].startswith("M")
+    assert compact["canonical"]["sequence_preview"].endswith("K")
+    standard = await svc.get_sequence("P05067", response_mode="standard")
+    assert standard["canonical"]["sequence"] == seq

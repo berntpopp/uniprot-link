@@ -143,10 +143,12 @@ def _register_sequence_and_features(mcp: FastMCP) -> None:
         tags={"protein", "sequence"},
         description=(
             "Return the amino-acid sequence(s) for an entry: the canonical isoform "
-            "(length, mass, sequence string) plus any additional (non-canonical) "
-            "isoforms. Pass an accession; isoform suffixes are normalised to the "
-            "parent entry. response_mode (default compact) controls verbosity; "
-            "minimal returns metadata only, full returns the full sequence string."
+            "(length, mass, sequence) plus any additional (non-canonical) isoforms. "
+            "Pass an accession; isoform suffixes are normalised to the parent entry. "
+            "response_mode controls verbosity: minimal=metadata only; compact "
+            "(default)=length/mass + a first/last-30-residue sequence_preview "
+            "(sequence_truncated:true) — cheap for large proteins; standard/full "
+            "return the complete sequence string."
         ),
     )
     async def get_protein_sequence(
