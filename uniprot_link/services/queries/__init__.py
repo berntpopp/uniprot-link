@@ -28,8 +28,8 @@ from uniprot_link.services.queries.taxonomy import (
     taxon_core,
 )
 from uniprot_link.services.queries.validation import (
-    classify_sparql_operation,
     clamp_limit,
+    classify_sparql_operation,
     escape_literal,
     inject_limit,
     validate_accession,
@@ -37,8 +37,8 @@ from uniprot_link.services.queries.validation import (
 )
 
 __all__ = [
-    "classify_sparql_operation",
     "clamp_limit",
+    "classify_sparql_operation",
     "entry_exists_ask",
     "escape_literal",
     "find_proteins",
