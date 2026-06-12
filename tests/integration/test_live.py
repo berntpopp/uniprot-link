@@ -77,6 +77,47 @@ async def test_multiword_example_search_returns_hits(service: SparqlService) -> 
     assert res["count"] > 0
 
 
+async def test_obsolete_entry_is_flagged_live(service: SparqlService) -> None:
+    """F-OBS: an obsolete accession is flagged, never presented as a live entry."""
+    from uniprot_link.exceptions import ObsoleteEntryError
+
+    # Z9Z9Z9: obsolete (redundant-proteome member), no replacement.
+    out = await service.get_protein("Z9Z9Z9")
+    assert out["obsolete"] is True
+    assert out["obsolete_reason"] == "deleted"
+    assert "sequence_length" not in out  # nothing fabricated
+    with pytest.raises(ObsoleteEntryError):
+        await service.get_sequence("Z9Z9Z9")
+
+
+async def test_demerged_entry_reports_replacement_live(service: SparqlService) -> None:
+    """F-OBS: a demerged accession reports its live replacement(s)."""
+    out = await service.get_protein("A0A009K1D9")
+    assert out["obsolete"] is True
+    assert out["obsolete_reason"] == "demerged"
+    assert "A0A9P2UQ24" in out["replaced_by"]
+
+
+async def test_bogus_isoform_index_is_not_found_live(service: SparqlService) -> None:
+    """F-ISO: a nonexistent isoform index is rejected, not collapsed to the parent."""
+    from uniprot_link.exceptions import NotFoundError
+
+    with pytest.raises(NotFoundError):
+        await service.get_protein("P05067-99")
+    real = await service.get_protein("P05067-2")
+    assert real["accession"] == "P05067"
+    assert real["requested_accession"] == "P05067-2"
+    assert real["isoform"] == "P05067-2"
+
+
+async def test_get_protein_presence_flags_live(service: SparqlService) -> None:
+    """Content-aware chaining: APP has variants, diseases, and PDB structures."""
+    out = await service.get_protein("P05067")
+    assert out["has_variants"] is True
+    assert out["has_diseases"] is True
+    assert out["has_structure"] is True
+
+
 async def test_variants_brca1(service: SparqlService) -> None:
     out = await service.get_variants("P38398", limit=50)
     assert out["count"] >= 1

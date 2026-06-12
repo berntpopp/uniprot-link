@@ -163,8 +163,7 @@ def entry_status(accession: str) -> str:
     if "-" in acc:
         iso_select = " ?isoform_exists"
         iso_bind = (
-            f"\n  BIND(EXISTS {{ uniprotkb:{base} up:sequence isoform:{acc} }} "
-            "AS ?isoform_exists)"
+            f"\n  BIND(EXISTS {{ uniprotkb:{base} up:sequence isoform:{acc} }} AS ?isoform_exists)"
         )
     return f"""{prefix_block()}
 SELECT ?obsolete ?replacedBy{iso_select} WHERE {{

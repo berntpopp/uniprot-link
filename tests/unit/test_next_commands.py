@@ -22,17 +22,13 @@ def test_after_get_protein_is_content_aware() -> None:
     from uniprot_link.mcp.next_commands import after_get_protein
 
     # No diseases/variants -> only sequence + features suggested (len 2).
-    plain = after_get_protein(
-        "P05067", has_variants=False, has_diseases=False, has_structure=False
-    )
+    plain = after_get_protein("P05067", has_variants=False, has_diseases=False, has_structure=False)
     tools = [c["tool"] for c in plain]
     assert tools == ["get_protein_sequence", "get_protein_features"]
     assert "get_protein_diseases" not in tools
 
     # Disease-bearing entry surfaces diseases among the gated suggestions.
-    rich = after_get_protein(
-        "P05067", has_variants=True, has_diseases=True, has_structure=True
-    )
+    rich = after_get_protein("P05067", has_variants=True, has_diseases=True, has_structure=True)
     rtools = [c["tool"] for c in rich]
     assert "get_protein_diseases" in rtools or "get_protein_variants" in rtools
     assert len(rich) <= 3

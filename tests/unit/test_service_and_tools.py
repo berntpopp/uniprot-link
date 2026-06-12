@@ -116,9 +116,7 @@ async def test_get_protein_obsolete_returns_flagged_record(service_factory: Any)
     summary = make_select_json(
         ["mnemonic", "reviewed"], [{"mnemonic": "A0A009K1D9_ACIBA", "reviewed": False}]
     )
-    svc = service_factory(
-        [("up:obsolete ?obsolete", status), ("up:recommendedName", summary)]
-    )
+    svc = service_factory([("up:obsolete ?obsolete", status), ("up:recommendedName", summary)])
     out = await svc.get_protein("A0A009K1D9")
     assert out["obsolete"] is True
     assert out["replaced_by"] == ["A0A9P2UQ24"]
@@ -132,9 +130,7 @@ async def test_get_protein_obsolete_returns_flagged_record(service_factory: Any)
 async def test_get_protein_deleted_no_replacement(service_factory: Any) -> None:
     status = make_select_json(["obsolete"], [{"obsolete": True}])
     summary = make_select_json(["mnemonic"], [{"mnemonic": "Z9Z9Z9_STAAU"}])
-    svc = service_factory(
-        [("up:obsolete ?obsolete", status), ("up:recommendedName", summary)]
-    )
+    svc = service_factory([("up:obsolete ?obsolete", status), ("up:recommendedName", summary)])
     out = await svc.get_protein("Z9Z9Z9")
     assert out["obsolete"] is True
     assert out["obsolete_reason"] == "deleted"
@@ -147,9 +143,7 @@ async def test_get_protein_bogus_isoform_is_not_found(service_factory: Any) -> N
         ["obsolete", "isoform_exists"], [{"obsolete": False, "isoform_exists": False}]
     )
     summary = make_select_json(["mnemonic"], [{"mnemonic": "A4_HUMAN"}])
-    svc = service_factory(
-        [("up:obsolete ?obsolete", status), ("up:recommendedName", summary)]
-    )
+    svc = service_factory([("up:obsolete ?obsolete", status), ("up:recommendedName", summary)])
     with pytest.raises(NotFoundError):
         await svc.get_protein("P05067-99")
 
@@ -170,9 +164,7 @@ async def test_get_protein_real_isoform_echoes_request(service_factory: Any) -> 
             }
         ],
     )
-    svc = service_factory(
-        [("up:obsolete ?obsolete", status), ("up:recommendedName", summary)]
-    )
+    svc = service_factory([("up:obsolete ?obsolete", status), ("up:recommendedName", summary)])
     out = await svc.get_protein("P05067-2")
     assert out["accession"] == "P05067"
     assert out["requested_accession"] == "P05067-2"

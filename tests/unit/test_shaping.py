@@ -161,9 +161,21 @@ def test_shape_cross_references_sorts_ids_and_db_keys() -> None:
     body = make_select_json(
         ["db", "database", "xref"],
         [
-            {"db": "http://purl.uniprot.org/database/PDB", "database": "PDB", "xref": "http://x/7JXN"},
-            {"db": "http://purl.uniprot.org/database/PDB", "database": "PDB", "xref": "http://x/1AAP"},
-            {"db": "http://purl.uniprot.org/database/RefSeq", "database": "RefSeq", "xref": "http://x/NP_2"},
+            {
+                "db": "http://purl.uniprot.org/database/PDB",
+                "database": "PDB",
+                "xref": "http://x/7JXN",
+            },
+            {
+                "db": "http://purl.uniprot.org/database/PDB",
+                "database": "PDB",
+                "xref": "http://x/1AAP",
+            },
+            {
+                "db": "http://purl.uniprot.org/database/RefSeq",
+                "database": "RefSeq",
+                "xref": "http://x/NP_2",
+            },
         ],
     )
     out = S.shape_cross_references(body)
