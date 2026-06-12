@@ -421,21 +421,15 @@ class SparqlService:
         databases: list[str] | None = None,
         response_mode: str = "compact",
     ) -> dict[str, Any]:
-        """Return cross-references grouped by database."""
+        """Return cross-references grouped by database (token-lean by mode)."""
         query = Q.protein_cross_references(accession, databases)
         _, (data_json, qmeta) = await asyncio.gather(
             self.require_entry(accession), self._select_timed(query)
         )
         grouped = S.shape_cross_references(data_json, short=response_mode != "full")
+        projected = S.project_cross_references(grouped, mode=response_mode)
         acc = Q.validate_accession(accession).split("-")[0]
-        total = sum(len(v) for v in grouped.values())
-        return {
-            "accession": acc,
-            "database_count": len(grouped),
-            "total": total,
-            "by_database": grouped,
-            **qmeta,
-        }
+        return {"accession": acc, **projected, **qmeta}
 
     async def get_go_terms(self, accession: str) -> dict[str, Any]:
         """Return Gene Ontology annotations grouped by aspect."""
@@ -464,7 +458,8 @@ class SparqlService:
         effective = list(databases or MAP_IDENTIFIER_DATABASES)
         result = await self.get_cross_references(accession, effective, response_mode)
         result["requested_databases"] = effective
-        result["mapped_databases"] = list(result["by_database"].keys())
+        # `counts` is present in every mode (by_database is omitted in minimal).
+        result["mapped_databases"] = list(result.get("counts", {}).keys())
         return result
 
     # --- Taxonomy -----------------------------------------------------------

@@ -343,6 +343,42 @@ def shape_cross_references(
     return {db: sorted(ids) for db, ids in sorted(grouped.items())}
 
 
+_XREF_COMPACT_ID_CAP = 25
+
+
+def project_cross_references(grouped: dict[str, list[str]], *, mode: str) -> dict[str, Any]:
+    """Project sorted, grouped xrefs for a response_mode (token economy, F-VERB).
+
+    ``counts``/``total``/``database_count`` are always present. ``minimal`` omits
+    the id lists; ``compact`` caps each database at ``_XREF_COMPACT_ID_CAP`` and
+    reports ``truncated_databases``; ``standard``/``full`` return every id.
+    """
+    counts = {db: len(ids) for db, ids in grouped.items()}
+    out: dict[str, Any] = {
+        "database_count": len(grouped),
+        "total": sum(counts.values()),
+        "counts": counts,
+    }
+    if mode == "minimal":
+        return out
+    if mode in ("standard", "full"):
+        out["by_database"] = grouped
+        return out
+    # compact: cap each database, flag truncation so the cap is never silent.
+    capped: dict[str, list[str]] = {}
+    truncated: dict[str, dict[str, int]] = {}
+    for db, ids in grouped.items():
+        if len(ids) > _XREF_COMPACT_ID_CAP:
+            capped[db] = ids[:_XREF_COMPACT_ID_CAP]
+            truncated[db] = {"returned": _XREF_COMPACT_ID_CAP, "total": len(ids)}
+        else:
+            capped[db] = ids
+    out["by_database"] = capped
+    if truncated:
+        out["truncated_databases"] = truncated
+    return out
+
+
 def shape_go_terms(result_json: dict[str, Any] | None) -> dict[str, list[dict[str, Any]]]:
     """Group GO annotations into biological_process / molecular_function /
     cellular_component via their top-level root class.

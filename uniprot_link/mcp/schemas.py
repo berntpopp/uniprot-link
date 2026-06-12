@@ -77,17 +77,26 @@ VARIANTS_SCHEMA = _envelope(accession=_STR, count=_INT, variants=_ARR, truncated
 DISEASES_SCHEMA = _envelope(accession=_STR, count=_INT, diseases=_ARR)
 
 CROSS_REFERENCES_SCHEMA = _envelope(
-    accession=_STR, database_count=_INT, total=_INT, by_database=_OBJ
+    accession=_STR,
+    database_count=_INT,
+    total=_INT,
+    counts=_OBJ,
+    by_database=_OBJ,
+    truncated_databases=_OBJ,
 )
 
-GO_TERMS_SCHEMA = _envelope(accession=_STR, count=_INT, by_aspect=_OBJ)
+GO_TERMS_SCHEMA = _envelope(
+    accession=_STR, count=_INT, by_aspect=_OBJ, count_by_aspect=_OBJ, truncated=_OBJ
+)
 
 MAP_IDENTIFIERS_SCHEMA = _envelope(
     accession=_STR,
     database_count=_INT,
+    counts=_OBJ,
     by_database=_OBJ,
     requested_databases=_ARR,
     mapped_databases=_ARR,
+    truncated_databases=_OBJ,
 )
 
 TAXON_SCHEMA = _envelope(

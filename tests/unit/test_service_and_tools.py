@@ -329,6 +329,31 @@ async def test_cross_references_short_by_default_full_on_request(service_factory
 
 
 @pytest.mark.asyncio
+async def test_cross_references_lean_compact_and_minimal(service_factory: Any) -> None:
+    rows_ = [
+        {
+            "db": "http://purl.uniprot.org/database/PDB",
+            "database": "PDB",
+            "xref": f"http://x/{i:04d}",
+        }
+        for i in range(40)
+    ]
+    body = make_select_json(["db", "database", "xref"], rows_)
+    routes = [("up:obsolete ?obsolete", _ACTIVE_STATUS), ("rdfs:seeAlso", body)]
+    svc = service_factory(routes)
+    compact = await svc.get_cross_references("P05067")  # default compact
+    assert compact["counts"]["PDB"] == 40
+    assert len(compact["by_database"]["PDB"]) == 25  # capped
+    assert compact["truncated_databases"]["PDB"] == {"returned": 25, "total": 40}
+    minimal = await svc.get_cross_references("P05067", response_mode="minimal")
+    assert "by_database" not in minimal
+    assert minimal["counts"]["PDB"] == 40
+    full = await svc.get_cross_references("P05067", response_mode="full")
+    assert len(full["by_database"]["PDB"]) == 40  # all ids
+    assert "truncated_databases" not in full
+
+
+@pytest.mark.asyncio
 async def test_run_query_select_truncation(service_factory: Any) -> None:
     rows = make_select_json(["s"], [{"s": f"http://x/{i}"} for i in range(2)])
     svc = service_factory([("SELECT", rows)])
