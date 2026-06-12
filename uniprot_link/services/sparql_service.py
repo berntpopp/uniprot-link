@@ -17,6 +17,7 @@ from uniprot_link.services import shaping as S
 from uniprot_link.services.constants import (
     FEATURE_TYPES,
     MAP_IDENTIFIER_DATABASES,
+    SECONDARY_STRUCTURE_TYPES,
     UNIPROT_RELEASE,
     lookup_common_taxon,
 )
@@ -352,6 +353,7 @@ class SparqlService:
         accession: str,
         feature_types: list[str] | None = None,
         limit: int = 200,
+        include_secondary_structure: bool = False,
     ) -> dict[str, Any]:
         """Return sequence features with coordinates (token-lean via limit)."""
         display_limit = Q.clamp_limit(limit, default=200, maximum=1000)
@@ -361,14 +363,33 @@ class SparqlService:
             self.require_entry(accession), self._select_timed(query)
         )
         all_features = S.shape_features(data_json)
-        features = all_features[:display_limit]
         acc = Q.validate_accession(accession).split("-")[0]
+        # P1b: hide secondary-structure (helix/strand/turn) by default -- it
+        # dominates an unfiltered dump and is rarely the answer. Excluded only when
+        # not explicitly requested (via the flag or a secondary type in the filter).
+        requested = {ft.strip().lower() for ft in (feature_types or [])}
+        excluded_ss = 0
+        if not include_secondary_structure and not (requested & SECONDARY_STRUCTURE_TYPES):
+            kept = [f for f in all_features if f.get("type") not in SECONDARY_STRUCTURE_TYPES]
+            excluded_ss = len(all_features) - len(kept)
+            all_features = kept
+        features = all_features[:display_limit]
         payload: dict[str, Any] = {
             "accession": acc,
             "count": len(features),
             "features": features,
             **qmeta,
         }
+        if excluded_ss:
+            payload["excluded_secondary_structure"] = {
+                "count": excluded_ss,
+                "types": sorted(SECONDARY_STRUCTURE_TYPES),
+                "hint": (
+                    "Secondary-structure features (helix/strand/turn) are hidden "
+                    "by default; pass include_secondary_structure=true, or name them "
+                    "in feature_types, to include them."
+                ),
+            }
         if len(all_features) > display_limit:
             payload["truncated"] = {
                 "returned": len(features),

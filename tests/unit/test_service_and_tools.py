@@ -930,6 +930,55 @@ def test_sort_by_mnemonic_is_total_with_accession_tiebreak() -> None:
     assert _sort_by_mnemonic(list(reversed(page))) == out
 
 
+def _features_body() -> dict[str, Any]:
+    return make_select_json(
+        ["type", "begin", "end", "comment"],
+        [
+            {"type": "http://purl.uniprot.org/core/Domain_Extent_Annotation", "begin": 1, "end": 9},
+            {"type": "http://purl.uniprot.org/core/Helix_Annotation", "begin": 10, "end": 12},
+            {"type": "http://purl.uniprot.org/core/Beta_Strand_Annotation", "begin": 13, "end": 15},
+            {"type": "http://purl.uniprot.org/core/Turn_Annotation", "begin": 16, "end": 17},
+        ],
+    )
+
+
+@pytest.mark.asyncio
+async def test_features_excludes_secondary_structure_by_default(service_factory: Any) -> None:
+    """P1b: helix/strand/turn are hidden by default and disclosed, not silent."""
+    routes = [("up:obsolete ?obsolete", _ACTIVE_STATUS), ("up:range", _features_body())]
+    svc = service_factory(routes)
+    res = await svc.get_features("P05067")
+    types = {f["type"] for f in res["features"]}
+    assert types == {"domain"}  # the 3 secondary-structure rows are hidden
+    assert res["count"] == 1
+    assert res["excluded_secondary_structure"]["count"] == 3
+    assert set(res["excluded_secondary_structure"]["types"]) == {"beta_strand", "helix", "turn"}
+
+
+@pytest.mark.asyncio
+async def test_features_include_secondary_structure_flag(service_factory: Any) -> None:
+    routes = [("up:obsolete ?obsolete", _ACTIVE_STATUS), ("up:range", _features_body())]
+    svc = service_factory(routes)
+    res = await svc.get_features("P05067", include_secondary_structure=True)
+    assert res["count"] == 4
+    assert "excluded_secondary_structure" not in res
+
+
+@pytest.mark.asyncio
+async def test_features_explicit_secondary_type_is_returned(service_factory: Any) -> None:
+    """Explicit feature_types=['helix'] beats the default exclusion."""
+    helix = make_select_json(
+        ["type", "begin", "end", "comment"],
+        [{"type": "http://purl.uniprot.org/core/Helix_Annotation", "begin": 10, "end": 12}],
+    )
+    routes = [("up:obsolete ?obsolete", _ACTIVE_STATUS), ("up:range", helix)]
+    svc = service_factory(routes)
+    res = await svc.get_features("P05067", feature_types=["helix"])
+    assert res["count"] == 1
+    assert res["features"][0]["type"] == "helix"
+    assert "excluded_secondary_structure" not in res
+
+
 @pytest.mark.asyncio
 async def test_features_domain_without_region_hints(service_factory: Any) -> None:
     """Requesting ['domain'] (not region) attaches a domain->region nudge."""

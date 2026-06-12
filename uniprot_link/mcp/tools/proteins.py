@@ -224,8 +224,12 @@ def _register_sequence_and_features(mcp: FastMCP) -> None:
             "feature_types=['domain'] returns positional domain extents; each "
             "returned `type` round-trips to the filter vocabulary. Filter keys come "
             "from capabilities (feature_types); a zero-match filter echoes the "
-            "accepted keys as a filter_hint. "
-            "Signature: get_protein_features(accession, feature_types=, limit=)."
+            "accepted keys as a filter_hint. Secondary-structure features "
+            "(helix/strand/turn) are hidden by default and disclosed under "
+            "excluded_secondary_structure; set include_secondary_structure=true (or "
+            "name them in feature_types) to return them. "
+            "Signature: get_protein_features(accession, feature_types=, limit=, "
+            "include_secondary_structure=)."
         ),
     )
     async def get_protein_features(
@@ -237,9 +241,15 @@ def _register_sequence_and_features(mcp: FastMCP) -> None:
         limit: Annotated[
             int, Field(description="Max features to return (default 200).", ge=1, le=1000)
         ] = 200,
+        include_secondary_structure: Annotated[
+            bool,
+            Field(description="Include helix/strand/turn features (hidden by default)."),
+        ] = False,
     ) -> dict[str, Any]:
         async def call() -> dict[str, Any]:
-            payload = await get_sparql_service().get_features(accession, feature_types, limit)
+            payload = await get_sparql_service().get_features(
+                accession, feature_types, limit, include_secondary_structure
+            )
             nxt = after_entry_subresource(
                 payload["accession"], "get_protein_features", count=payload.get("count")
             )

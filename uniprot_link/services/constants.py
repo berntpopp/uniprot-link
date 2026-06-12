@@ -254,6 +254,12 @@ FEATURE_TYPES: dict[str, str] = {
 # returned `type` back into a valid feature_types filter input).
 FEATURE_CLASS_TO_KEY: dict[str, str] = {cls: key for key, cls in FEATURE_TYPES.items()}
 
+# Secondary-structure feature keys. Excluded from get_protein_features by default
+# (they dominate the payload and are rarely the answer to a domain/region/site
+# question); included on request via include_secondary_structure or an explicit
+# feature_types filter.
+SECONDARY_STRUCTURE_TYPES: frozenset[str] = frozenset({"beta_strand", "helix", "turn"})
+
 # GO top-level roots -> aspect bucket (terms carry no hasOBONamespace here).
 GO_ASPECT_ROOTS: dict[str, str] = {
     "GO_0008150": "biological_process",
