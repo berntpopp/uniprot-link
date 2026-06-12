@@ -38,7 +38,8 @@ def register_query_tools(mcp: FastMCP) -> None:
             "This is the escape hatch for anything the typed tools do not cover -- "
             "seed queries from search_example_queries. Use uniprot://prefixes for the "
             "standard PREFIX block. Unbounded or federated queries can take 10-60 s; "
-            "bound lookups (anchored on an accession/gene/taxon) return in <2 s."
+            "bound lookups (anchored on an accession/gene/taxon) return in <2 s. "
+            "Signature: run_sparql_query(query, result_format=, limit=, timeout_seconds=)."
         ),
     )
     async def run_sparql_query(
@@ -90,7 +91,8 @@ def register_query_tools(mcp: FastMCP) -> None:
             "'3D structure', 'cross-reference', 'taxonomy'). Returns example ids, "
             "descriptions, tags, and query types. Fetch the full query text with "
             "get_example_query, then run it via run_sparql_query. The best way to "
-            "learn how to query UniProt."
+            "learn how to query UniProt. "
+            "Signature: search_example_queries(text=, limit=)."
         ),
     )
     async def search_example_queries(
@@ -122,7 +124,8 @@ def register_query_tools(mcp: FastMCP) -> None:
             "Fetch one curated example's full SPARQL text, description, keyword tags, "
             "and any federated endpoints it joins. Pass an example_id (full IRI) from "
             "search_example_queries. `_meta.next_commands` offers to run it directly "
-            "via run_sparql_query."
+            "via run_sparql_query. "
+            "Signature: get_example_query(example_id)."
         ),
     )
     async def get_example_query(

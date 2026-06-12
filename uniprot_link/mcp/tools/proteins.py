@@ -70,7 +70,10 @@ def _register_find_and_summary(mcp: FastMCP) -> None:
             "or run_sparql_query. Pair with get_protein for full detail. Results "
             "are ordered reviewed-first, then by mnemonic, then accession (stable "
             "across pages). Cold search can take several seconds; an identical "
-            "repeat is cached (~0 ms)."
+            "repeat is cached (~0 ms). If you already know the accession, call "
+            "get_protein directly -- it is far faster than a cold search. "
+            "Signature: find_proteins(gene=, organism_taxon=, reviewed=, keyword=, "
+            "ec_number=, mnemonic=, name_contains=, limit=, offset=)."
         ),
     )
     async def find_proteins(
@@ -133,7 +136,8 @@ def _register_find_and_summary(mcp: FastMCP) -> None:
             "has_structure presence flags that drive content-aware next_commands. "
             "An obsolete/demerged accession returns a flagged obsolete record "
             "(obsolete:true + replaced_by). response_mode (default compact) controls "
-            "verbosity; standard/full add the created/modified dates."
+            "verbosity; standard/full add the created/modified dates. "
+            "Signature: get_protein(accession, response_mode=)."
         ),
     )
     async def get_protein(
@@ -178,7 +182,8 @@ def _register_sequence_and_features(mcp: FastMCP) -> None:
             "response_mode controls verbosity: minimal=metadata only; compact "
             "(default)=length/mass + a first/last-30-residue sequence_preview "
             "(sequence_truncated:true) — cheap for large proteins; standard/full "
-            "return the complete sequence string."
+            "return the complete sequence string. "
+            "Signature: get_protein_sequence(accession, response_mode=)."
         ),
     )
     async def get_protein_sequence(
@@ -210,7 +215,8 @@ def _register_sequence_and_features(mcp: FastMCP) -> None:
             "feature_types=['domain'] returns positional domain extents; each "
             "returned `type` round-trips to the filter vocabulary. Filter keys come "
             "from capabilities (feature_types); a zero-match filter echoes the "
-            "accepted keys as a filter_hint."
+            "accepted keys as a filter_hint. "
+            "Signature: get_protein_features(accession, feature_types=, limit=)."
         ),
     )
     async def get_protein_features(
@@ -252,7 +258,8 @@ def _register_annotations(mcp: FastMCP) -> None:
             "residue, amino-acid substitution, an HGVS-style `notation` (e.g. "
             "`L176F`) for simple substitutions, `variant_type` (substitution|other), "
             "free-text description, structured linked `diseases`, and `dbsnp` rsIDs. "
-            "Set disease_associated_only=true to keep only disease-linked variants."
+            "Set disease_associated_only=true to keep only disease-linked variants. "
+            "Signature: get_protein_variants(accession, limit=, disease_associated_only=)."
         ),
     )
     async def get_protein_variants(
@@ -288,7 +295,8 @@ def _register_annotations(mcp: FastMCP) -> None:
             "UniProt disease id, mnemonic, MIM id, the clinical `definition` (the "
             "disease vocabulary's own description), and `involvement` (the "
             "entry-specific note). Pairs with get_protein_variants for "
-            "variant-level disease evidence."
+            "variant-level disease evidence. "
+            "Signature: get_protein_diseases(accession)."
         ),
     )
     async def get_protein_diseases(accession: _ACC) -> dict[str, Any]:
@@ -316,7 +324,8 @@ def _register_annotations(mcp: FastMCP) -> None:
             "(PDB, AlphaFoldDB, Ensembl, RefSeq, Reactome, STRING, InterPro, ...). "
             "Optionally restrict to specific databases. response_mode (default "
             "compact) returns short ids; full restores raw IRIs. "
-            "Returns every cross-reference database; use map_identifiers for a focused primary-id mapping."
+            "Returns every cross-reference database; use map_identifiers for a focused primary-id mapping. "
+            "Signature: get_protein_cross_references(accession, databases=, response_mode=)."
         ),
     )
     async def get_protein_cross_references(
@@ -355,7 +364,8 @@ def _register_annotations(mcp: FastMCP) -> None:
             "available, each with GO id, label, and (when annotated) ECO `evidence` "
             "ids plus mapped GO `evidence_codes` (IDA/IEA/IMP/...) for citation. "
             "Always returns `count` and `count_by_aspect`; pass `aspect` to scope to "
-            "one ontology and `limit` to cap a large set (token economy)."
+            "one ontology and `limit` to cap a large set (token economy). "
+            "Signature: get_protein_go_terms(accession, aspect=, limit=)."
         ),
     )
     async def get_protein_go_terms(
@@ -395,7 +405,8 @@ def _register_annotations(mcp: FastMCP) -> None:
             "the databases that matched and per-database counts. response_mode "
             "(default compact) returns short ids; full restores raw IRIs. For the "
             "exhaustive cross-reference set (incl. drug/disease databases like "
-            "DrugBank/ChEMBL/OpenTargets) use get_protein_cross_references instead."
+            "DrugBank/ChEMBL/OpenTargets) use get_protein_cross_references instead. "
+            "Signature: map_identifiers(accession, databases=, response_mode=)."
         ),
     )
     async def map_identifiers(
