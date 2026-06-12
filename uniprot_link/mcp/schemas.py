@@ -58,6 +58,7 @@ FIND_PROTEINS_SCHEMA = _envelope(count=_INT, proteins=_ARR, truncated=_OBJ)
 
 PROTEIN_SCHEMA = _envelope(
     accession=_STR,
+    requested_accession=_STR,
     mnemonic=_STR,
     reviewed=_BOOL,
     recommended_name=_STR,
@@ -66,6 +67,12 @@ PROTEIN_SCHEMA = _envelope(
     taxon_id=_STR,
     sequence_length=_INT,
     mass_da=_INT,
+    obsolete=_BOOL,
+    replaced_by=_ARR,
+    has_variants=_BOOL,
+    has_diseases=_BOOL,
+    has_structure=_BOOL,
+    isoform=_STR,
 )
 
 SEQUENCE_SCHEMA = _envelope(accession=_STR, canonical=_OBJ, isoform_count=_INT, isoforms=_ARR)

@@ -20,7 +20,7 @@ def test_capabilities_advertises_response_modes_and_contracts() -> None:
     from uniprot_link.mcp.capabilities import build_capabilities
 
     cap = build_capabilities()
-    assert cap["server_version"] == "0.5.0"
+    assert cap["server_version"] == "0.6.0"
     assert cap["response_modes"] == ["minimal", "compact", "standard", "full"]
     assert cap["default_response_mode"] == "compact"
     assert "domain" in cap["feature_types"]
@@ -36,6 +36,15 @@ def test_capabilities_documents_result_ordering() -> None:
     cap = build_capabilities()
     ordering = cap["result_ordering"]["find_proteins"]
     assert "accession" in ordering and "reviewed" in ordering.lower()
+
+
+def test_capabilities_documents_obsolete_and_map_dbs() -> None:
+    cap = build_capabilities()
+    assert cap["server_version"] == "0.6.0"
+    assert "obsolete" in cap["not_found_contract"].lower()
+    assert "PDB" in cap["map_identifier_databases"]
+    assert "DrugBank" not in cap["map_identifier_databases"]
+    assert "cross_references" in cap["result_ordering"]
 
 
 def test_capabilities_has_latency_profile() -> None:

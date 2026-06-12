@@ -18,6 +18,7 @@ from uniprot_link.mcp.resources import (
 from uniprot_link.services.constants import (
     COMMON_XREF_DATABASES,
     FEATURE_TYPES,
+    MAP_IDENTIFIER_DATABASES,
     NAMED_GRAPHS,
     PREFIXES,
     UNIPROT_RELEASE,
@@ -66,6 +67,7 @@ def build_capabilities() -> dict[str, Any]:
         "prefixes": PREFIXES,
         "feature_types": sorted(FEATURE_TYPES.keys()),
         "common_xref_databases": COMMON_XREF_DATABASES,
+        "map_identifier_databases": MAP_IDENTIFIER_DATABASES,
         "response_modes": list(RESPONSE_MODES),
         "default_response_mode": "compact",
         "provenance_policy": (
@@ -114,12 +116,30 @@ def build_capabilities() -> dict[str, Any]:
         "not_found_contract": (
             "Nonexistent accessions/taxa return error_code 'not_found' on every "
             "get_protein*/get_taxon tool; run_sparql_query rejects write/UPDATE "
-            "queries as 'invalid_input' (read-only)."
+            "queries as 'invalid_input' (read-only). An obsolete/demerged accession "
+            "is surfaced consistently: get_protein returns a flagged record "
+            "(obsolete:true + replaced_by), while the data sub-tools return a "
+            "'not_found' error carrying obsolete:true + replaced_by + a "
+            "next_command to the live replacement."
+        ),
+        "obsolete_handling": (
+            "Entries with up:obsolete=true (demerged or deleted) are never presented "
+            "as live. get_protein returns {obsolete:true, obsolete_reason, "
+            "replaced_by:[...]}; sequence/features/variants/diseases/go/xref/map "
+            "raise an obsolete-flagged not_found. replaced_by may list multiple "
+            "accessions (a demerge can split into several)."
         ),
         "result_ordering": {
             "find_proteins": (
                 "Reviewed (Swiss-Prot) first, then by mnemonic (entry name), then "
                 "accession -- deterministic across identical calls and pages."
+            ),
+            "cross_references": (
+                "Ids and database keys are sorted (stable across calls and identical "
+                "between get_protein_cross_references and map_identifiers). compact "
+                "caps each database at 25 ids with a truncated_databases note and "
+                "always reports per-database counts; minimal returns counts only; "
+                "standard/full return every id."
             ),
         },
         "recommended_workflows": [
