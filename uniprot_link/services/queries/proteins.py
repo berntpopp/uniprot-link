@@ -105,11 +105,17 @@ def find_proteins(
     # universally-present fields (mnemonic/reviewed/organism) as REQUIRED joins
     # lets QLever do bound joins instead of materialising large OPTIONAL
     # relations, which is the difference between ~5s and a 45s timeout.
-    if name_contains:
-        nc = escape_literal(name_contains.strip())
+    #
+    # F6: multi-word name_contains is matched per-WORD (each token must appear
+    # somewhere in the name), not as one literal substring. "polynucleotide
+    # kinase" therefore matches "Bifunctional polynucleotide phosphatase/kinase".
+    # Single-word input is unchanged. Capped at 6 tokens to bound the query.
+    name_tokens = [escape_literal(t) for t in name_contains.split()][:6] if name_contains else []
+    if name_tokens:
+        conditions = " && ".join(f'CONTAINS(LCASE(?name), LCASE("{t}"))' for t in name_tokens)
         name_pattern = (
             "  ?protein up:recommendedName/up:fullName ?name .\n"
-            f'  FILTER(CONTAINS(LCASE(?name), LCASE("{nc}")))'
+            f"  FILTER({conditions})"
         )
     else:
         name_pattern = "  OPTIONAL { ?protein up:recommendedName/up:fullName ?name }"

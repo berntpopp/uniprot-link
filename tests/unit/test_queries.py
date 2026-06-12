@@ -147,6 +147,22 @@ class TestFindProteins:
         query = q.find_proteins(organism_taxon=9606, name_contains="kinase")
         assert "CONTAINS(LCASE(?name)" in query
 
+    def test_name_contains_single_word_is_one_contains(self) -> None:
+        query = q.find_proteins(organism_taxon=9606, name_contains="kinase")
+        assert query.count("CONTAINS(LCASE(?name)") == 1
+        assert "&&" not in query
+
+    def test_name_contains_multiword_ands_each_token(self) -> None:
+        """F6: 'polynucleotide kinase' must match 'polynucleotide phosphatase/kinase'."""
+        query = q.find_proteins(
+            organism_taxon=9606, name_contains="polynucleotide kinase"
+        )
+        # each whitespace token becomes its own CONTAINS, AND-ed together
+        assert query.count("CONTAINS(LCASE(?name)") == 2
+        assert "&&" in query
+        assert 'LCASE("polynucleotide")' in query
+        assert 'LCASE("kinase")' in query
+
 
 class TestProteinQueries:
     def test_summary_isolates_aggregation(self) -> None:

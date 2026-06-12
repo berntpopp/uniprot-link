@@ -64,7 +64,8 @@ def _register_find_and_summary(mcp: FastMCP) -> None:
             "Search UniProtKB by structured filters and return matching entries "
             "(accession, mnemonic, recommended name, reviewed flag, organism). "
             "Requires at least one anchor: gene symbol, mnemonic, EC number, keyword "
-            "(KW-id or label), OR organism_taxon together with name_contains. "
+            "(KW-id or label), OR organism_taxon together with name_contains "
+            "(matched per word, in any order, case-insensitive). "
             "Reviewed (Swiss-Prot) hits are ranked first. UniProt SPARQL has no "
             "general full-text index, so for broad text use search_example_queries "
             "or run_sparql_query. Pair with get_protein for full detail. Results "
@@ -92,7 +93,15 @@ def _register_find_and_summary(mcp: FastMCP) -> None:
             str | None, Field(description="Entry mnemonic, e.g. BRCA1_HUMAN.")
         ] = None,
         name_contains: Annotated[
-            str | None, Field(description="Substring of the recommended protein name.")
+            str | None,
+            Field(
+                description=(
+                    "Words to match in the recommended protein name. Multi-word "
+                    "input matches per word (each word must appear, in any order), "
+                    "so 'polynucleotide kinase' matches 'Bifunctional "
+                    "polynucleotide phosphatase/kinase'. Case-insensitive."
+                )
+            ),
         ] = None,
         limit: Annotated[int, Field(description="Max results per page.", ge=1, le=200)] = 25,
         offset: Annotated[int, Field(description="Pagination offset.", ge=0)] = 0,
