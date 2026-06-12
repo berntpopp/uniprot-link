@@ -4,6 +4,27 @@ All notable changes to uniprot-link are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/) and the project uses semantic
 versioning.
 
+## [0.3.0] - 2026-06-12
+
+### Added
+
+- `get_protein_variants` now returns the `wild_type` residue, a `variant_type`
+  (`substitution` | `other`), and an HGVS-style `notation` (e.g. `L176F`) for
+  simple substitutions — so amino-acid changes are constructible without a
+  separate sequence fetch. Empty `substitution` (deletion/complex) is made
+  explicit via `variant_type: "other"` instead of a bare empty string.
+- Deployment-freshness guard: `get_server_capabilities` and `/health` now carry a
+  `build` stamp (version, git sha, build time); `scripts/check_deployed_version.py`
+  gates a release on the deployed version matching the source.
+- `run_sparql_query` syntax errors now include a `search_example_queries`
+  recovery `next_command`.
+
+### Changed
+
+- `map_identifiers` defaults to a curated set of primary id-mapping databases
+  (PDB, Ensembl, RefSeq, HGNC, ...) so it is genuinely a focused, smaller view
+  than `get_protein_cross_references`; pass `databases` to override.
+
 ## [0.2.0] - 2026-06-11
 
 A correctness and ergonomics milestone: 15 fixes across the typed protein and
