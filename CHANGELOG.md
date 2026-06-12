@@ -4,6 +4,71 @@ All notable changes to uniprot-link are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/) and the project uses semantic
 versioning.
 
+## [0.9.0] - 2026-06-12
+
+Closes every finding (F1–F9 + the untested obsolete path) of the v0.8.0
+consumer/tester assessment
+([`mcp-assessment-v0.8.0-consumer-tester.md`](docs/mcp-assessment-v0.8.0-consumer-tester.md),
+overall **8.0/10**, docked for a silent isoform correctness defect). Each finding
+was reproduced live before the fix and re-verified live after; grounded in
+2025–2026 MCP best-practice research. Design + plan:
+[`docs/superpowers/specs/2026-06-12-v0.9.0-assessment-remediation-design.md`](docs/superpowers/specs/2026-06-12-v0.9.0-assessment-remediation-design.md).
+
+### Fixed
+
+- **Isoform handling is now correct and consistent across the whole
+  `get_protein_*` family (F1/F2 — the correctness defect that capped the score).**
+  - `get_protein_features` no longer **silently returns 0 features** for an
+    isoform accession (e.g. `P05067-2`). The query builders for features,
+    cross-references, **and GO terms** (the latter two an untested latent twin)
+    now anchor on the base entry like variants/diseases already did. Live:
+    `P05067-2` → 12 domain/region features (was 0). (F1)
+  - `get_protein_sequence` no longer returns `not_found` for a valid isoform.
+    An isoform accession returns **that isoform's specific sequence** (its own
+    length + a computed mass, since `up:mass` is canonical-only). This restores
+    the cross-tool contract `get_protein(P05067-2)` advertises. (F2)
+  - Every entry-level tool now **rejects a typo'd isoform index** (clean
+    `not_found`) and, for a valid isoform request, echoes `requested_accession` +
+    an `isoform_note` — matching `get_protein`'s model. (F1)
+- **`run_sparql_query` reports the true `query_type`** (SELECT/ASK/CONSTRUCT/
+  DESCRIBE) for non-JSON serializations, with the serialization in a separate
+  `serialization` field — a SELECT projected to CSV is no longer mislabeled
+  `RDF/raw`. (F8)
+- **`latency_profile` no longer under-states reality.** `get_protein_features`
+  and `get_protein_diseases` (measured ~1.6–2.3 s cold) move out of the `fast`
+  (0–700 ms) band into a `medium` (700–2500 ms) band; bands now describe the
+  query class, not a single number. (F4)
+
+### Added
+
+- **`canonical_only` flag on `get_protein_sequence`** returns just the canonical
+  isoform (skips the additional-isoform list) — avoids dumping every isoform's
+  full sequence when only the canonical is wanted. Plus a `requested_isoform`
+  field on isoform-specific responses. (F7)
+- **`reviewed_count` (+ a `reviewed_hint`) on `find_proteins`** discloses how many
+  of a (reviewed-first) gene page are Swiss-Prot, so a page dominated by TrEMBL is
+  never mistaken for "all there is". (F9)
+- **`query`/`q` accepted as aliases for `search_example_queries`'s `text`** — a
+  natural wrong guess now succeeds instead of erroring. (F6)
+- **Documented `find_proteins` paging** in capabilities `limits`:
+  `find_proteins_page_size: 25`, `find_proteins_max_limit: 200`, the cross-ref
+  compact id cap, and a note clarifying `default_select_limit` is the
+  `run_sparql_query` auto-LIMIT (not the find_proteins page size). (F5)
+
+### Changed
+
+- **`find_proteins` latency** (F3): an exact `mnemonic` anchor is fast-pathed to a
+  single bound query (~7.9 s → ~3.9 s live, and the redundant TrEMBL scan is
+  gone); the common `offset==0` reviewed-first page now issues its COUNT +
+  reviewed-fill + unreviewed-fill **concurrently** (wall-clock = slowest leg, not
+  the sum). Semantics (reviewed-first ordering, paging) unchanged.
+- The `find_proteins` family moved into `services/service_find.py`
+  (`FindProteinsServiceMixin`) to keep modules within the 600-line cap.
+
+### Note
+
+The deployed server runs v0.8.0 until redeployed; these fixes are on disk/branch.
+
 ## [0.8.0] - 2026-06-12
 
 Closes every finding (F1–F8 + Part 1) of the v0.7.0 tester assessment

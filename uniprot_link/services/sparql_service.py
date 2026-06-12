@@ -401,9 +401,7 @@ class SparqlService(FindProteinsServiceMixin, TaxonomyServiceMixin):
         grouped = S.shape_go_terms(data_json)
         projected = S.project_go_terms(grouped, aspect=aspect, limit=max(0, int(limit)))
         acc = Q.validate_accession(accession).split("-")[0]
-        return attach_isoform_context(
-            {"accession": acc, **projected, **qmeta}, accession, acc
-        )
+        return attach_isoform_context({"accession": acc, **projected, **qmeta}, accession, acc)
 
     async def map_identifiers(
         self,
