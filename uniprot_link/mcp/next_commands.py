@@ -5,6 +5,8 @@ from __future__ import annotations
 import re
 from typing import Any
 
+from uniprot_link.services.queries.validation import looks_like_accession
+
 _PROTEIN_TOOLS = {
     "get_protein",
     "get_protein_sequence",
@@ -24,18 +26,29 @@ def cmd(tool: str, **arguments: Any) -> dict[str, Any]:
     return {"tool": tool, "arguments": arguments}
 
 
-def protein_not_found_recovery(value: str) -> list[dict[str, Any]]:
-    """Recovery for a failed get_protein lookup without reusing a bad accession.
+def looks_like_gene_symbol(value: str) -> bool:
+    """True only for a genuine gene-symbol shape (never an accession attempt).
 
-    A numeric/garbage accession must NOT be replayed as a gene symbol; only a
-    gene-shaped value is offered to find_proteins(gene=...).
+    Distinguishes a gene typed into the accession slot (``BRCA1``, ``G6PD``) from
+    a mangled/near-miss accession (``Q96T60XYZ``, ``P05067``) so error recovery
+    only suggests find_proteins(gene=...) when it would actually help.
     """
-    out: list[dict[str, Any]] = []
-    value = (value or "").strip()
-    if value and _GENE_SHAPE.match(value) and not value[:1].isdigit():
-        out.append(cmd("find_proteins", gene=value))
-    out.append(cmd("get_server_capabilities"))
-    return out
+    v = (value or "").strip()
+    if not v or not _GENE_SHAPE.match(v):
+        return False
+    return not looks_like_accession(v)
+
+
+def protein_not_found_recovery(value: str) -> list[dict[str, Any]]:
+    """Recovery for a failed get_protein lookup.
+
+    A genuine gene symbol in the accession slot (``BRCA1``) is redirected to
+    find_proteins(gene=...). A mangled/near-miss accession (``Q96T60XYZ``) or a
+    digit blob (``999999``) is NOT replayed as a gene -- it points at discovery.
+    """
+    if looks_like_gene_symbol(value):
+        return [cmd("find_proteins", gene=value.strip()), cmd("get_server_capabilities")]
+    return [cmd("get_server_capabilities"), cmd("search_example_queries", text="protein")]
 
 
 def default_error_next_commands(

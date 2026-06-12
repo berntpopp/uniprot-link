@@ -18,6 +18,9 @@ _ACCESSION_RE = re.compile(
     re.IGNORECASE,
 )
 _TAXON_RE = re.compile(r"^\d+$")
+# The accession interior signature: a letter, a digit, then 4+ alnum chars (e.g.
+# ``Q96T60XYZ``). Catches a *mangled* accession the strict grammar above rejects.
+_ACCESSION_LIKE_RE = re.compile(r"^[A-Za-z][0-9][A-Za-z0-9]{4,}(-\d+)?$")
 _SELECT_LIMIT_RE = re.compile(r"\blimit\s+\d+", re.IGNORECASE)
 _COMMENT_RE = re.compile(r"#[^\n]*")
 _PREFIX_RE = re.compile(r"^\s*(?:PREFIX\s+[^:]*:\s*<[^>]*>|BASE\s*<[^>]*>)\s*", re.IGNORECASE)
@@ -46,6 +49,17 @@ def validate_accession(accession: str) -> str:
             field="accession",
         )
     return acc
+
+
+def looks_like_accession(value: str) -> bool:
+    """True if ``value`` is a real OR near-miss UniProtKB accession (not a gene).
+
+    Used by error recovery to keep a mangled accession (e.g. ``Q96T60XYZ``) from
+    being replayed as ``find_proteins(gene=...)``, while still letting a genuine
+    gene symbol typed into the accession slot (``BRCA1``) redirect to a search.
+    """
+    v = value.strip()
+    return bool(_ACCESSION_RE.match(v.upper()) or _ACCESSION_LIKE_RE.match(v))
 
 
 def validate_taxon(taxon_id: str | int) -> str:
