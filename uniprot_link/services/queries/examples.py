@@ -19,8 +19,13 @@ def search_example_queries(text: str | None = None, limit: int = 25) -> str:
                 for t in tokens
             )
             text_filter = f"    FILTER({clauses})\n"
+    # GROUP BY ?ex only (Bug 12): an example can carry >1 rdfs:comment AND >1
+    # matching rdf:type, which previously produced duplicate rows. ?comment and
+    # ?type are collapsed with SAMPLE under distinct aliases (?desc/?qtype — the
+    # SPARQL alias must not reuse an in-scope variable). UniProt-native vs
+    # federated ranking is decided in shaping from the example IRI host.
     return f"""{prefix_block()}
-SELECT ?ex ?comment ?type
+SELECT ?ex (SAMPLE(?comment) AS ?desc) (SAMPLE(?type) AS ?qtype)
        (GROUP_CONCAT(DISTINCT ?kw; separator=", ") AS ?keywords)
 WHERE {{
   GRAPH <{SPARQL_EXAMPLES_GRAPH}> {{
@@ -31,7 +36,7 @@ WHERE {{
                                 sh:SPARQLConstructExecutable)) }}
 {text_filter}  }}
 }}
-GROUP BY ?ex ?comment ?type
+GROUP BY ?ex
 ORDER BY ?ex
 LIMIT {limit}"""
 

@@ -430,3 +430,24 @@ def test_shape_go_terms_includes_and_merges_evidence() -> None:
     cc = out["cellular_component"][0]
     assert cc["id"] == "GO:0005634"
     assert "evidence" not in cc
+
+
+def test_shape_example_list_dedupes_ids_and_ranks_native_first() -> None:
+    native = "https://sparql.uniprot.org/.well-known/sparql-examples/26"
+    federated = "https://sparql.rhea-db.org/.well-known/sparql-examples/114"
+    body = make_select_json(
+        ["ex", "desc", "qtype", "keywords"],
+        [
+            # federated (Rhea) example, listed first by the SPARQL ORDER BY ?ex
+            {"ex": federated, "desc": "rhea ex", "qtype": "", "keywords": ""},
+            # the native example appears twice (two rdfs:comment values)
+            {"ex": native, "desc": "native ex", "qtype": "", "keywords": "domain"},
+            {"ex": native, "desc": "native ex (alt)", "qtype": "", "keywords": "domain"},
+        ],
+    )
+    out = S.shape_example_list(body)
+    ids = [e["example_id"] for e in out]
+    assert ids.count(native) == 1  # deduped by example_id
+    assert ids[0] == native  # native ranks above the federated Rhea example
+    assert out[0].get("federated") is None  # native carries no federated flag
+    assert out[-1]["federated"] is True  # the Rhea example is flagged federated

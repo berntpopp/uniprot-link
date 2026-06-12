@@ -333,23 +333,34 @@ def shape_taxon_resolutions(result_json: dict[str, Any] | None) -> list[dict[str
 
 
 def shape_example_list(result_json: dict[str, Any] | None) -> list[dict[str, Any]]:
-    """Shape example-catalog search rows."""
+    """Shape example-catalog search rows: dedupe by id, rank native above federated.
+
+    An example with >1 matching rdf:type previously produced duplicate rows
+    (Bug 12). Here the first row per ``example_id`` wins, and UniProt-native
+    examples are stably ranked before federated (Rhea/empty-keyword) ones.
+    """
     out: list[dict[str, Any]] = []
+    seen: set[str] = set()
     for row in rows(result_json):
-        out.append(
-            {
-                "example_id": row.get("ex"),
-                "description": row.get("comment"),
-                "query_type": local_name(row["type"])
-                .replace("SPARQL", "")
-                .replace("Executable", "")
-                if row.get("type")
-                else None,
-                "keywords": [
-                    k.strip() for k in str(row.get("keywords", "")).split(",") if k.strip()
-                ],
-            }
-        )
+        ex = row.get("ex")
+        if not ex or ex in seen:
+            continue
+        seen.add(ex)
+        # Federated = not hosted on the UniProt example graph (e.g. Rhea); these
+        # often carry empty keywords and are ranked below native examples.
+        federated = not str(ex).startswith("https://sparql.uniprot.org/")
+        entry: dict[str, Any] = {
+            "example_id": ex,
+            "description": row.get("desc"),
+            "query_type": local_name(row["qtype"]).replace("SPARQL", "").replace("Executable", "")
+            if row.get("qtype")
+            else None,
+            "keywords": [k.strip() for k in str(row.get("keywords", "")).split(",") if k.strip()],
+        }
+        if federated:
+            entry["federated"] = True
+        out.append(entry)
+    out.sort(key=lambda e: bool(e.get("federated")))  # stable: native first
     return out
 
 
