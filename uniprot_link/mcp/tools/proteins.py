@@ -246,8 +246,10 @@ def _register_annotations(mcp: FastMCP) -> None:
         tags={"protein", "disease"},
         description=(
             "Return disease annotations associated with an entry: disease name, "
-            "UniProt disease id, MIM id, and the descriptive comment. Pairs with "
-            "get_protein_variants for variant-level disease evidence."
+            "UniProt disease id, mnemonic, MIM id, the clinical `definition` (the "
+            "disease vocabulary's own description), and `involvement` (the "
+            "entry-specific note). Pairs with get_protein_variants for "
+            "variant-level disease evidence."
         ),
     )
     async def get_protein_diseases(accession: _ACC) -> dict[str, Any]:

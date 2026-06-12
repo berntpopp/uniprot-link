@@ -201,17 +201,24 @@ def _classify_variant(v: dict[str, Any]) -> dict[str, Any]:
 
 
 def shape_diseases(result_json: dict[str, Any] | None) -> list[dict[str, Any]]:
-    """Shape disease-annotation rows."""
+    """Shape disease-annotation rows.
+
+    ``definition`` is the disease's clinical definition (disease ``rdfs:comment``);
+    ``involvement`` is the entry-specific note (annotation ``rdfs:comment``). The
+    old single ``description`` (which carried only the involvement boilerplate) is
+    replaced by this pair (Bug 9).
+    """
     out: list[dict[str, Any]] = []
     for row in rows(result_json):
-        out.append(
-            {
-                "disease": row.get("diseaseLabel"),
-                "disease_id": local_name(row["disease"]) if row.get("disease") else None,
-                "mim": local_name(row["mim"]) if row.get("mim") else None,
-                "description": row.get("comment"),
-            }
-        )
+        disease = {
+            "disease": row.get("diseaseLabel"),
+            "disease_id": local_name(row["disease"]) if row.get("disease") else None,
+            "mnemonic": row.get("mnemonic"),
+            "mim": local_name(row["mim"]) if row.get("mim") else None,
+            "definition": row.get("definition"),
+            "involvement": row.get("comment"),
+        }
+        out.append({k: v for k, v in disease.items() if v not in (None, "")})
     return out
 
 

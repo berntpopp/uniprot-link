@@ -370,3 +370,25 @@ def test_shape_features_flags_unmapped_class() -> None:
     )
     out = S.shape_features(body)
     assert out[0]["type"].startswith("_unmapped:")
+
+
+def test_shape_diseases_splits_involvement_and_definition() -> None:
+    body = make_select_json(
+        ["disease", "diseaseLabel", "comment", "definition", "mnemonic", "mim"],
+        [
+            {
+                "disease": "http://purl.uniprot.org/diseases/4356",
+                "diseaseLabel": "Ataxia-oculomotor apraxia 4",
+                "comment": "The disease is caused by variants affecting the gene...",
+                "definition": "An autosomal recessive disease characterized by ...",
+                "mnemonic": "AOA4",
+                "mim": "http://purl.uniprot.org/mim/616267",
+            }
+        ],
+    )
+    out = S.shape_diseases(body)
+    assert out[0]["involvement"].startswith("The disease is caused")
+    assert out[0]["definition"].startswith("An autosomal recessive")
+    assert out[0]["mnemonic"] == "AOA4"
+    assert out[0]["mim"] == "616267"
+    assert out[0]["disease"] == "Ataxia-oculomotor apraxia 4"

@@ -257,10 +257,18 @@ LIMIT {limit}"""
 
 
 def protein_diseases(accession: str) -> str:
-    """Build a SELECT for disease annotations linked to an entry (with MIM)."""
+    """Build a SELECT for disease annotations linked to an entry.
+
+    Two distinct comments are returned: the *annotation* ``rdfs:comment``
+    (involvement — "the disease is caused by variants affecting this entry") and
+    the linked *disease vocabulary* entry's ``rdfs:comment`` (the clinical
+    definition). The disease vocabulary has no ``skos:definition``; the
+    definition lives on ``rdfs:comment`` of the ``up:Disease`` resource (verified
+    live). Also surfaces the disease ``up:mnemonic`` (e.g. AOA4).
+    """
     acc = validate_accession(accession).split("-")[0]
     return f"""{prefix_block()}
-SELECT ?disease ?diseaseLabel ?comment ?mim
+SELECT ?disease ?diseaseLabel ?comment ?definition ?mnemonic ?mim
 WHERE {{
   uniprotkb:{acc} up:annotation ?a .
   ?a a up:Disease_Annotation .
@@ -268,6 +276,8 @@ WHERE {{
   OPTIONAL {{
     ?a up:disease ?disease .
     ?disease skos:prefLabel ?diseaseLabel .
+    OPTIONAL {{ ?disease rdfs:comment ?definition }}
+    OPTIONAL {{ ?disease up:mnemonic ?mnemonic }}
     OPTIONAL {{ ?disease rdfs:seeAlso ?mim . ?mim up:database database:MIM }}
   }}
 }}
