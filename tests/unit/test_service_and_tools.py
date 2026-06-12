@@ -329,6 +329,35 @@ async def test_cross_references_short_by_default_full_on_request(service_factory
 
 
 @pytest.mark.asyncio
+async def test_go_terms_aspect_filter_limit_and_counts(service_factory: Any) -> None:
+    rows_ = [
+        {
+            "go": f"http://purl.obolibrary.org/obo/GO_{i:07d}",
+            "label": f"t{i}",
+            "aspect": "http://purl.obolibrary.org/obo/GO_0008150",
+        }
+        for i in range(3)
+    ] + [
+        {
+            "go": "http://purl.obolibrary.org/obo/GO_0005634",
+            "label": "nucleus",
+            "aspect": "http://purl.obolibrary.org/obo/GO_0005575",
+        }
+    ]
+    body = make_select_json(["go", "label", "aspect"], rows_)
+    routes = [("up:obsolete ?obsolete", _ACTIVE_STATUS), ("up:classifiedWith", body)]
+    svc = service_factory(routes)
+    res = await svc.get_go_terms("P05067")
+    assert res["count"] == 4
+    assert res["count_by_aspect"]["biological_process"] == 3
+    bp_only = await svc.get_go_terms("P05067", aspect="biological_process")
+    assert list(bp_only["by_aspect"].keys()) == ["biological_process"]
+    assert bp_only["count"] == 3
+    limited = await svc.get_go_terms("P05067", limit=2)
+    assert limited["count"] == 2 and limited["truncated"]["total"] == 4
+
+
+@pytest.mark.asyncio
 async def test_cross_references_lean_compact_and_minimal(service_factory: Any) -> None:
     rows_ = [
         {

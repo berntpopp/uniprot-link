@@ -347,12 +347,23 @@ def _register_annotations(mcp: FastMCP) -> None:
             "Return Gene Ontology annotations for an entry, grouped by aspect "
             "(biological_process / molecular_function / cellular_component) where "
             "available, each with GO id, label, and (when annotated) ECO `evidence` "
-            "ids plus mapped GO `evidence_codes` (IDA/IEA/IMP/...) for citation."
+            "ids plus mapped GO `evidence_codes` (IDA/IEA/IMP/...) for citation. "
+            "Always returns `count` and `count_by_aspect`; pass `aspect` to scope to "
+            "one ontology and `limit` to cap a large set (token economy)."
         ),
     )
-    async def get_protein_go_terms(accession: _ACC) -> dict[str, Any]:
+    async def get_protein_go_terms(
+        accession: _ACC,
+        aspect: Annotated[
+            Literal["biological_process", "molecular_function", "cellular_component"] | None,
+            Field(description="Restrict to one GO aspect (omit for all)."),
+        ] = None,
+        limit: Annotated[
+            int, Field(description="Max terms to return (0 = all).", ge=0, le=500)
+        ] = 0,
+    ) -> dict[str, Any]:
         async def call() -> dict[str, Any]:
-            payload = await get_sparql_service().get_go_terms(accession)
+            payload = await get_sparql_service().get_go_terms(accession, aspect, limit)
             payload["_meta"] = {
                 "next_commands": after_entry_subresource(
                     payload["accession"], "get_protein_go_terms", count=payload.get("count")

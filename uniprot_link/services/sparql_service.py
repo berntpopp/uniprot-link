@@ -431,16 +431,18 @@ class SparqlService:
         acc = Q.validate_accession(accession).split("-")[0]
         return {"accession": acc, **projected, **qmeta}
 
-    async def get_go_terms(self, accession: str) -> dict[str, Any]:
-        """Return Gene Ontology annotations grouped by aspect."""
+    async def get_go_terms(
+        self, accession: str, aspect: str | None = None, limit: int = 0
+    ) -> dict[str, Any]:
+        """Return GO annotations grouped by aspect (aspect/limit, token-lean)."""
         query = Q.protein_go_terms(accession)
         _, (data_json, qmeta) = await asyncio.gather(
             self.require_entry(accession), self._select_timed(query)
         )
         grouped = S.shape_go_terms(data_json)
+        projected = S.project_go_terms(grouped, aspect=aspect, limit=max(0, int(limit)))
         acc = Q.validate_accession(accession).split("-")[0]
-        total = sum(len(v) for v in grouped.values())
-        return {"accession": acc, "count": total, "by_aspect": grouped, **qmeta}
+        return {"accession": acc, **projected, **qmeta}
 
     async def map_identifiers(
         self,

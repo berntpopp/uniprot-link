@@ -416,6 +416,43 @@ def shape_go_terms(result_json: dict[str, Any] | None) -> dict[str, list[dict[st
     return grouped
 
 
+def project_go_terms(
+    grouped: dict[str, list[dict[str, Any]]],
+    *,
+    aspect: str | None = None,
+    limit: int = 0,
+) -> dict[str, Any]:
+    """Filter GO terms by aspect and cap the total; always report counts (F-VERB).
+
+    ``count_by_aspect`` reflects the pre-cap totals (after any aspect filter) so a
+    consumer always sees how many terms exist before deciding to widen ``limit``.
+    """
+    if aspect:
+        grouped = {k: v for k, v in grouped.items() if k == aspect}
+    count_by_aspect = {k: len(v) for k, v in grouped.items()}
+    total = sum(count_by_aspect.values())
+    out: dict[str, Any] = {}
+    if limit and total > limit:
+        remaining = limit
+        capped: dict[str, list[dict[str, Any]]] = {}
+        for k, terms in grouped.items():
+            if remaining <= 0:
+                break
+            capped[k] = terms[:remaining]
+            remaining -= len(capped[k])
+        grouped = capped
+        out["truncated"] = {
+            "returned": limit,
+            "total": total,
+            "recovery": "raise `limit` or filter by `aspect`.",
+        }
+    returned = sum(len(v) for v in grouped.values())
+    out["count"] = returned if limit else total
+    out["count_by_aspect"] = count_by_aspect
+    out["by_aspect"] = grouped
+    return out
+
+
 def shape_taxon_core(result_json: dict[str, Any] | None) -> dict[str, Any] | None:
     """Shape a taxon's own attributes; ``None`` if the taxon does not exist."""
     data = rows(result_json)
