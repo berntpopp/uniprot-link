@@ -157,7 +157,14 @@ class SparqlClient:
             status = response.status_code
 
             if status == _HTTP_BAD_REQUEST:
-                detail = response.text.strip()[:240] or "Malformed SPARQL query."
+                # QLever surfaces a parse detail in the body for many errors; when
+                # it returns an empty 400 (it does for some malformed queries),
+                # give a cause-oriented hint instead of a bare string (Bug 11).
+                detail = response.text.strip()[:240] or (
+                    "Malformed SPARQL query (endpoint returned no detail). Common "
+                    "causes: unbalanced {}/() , a missing PREFIX, or an incomplete "
+                    "FILTER/expression. Re-seed from a working example."
+                )
                 raise QuerySyntaxError(detail)
             if status == _HTTP_TOO_MANY_REQUESTS:
                 if attempt < self.config.max_retries:

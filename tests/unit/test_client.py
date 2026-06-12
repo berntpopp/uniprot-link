@@ -53,8 +53,23 @@ async def test_user_agent_has_contact(config: SparqlEndpointConfig) -> None:
 async def test_400_maps_to_syntax_error(config: SparqlEndpointConfig) -> None:
     respx.post(ENDPOINT).mock(return_value=httpx.Response(400, text="Parse error near 'SELCT'"))
     client = SparqlClient(config)
-    with pytest.raises(QuerySyntaxError):
+    with pytest.raises(QuerySyntaxError) as exc:
         await client.execute("SELCT bad")
+    assert "Parse error near 'SELCT'" in exc.value.message  # endpoint detail surfaced
+    await client.aclose()
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_400_empty_body_gets_cause_oriented_hint(config: SparqlEndpointConfig) -> None:
+    # QLever returns an empty 400 for some malformed queries (Bug 11).
+    respx.post(ENDPOINT).mock(return_value=httpx.Response(400, text=""))
+    client = SparqlClient(config)
+    with pytest.raises(QuerySyntaxError) as exc:
+        await client.execute("SELECT ?x WHERE { FILTER(")
+    msg = exc.value.message
+    assert "Common causes" in msg
+    assert "PREFIX" in msg
     await client.aclose()
 
 
