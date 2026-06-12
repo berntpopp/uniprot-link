@@ -476,3 +476,58 @@ def test_shape_example_list_dedupes_ids_and_ranks_native_first() -> None:
     assert ids[0] == native  # native ranks above the federated Rhea example
     assert out[0].get("federated") is None  # native carries no federated flag
     assert out[-1]["federated"] is True  # the Rhea example is flagged federated
+
+
+def test_average_mass_matches_uniprot_canonical() -> None:
+    from uniprot_link.services.shaping import average_mass
+
+    # PNKP canonical isoform Q96T60-1: UniProt reports 57076 Da for this 521-aa
+    # sequence. This locks the residue mass table against drift.
+    q96t60_1 = (
+        "MGEVEAPGRLWLESPPGGAPPIFLPSDGQALVLGRGPLTQVTDRKCSRTQVELVADPETRTVAVKQLGVNPST"
+        "TGTQELKPGLEGSLGVGDTLYLVNGLHPLTLRWEETRTPESQPDTPPGTPLVSQDEKRDAELPKKRMRKSNPG"
+        "WENLEKLLVFTAAGVKPQGKVAGFDLDGTLITTRSGKVFPTGPSDWRILYPEIPRKLRELEAEGYKLVIFTNQ"
+        "MSIGRGKLPAEEFKAKVEAVVEKLGVPFQVLVATHAGLYRKPVTGMWDHLQEQANDGTPISIGDSIFVGDAAG"
+        "RPANWAPGRKKKDFSCADRLFALNLGLPFATPEEFFLKWPAAGFELPAFDPRTVSRSGPLCLPESRALLSASP"
+        "EVVVAVGFPGAGKSTFLKKHLVSAGYVHVNRDTLGSWQRCVTTCETALKQGKRVAIDNTNPDAASRARYVQCA"
+        "RAAGVPCRCFLFTATLEQARHNNRFREMTDSSHIPVSDMVMYGYRKQFEAPTLAEGFSAILEIPFRLWVEPRL"
+        "GRLYCQFSEG"
+    )
+    assert len(q96t60_1) == 521
+    mass = average_mass(q96t60_1)
+    assert mass is not None
+    assert abs(mass - 57076) <= 2
+
+
+def test_isoform_mass_is_computed_when_absent() -> None:
+    from tests.conftest import make_select_json
+    from uniprot_link.services.shaping import shape_sequences
+
+    body = make_select_json(
+        ["isoform", "length", "value"],
+        [{"isoform": "http://purl.uniprot.org/isoforms/Q96T60-2", "length": 5, "value": "ACDEF"}],
+    )
+    iso = shape_sequences(body)[0]
+    assert isinstance(iso["mass_da"], int)
+    assert iso["mass_da"] > 0
+    assert iso["mass_computed"] is True
+
+
+def test_canonical_mass_is_not_marked_computed() -> None:
+    from tests.conftest import make_select_json
+    from uniprot_link.services.shaping import shape_sequences
+
+    body = make_select_json(
+        ["isoform", "length", "mass", "value"],
+        [
+            {
+                "isoform": "http://purl.uniprot.org/isoforms/P05067-1",
+                "length": 8,
+                "mass": 86943,
+                "value": "MLPCANON",
+            }
+        ],
+    )
+    canonical = shape_sequences(body)[0]
+    assert canonical["mass_da"] == 86943
+    assert "mass_computed" not in canonical

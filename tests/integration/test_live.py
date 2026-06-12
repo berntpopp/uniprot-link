@@ -271,3 +271,13 @@ async def test_features_domain_region_hint_live(service: SparqlService) -> None:
     both = await service.get_features("Q96T60", ["domain", "region"])
     assert both["count"] > out["count"]
     assert "domain_region_hint" not in both
+
+
+async def test_isoform_mass_is_computed_live(service: SparqlService) -> None:
+    """v0.5.0 C7: a non-canonical isoform gets a computed (non-null) mass."""
+    out = await service.get_sequence("Q96T60", response_mode="standard")
+    assert out["isoform_count"] >= 2
+    iso2 = next(s for s in out["isoforms"] if s["isoform"] == "Q96T60-2")
+    assert isinstance(iso2["mass_da"], int)
+    assert iso2["mass_da"] > 0
+    assert iso2["mass_computed"] is True

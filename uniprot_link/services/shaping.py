@@ -5,10 +5,12 @@ from __future__ import annotations
 from typing import Any
 
 from uniprot_link.services.constants import (
+    AVERAGE_RESIDUE_MASS,
     ECO_TO_GO_CODE,
     FEATURE_CLASS_TO_KEY,
     GO_ASPECT_ROOTS,
     PREFIXES,
+    WATER_MASS,
 )
 
 _UNIPROT_ACC_PREFIXES = (
@@ -114,20 +116,48 @@ def shape_protein_summary(result_json: dict[str, Any] | None) -> dict[str, Any] 
     return {k: v for k, v in summary.items() if v not in (None, [], "")}
 
 
+def average_mass(sequence: str) -> int | None:
+    """Average molecular mass (Da) from a residue sequence.
+
+    Returns ``None`` if the sequence contains a residue with no defined average
+    mass (e.g. ambiguous B/Z/X) rather than guessing.
+    """
+    if not sequence:
+        return None
+    total = WATER_MASS
+    for residue in sequence:
+        mass = AVERAGE_RESIDUE_MASS.get(residue)
+        if mass is None:
+            return None
+        total += mass
+    return round(total)
+
+
 def shape_sequences(result_json: dict[str, Any] | None) -> list[dict[str, Any]]:
-    """Shape sequence rows; mark the canonical isoform (IRI ending in -1)."""
+    """Shape sequence rows; mark the canonical isoform (IRI ending in -1).
+
+    UniProt asserts ``up:mass`` only on the canonical sequence, so a non-canonical
+    isoform's mass is derived from its sequence (``mass_computed: True``) rather
+    than left null.
+    """
     out: list[dict[str, Any]] = []
     for row in rows(result_json):
         iso = row.get("isoform", "")
-        out.append(
-            {
-                "isoform": accession_from_uri(iso),
-                "canonical": iso.endswith("-1"),
-                "length": row.get("length"),
-                "mass_da": row.get("mass"),
-                "sequence": row.get("value"),
-            }
-        )
+        mass = row.get("mass")
+        seq = row.get("value")
+        entry: dict[str, Any] = {
+            "isoform": accession_from_uri(iso),
+            "canonical": iso.endswith("-1"),
+            "length": row.get("length"),
+            "mass_da": mass,
+            "sequence": seq,
+        }
+        if mass is None and seq:
+            computed = average_mass(seq)
+            if computed is not None:
+                entry["mass_da"] = computed
+                entry["mass_computed"] = True
+        out.append(entry)
     out.sort(key=lambda s: (not s["canonical"], s["isoform"]))
     return out
 
