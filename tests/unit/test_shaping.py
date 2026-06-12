@@ -306,6 +306,25 @@ def test_shape_variants_adds_wildtype_and_notation():
     assert "substitution" not in out[408]
 
 
+def test_shape_protein_summary_carries_presence_flags() -> None:
+    body = make_select_json(
+        ["mnemonic", "has_variants", "has_diseases", "has_structure"],
+        [
+            {
+                "mnemonic": "A4_HUMAN",
+                "has_variants": True,
+                "has_diseases": False,
+                "has_structure": True,
+            }
+        ],
+    )
+    out = S.shape_protein_summary(body)
+    assert out is not None
+    assert out["has_variants"] is True
+    assert out["has_diseases"] is False  # explicit False kept (presence flag)
+    assert out["has_structure"] is True
+
+
 def test_shape_entry_status_active_obsolete_absent_isoform() -> None:
     from uniprot_link.services.shaping import shape_entry_status
 

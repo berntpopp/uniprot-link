@@ -240,17 +240,48 @@ class SparqlService:
         return collected, {"elapsed_ms": round(elapsed, 1), "cached": cached}
 
     async def get_protein(self, accession: str, response_mode: str = "compact") -> dict[str, Any]:
-        """Return the core summary for a single entry."""
-        query = Q.protein_summary(accession)
-        summary_json, qmeta = await self._select_timed(query)
+        """Return the core summary for a single entry (obsolete/isoform aware).
+
+        Runs the obsolete-aware status probe in parallel with the summary so an
+        obsolete accession returns a flagged record (never a sparse "live" one,
+        F-OBS) and a typo'd isoform index is rejected rather than silently
+        collapsed to the parent (F-ISO).
+        """
+        status_json, (summary_json, qmeta) = await asyncio.gather(
+            self._select(Q.entry_status(accession)),
+            self._select_timed(Q.protein_summary(accession)),
+        )
+        status = S.shape_entry_status(status_json, accession)
         summary = S.shape_protein_summary(summary_json)
-        if summary is None:
+        acc = Q.validate_accession(accession).split("-")[0]
+        if not status.exists and summary is None:
             raise NotFoundError(
                 f"No UniProtKB entry found for accession '{accession}'. "
                 "Resolve a gene/organism via find_proteins first."
             )
-        acc = Q.validate_accession(accession).split("-")[0]
-        payload = {"accession": acc, **summary, **qmeta}
+        if status.obsolete:
+            record = S.build_obsolete_record(acc, status, summary)
+            record["requested_accession"] = accession
+            return {**record, **qmeta}
+        if status.isoform_exists is False:
+            raise NotFoundError(
+                f"No isoform '{accession}' exists for entry {acc}. "
+                "Call get_protein_sequence to list the entry's isoforms."
+            )
+        if summary is None:
+            raise NotFoundError(f"No UniProtKB entry found for accession '{accession}'.")
+        payload: dict[str, Any] = {
+            "accession": acc,
+            "requested_accession": accession,
+            **summary,
+            **qmeta,
+        }
+        if status.isoform_exists:
+            payload["isoform"] = accession
+            payload["isoform_note"] = (
+                "Summary is entry-level; call get_protein_sequence for the "
+                f"isoform-specific sequence and mass of {accession}."
+            )
         return S.apply_response_mode(payload, response_mode, kind="protein")
 
     async def get_sequence(self, accession: str, response_mode: str = "compact") -> dict[str, Any]:

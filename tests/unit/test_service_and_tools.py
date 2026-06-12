@@ -108,6 +108,79 @@ async def test_get_sequence_single_isoform_has_empty_isoforms(service_factory: A
 
 
 @pytest.mark.asyncio
+async def test_get_protein_obsolete_returns_flagged_record(service_factory: Any) -> None:
+    status = make_select_json(
+        ["obsolete", "replacedBy"],
+        [{"obsolete": True, "replacedBy": "http://purl.uniprot.org/uniprot/A0A9P2UQ24"}],
+    )
+    summary = make_select_json(
+        ["mnemonic", "reviewed"], [{"mnemonic": "A0A009K1D9_ACIBA", "reviewed": False}]
+    )
+    svc = service_factory(
+        [("up:obsolete ?obsolete", status), ("up:recommendedName", summary)]
+    )
+    out = await svc.get_protein("A0A009K1D9")
+    assert out["obsolete"] is True
+    assert out["replaced_by"] == ["A0A9P2UQ24"]
+    assert out["obsolete_reason"] == "demerged"
+    assert out["mnemonic"] == "A0A009K1D9_ACIBA"
+    assert "sequence_length" not in out and "mass_da" not in out  # nothing fabricated
+    assert out["requested_accession"] == "A0A009K1D9"
+
+
+@pytest.mark.asyncio
+async def test_get_protein_deleted_no_replacement(service_factory: Any) -> None:
+    status = make_select_json(["obsolete"], [{"obsolete": True}])
+    summary = make_select_json(["mnemonic"], [{"mnemonic": "Z9Z9Z9_STAAU"}])
+    svc = service_factory(
+        [("up:obsolete ?obsolete", status), ("up:recommendedName", summary)]
+    )
+    out = await svc.get_protein("Z9Z9Z9")
+    assert out["obsolete"] is True
+    assert out["obsolete_reason"] == "deleted"
+    assert "replaced_by" not in out
+
+
+@pytest.mark.asyncio
+async def test_get_protein_bogus_isoform_is_not_found(service_factory: Any) -> None:
+    status = make_select_json(
+        ["obsolete", "isoform_exists"], [{"obsolete": False, "isoform_exists": False}]
+    )
+    summary = make_select_json(["mnemonic"], [{"mnemonic": "A4_HUMAN"}])
+    svc = service_factory(
+        [("up:obsolete ?obsolete", status), ("up:recommendedName", summary)]
+    )
+    with pytest.raises(NotFoundError):
+        await svc.get_protein("P05067-99")
+
+
+@pytest.mark.asyncio
+async def test_get_protein_real_isoform_echoes_request(service_factory: Any) -> None:
+    status = make_select_json(
+        ["obsolete", "isoform_exists"], [{"obsolete": False, "isoform_exists": True}]
+    )
+    summary = make_select_json(
+        ["mnemonic", "has_variants", "has_diseases", "has_structure"],
+        [
+            {
+                "mnemonic": "A4_HUMAN",
+                "has_variants": True,
+                "has_diseases": True,
+                "has_structure": True,
+            }
+        ],
+    )
+    svc = service_factory(
+        [("up:obsolete ?obsolete", status), ("up:recommendedName", summary)]
+    )
+    out = await svc.get_protein("P05067-2")
+    assert out["accession"] == "P05067"
+    assert out["requested_accession"] == "P05067-2"
+    assert out["isoform"] == "P05067-2"
+    assert out["has_variants"] is True
+
+
+@pytest.mark.asyncio
 async def test_get_protein_not_found_raises(service_factory: Any) -> None:
     svc = service_factory([("up:recommendedName", _EMPTY)])
     with pytest.raises(NotFoundError):

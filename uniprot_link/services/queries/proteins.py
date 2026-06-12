@@ -186,8 +186,14 @@ def protein_summary(accession: str) -> str:
     return f"""{prefix_block()}
 SELECT ?mnemonic ?reviewed ?fullName ?shortName ?existence ?genes
        ?organism ?commonName ?taxid ?mass ?length ?function ?created ?modified
+       ?has_variants ?has_diseases ?has_structure
 WHERE {{
   uniprotkb:{base} a up:Protein .
+  # Cheap bound EXISTS presence flags (verified ~206 ms live) that drive
+  # content-aware next_commands and tell the caller what the entry carries.
+  BIND(EXISTS {{ uniprotkb:{base} up:annotation ?_v . ?_v a up:Natural_Variant_Annotation }} AS ?has_variants)
+  BIND(EXISTS {{ uniprotkb:{base} up:annotation ?_d . ?_d a up:Disease_Annotation }} AS ?has_diseases)
+  BIND(EXISTS {{ uniprotkb:{base} rdfs:seeAlso ?_x . ?_x up:database database:PDB }} AS ?has_structure)
   OPTIONAL {{ uniprotkb:{base} up:mnemonic ?mnemonic }}
   OPTIONAL {{ uniprotkb:{base} up:reviewed ?reviewed }}
   OPTIONAL {{ uniprotkb:{base} up:recommendedName ?rn .

@@ -120,6 +120,36 @@ def shape_entry_status(result_json: dict[str, Any] | None, requested: str) -> En
     return EntryStatus(exists=True, obsolete=obsolete, replaced_by=replaced, isoform_exists=iso)
 
 
+def build_obsolete_record(
+    accession: str, status: EntryStatus, summary: dict[str, Any] | None
+) -> dict[str, Any]:
+    """Build the flagged obsolete record returned by get_protein (F-OBS).
+
+    Never fabricates sequence/function fields; carries only the sparse identity
+    fields (mnemonic, reviewed) that survive on an obsolete entry, plus an
+    explicit ``obsolete: true`` flag and any ``replaced_by`` accessions.
+    """
+    record: dict[str, Any] = {
+        "accession": accession,
+        "obsolete": True,
+        "obsolete_reason": "demerged" if status.replaced_by else "deleted",
+        "notice": (
+            "This UniProtKB entry is obsolete and is not a live record. "
+            + (
+                f"It was demerged/replaced by: {', '.join(status.replaced_by)}."
+                if status.replaced_by
+                else "It was deleted and has no replacement entry."
+            )
+        ),
+    }
+    if status.replaced_by:
+        record["replaced_by"] = status.replaced_by
+    for key in ("mnemonic", "reviewed"):
+        if summary and summary.get(key) is not None:
+            record[key] = summary[key]
+    return record
+
+
 def shape_protein_summary(result_json: dict[str, Any] | None) -> dict[str, Any] | None:
     """Shape the single-row protein summary; ``None`` if no row."""
     data = rows(result_json)
@@ -142,7 +172,12 @@ def shape_protein_summary(result_json: dict[str, Any] | None) -> dict[str, Any] 
         "created": r.get("created"),
         "modified": r.get("modified"),
     }
-    return {k: v for k, v in summary.items() if v not in (None, [], "")}
+    cleaned = {k: v for k, v in summary.items() if v not in (None, [], "")}
+    # Presence flags bypass the empty-value filter: an explicit ``False`` is
+    # meaningful (the entry has no variants/diseases/structure) and drives
+    # content-aware chaining.
+    flags = {k: r[k] for k in ("has_variants", "has_diseases", "has_structure") if k in r}
+    return {**cleaned, **flags}
 
 
 def average_mass(sequence: str) -> int | None:
