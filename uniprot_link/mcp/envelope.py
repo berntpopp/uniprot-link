@@ -140,29 +140,49 @@ def build_arg_error_envelope(
     valid_params: list[str],
     signature: str,
     suggestion: str | None,
+    enum_values: list[Any] | None = None,
+    value_message: str | None = None,
 ) -> dict[str, Any]:
     """Standard invalid-input envelope for an argument-binding failure.
 
     Used by :class:`~uniprot_link.mcp.middleware.ArgValidationMiddleware` so a wrong
-    argument *name*, *type*, or a *missing required* argument routes through the same
-    contract as value-level errors instead of leaking a raw pydantic ``ValidationError``.
+    argument *name*, *type*, *missing required* argument, or invalid enum *value*
+    routes through the same contract instead of leaking a raw pydantic
+    ``ValidationError``.
+
+    Three categories, each with the correct ``allowed_values`` semantics (F1):
+
+    - missing required / unknown name -> ``allowed_values`` are the argument
+      *names* ("Valid argument names are listed in allowed_values").
+    - invalid enum *value* (``enum_values`` given) -> ``allowed_values`` are the
+      field's valid *values* ("Valid values are listed in allowed_values").
+    - other value error (``value_message`` given, no enum) -> no fabricated value
+      list; the pydantic reason is folded into the message.
     """
-    if error_type == "missing_argument":
+    allowed: list[Any] | None = valid_params
+    if error_type in {"missing_argument", "missing"}:
         head = f"Missing required argument `{loc}` for {tool_name}."
-    elif error_type == "unexpected_keyword_argument":
-        head = f"Unknown argument `{loc}` for {tool_name}."
-    else:
+        tail = " Valid argument names are listed in allowed_values."
+    elif enum_values is not None:
         head = f"Invalid value for argument `{loc}` of {tool_name}."
+        tail = " Valid values are listed in allowed_values."
+        allowed = enum_values
+    elif value_message is not None:
+        head = f"Invalid value for argument `{loc}` of {tool_name}: {value_message.rstrip('.')}."
+        tail = ""
+        allowed = None  # no enum -> never invent a value list
+    else:
+        head = f"Unknown argument `{loc}` for {tool_name}."
+        tail = " Valid argument names are listed in allowed_values."
     dym = f" Did you mean `{suggestion}`?" if suggestion else ""
-    message = f"{head}{dym} Valid argument names are listed in allowed_values."
-    return {
+    message = f"{head}{dym}{tail}"
+    envelope: dict[str, Any] = {
         "success": False,
         "error_code": "invalid_input",
         "message": message[:280],
         "retryable": False,
         "recovery_action": "reformulate_input",
         "field": loc,
-        "allowed_values": valid_params,
         "hint": signature,
         "_meta": {
             "tool": tool_name,
@@ -170,6 +190,9 @@ def build_arg_error_envelope(
             "next_commands": [cmd("get_server_capabilities")],
         },
     }
+    if allowed is not None:
+        envelope["allowed_values"] = allowed
+    return envelope
 
 
 async def run_mcp_tool(

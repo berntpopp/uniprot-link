@@ -80,6 +80,26 @@ def did_you_mean(unknown: str, valid: Iterable[str]) -> str | None:
     return matches[0] if matches else None
 
 
+def enum_values_for(schema: Mapping[str, Any], param: str) -> list[Any] | None:
+    """Return a parameter's enum value set from a JSON input schema, else ``None``.
+
+    Handles a direct ``enum`` and an ``anyOf``/``oneOf`` branch carrying one (the
+    ``Literal[...] | None`` shape FastMCP emits for an optional enum). This is the
+    single source of truth for "what values does this arg accept" -- consumed by
+    both the error path (F1: list valid *values*, not argument *names*) and the
+    capabilities discovery surface.
+    """
+    prop = (schema.get("properties") or {}).get(param)
+    if not isinstance(prop, dict):
+        return None
+    if isinstance(prop.get("enum"), list):
+        return list(prop["enum"])
+    for branch in prop.get("anyOf") or prop.get("oneOf") or []:
+        if isinstance(branch, dict) and isinstance(branch.get("enum"), list):
+            return list(branch["enum"])
+    return None
+
+
 def tool_signature(name: str, schema: Mapping[str, Any]) -> str:
     """Render ``name(req, opt=, ...)`` from a JSON input schema.
 

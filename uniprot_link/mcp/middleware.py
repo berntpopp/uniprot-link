@@ -24,8 +24,15 @@ from fastmcp.tools.tool import ToolResult
 from mcp.types import CallToolRequestParams, TextContent
 from pydantic import ValidationError
 
-from uniprot_link.mcp.arg_help import did_you_mean, normalize_alias_args, tool_signature
+from uniprot_link.mcp.arg_help import (
+    did_you_mean,
+    enum_values_for,
+    normalize_alias_args,
+    tool_signature,
+)
 from uniprot_link.mcp.envelope import build_arg_error_envelope
+
+_MISSING_TYPES = {"missing", "missing_argument"}
 
 logger = logging.getLogger(__name__)
 
@@ -86,7 +93,20 @@ class ArgValidationMiddleware(Middleware):
         first = exc.errors(include_url=False)[0]
         loc = ".".join(str(p) for p in first.get("loc", ())) or "input"
         error_type = str(first.get("type", "value_error"))
-        suggestion = did_you_mean(loc, valid) if loc not in valid else None
+        # Classify into missing / unknown-name / bad-value so each gets the right
+        # allowed_values semantics (F1). A *value* error on a known param surfaces
+        # the field's valid VALUES (enum) -- never the argument names.
+        suggestion: str | None = None
+        enum_values: list[Any] | None = None
+        value_message: str | None = None
+        if error_type in _MISSING_TYPES:
+            pass  # missing required: argument-names wording
+        elif loc not in valid:
+            suggestion = did_you_mean(loc, valid)  # unknown name: did-you-mean
+        else:
+            enum_values = enum_values_for(schema, loc)  # bad value on a known param
+            if enum_values is None:
+                value_message = str(first.get("msg", "")) or None
         envelope = build_arg_error_envelope(
             tool_name=name,
             loc=loc,
@@ -94,6 +114,8 @@ class ArgValidationMiddleware(Middleware):
             valid_params=valid,
             signature=tool_signature(name, schema),
             suggestion=suggestion,
+            enum_values=enum_values,
+            value_message=value_message,
         )
         logger.warning("mcp_arg_error tool=%s loc=%s type=%s", name, loc, error_type)
         return ToolResult(

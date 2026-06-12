@@ -7,7 +7,11 @@ from typing import TYPE_CHECKING, Annotated, Any, Literal
 from pydantic import Field
 
 from uniprot_link.mcp.annotations import READ_ONLY_OPEN_WORLD
-from uniprot_link.mcp.capabilities import collect_tool_signatures, project_capabilities
+from uniprot_link.mcp.capabilities import (
+    collect_tool_enums,
+    collect_tool_signatures,
+    project_capabilities,
+)
 from uniprot_link.mcp.envelope import McpErrorContext, run_mcp_tool
 from uniprot_link.mcp.schemas import CAPABILITIES_SCHEMA
 
@@ -45,7 +49,8 @@ def register_discovery_tools(mcp: FastMCP) -> None:
     ) -> dict[str, Any]:
         async def call() -> dict[str, Any]:
             signatures = await collect_tool_signatures(mcp)
-            return project_capabilities(detail, signatures)
+            enums = await collect_tool_enums(mcp)
+            return project_capabilities(detail, signatures, enums)
 
         return await run_mcp_tool(
             "get_server_capabilities",

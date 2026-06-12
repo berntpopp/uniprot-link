@@ -60,6 +60,55 @@ async def test_missing_required_routes_through_envelope() -> None:
 
 
 @pytest.mark.asyncio
+async def test_invalid_enum_value_returns_valid_values_for_aspect() -> None:
+    """F1: a bad enum *value* lists the valid VALUES, not the argument names."""
+    mcp = create_uniprot_mcp()
+    env = _structured(
+        await mcp.call_tool("get_protein_go_terms", {"accession": "P05067", "aspect": "function"})
+    )
+    assert env["success"] is False
+    assert env["error_code"] == "invalid_input"
+    assert env["field"] == "aspect"
+    assert env["allowed_values"] == [
+        "biological_process",
+        "molecular_function",
+        "cellular_component",
+    ]
+    assert "accession" not in env["allowed_values"]  # not the argument names
+    assert "argument names" not in env["message"]
+
+
+@pytest.mark.asyncio
+async def test_invalid_detail_value_returns_valid_values() -> None:
+    mcp = create_uniprot_mcp()
+    env = _structured(await mcp.call_tool("get_server_capabilities", {"detail": "banana"}))
+    assert env["field"] == "detail"
+    assert env["allowed_values"] == ["summary", "full"]
+
+
+@pytest.mark.asyncio
+async def test_invalid_result_format_returns_valid_values() -> None:
+    mcp = create_uniprot_mcp()
+    env = _structured(
+        await mcp.call_tool(
+            "run_sparql_query", {"query": "SELECT * WHERE {?s ?p ?o}", "result_format": "banana"}
+        )
+    )
+    assert env["field"] == "result_format"
+    assert env["allowed_values"] == ["json", "xml", "csv", "tsv", "turtle", "rdfxml", "ntriples"]
+
+
+@pytest.mark.asyncio
+async def test_unknown_argument_name_still_lists_names() -> None:
+    """Regression: a wrong NAME still lists argument names (the other category)."""
+    mcp = create_uniprot_mcp()
+    env = _structured(await mcp.call_tool("find_proteins", {"bogus_arg": "9606"}))
+    assert env["field"] == "bogus_arg"
+    assert "organism_taxon" in env["allowed_values"]
+    assert "argument names" in env["message"]
+
+
+@pytest.mark.asyncio
 async def test_alias_normalized_and_disclosed() -> None:
     """taxon -> organism_taxon lands on the right (typed) param and is disclosed."""
     import uniprot_link.mcp.service_adapters as service_adapters

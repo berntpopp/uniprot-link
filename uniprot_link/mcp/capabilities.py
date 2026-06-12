@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING, Any
 from uniprot_link import __version__
 from uniprot_link.api.client import RESULT_FORMATS
 from uniprot_link.buildinfo import build_info
-from uniprot_link.mcp.arg_help import ARG_ALIASES, tool_signature
+from uniprot_link.mcp.arg_help import ARG_ALIASES, enum_values_for, tool_signature
 from uniprot_link.mcp.resources import (
     RECOMMENDED_CITATION,
     RESEARCH_USE_NOTICE,
@@ -204,6 +204,27 @@ async def collect_tool_signatures(mcp: FastMCP) -> dict[str, str]:
     return {t.name: tool_signature(t.name, t.parameters or {}) for t in tools}
 
 
+async def collect_tool_enums(mcp: FastMCP) -> dict[str, dict[str, list[Any]]]:
+    """Map ``{tool: {arg: [valid values]}}`` for every enum-constrained argument.
+
+    Surfaces the value sets (aspect/detail/result_format/response_mode, ...) in the
+    discovery payload so an LLM can pick a valid value BEFORE provoking an error
+    (F1). Derived from the live JSON input schemas via the shared enum extractor.
+    """
+    tools = sorted(await mcp.list_tools(), key=lambda t: t.name)
+    out: dict[str, dict[str, list[Any]]] = {}
+    for tool in tools:
+        schema = tool.parameters or {}
+        enums = {
+            arg: vals
+            for arg in (schema.get("properties") or {})
+            if (vals := enum_values_for(schema, arg)) is not None
+        }
+        if enums:
+            out[tool.name] = enums
+    return out
+
+
 async def build_tools_overview(mcp: FastMCP) -> dict[str, Any]:
     """Lightweight discovery payload: name, one-line summary, and call signature."""
     tools = sorted(await mcp.list_tools(), key=lambda t: t.name)
@@ -220,22 +241,29 @@ async def build_tools_overview(mcp: FastMCP) -> dict[str, Any]:
     return {"server": "uniprot-link", "tool_count": len(entries), "tools": entries}
 
 
-def project_capabilities(detail: str, tool_signatures: dict[str, str]) -> dict[str, Any]:
+def project_capabilities(
+    detail: str,
+    tool_signatures: dict[str, str],
+    tool_enums: dict[str, dict[str, list[Any]]] | None = None,
+) -> dict[str, Any]:
     """Return the full capabilities payload, or a light summary (default).
 
     ``detail='full'`` returns everything (named graphs, prefixes, vocabularies);
     ``detail='summary'`` returns just identity/build, the tool list WITH signatures,
-    accepted argument aliases, workflows, error taxonomy, and limits.
+    accepted argument aliases, enum value sets, workflows, error taxonomy, limits.
     """
+    value_sets = tool_enums or {}
     full = build_capabilities()
     full["tool_signatures"] = tool_signatures
     full["argument_aliases"] = _ALIAS_DOC
+    full["argument_value_sets"] = value_sets
     if detail == "full":
         full["detail"] = "full"
         return full
     summary: dict[str, Any] = {k: full[k] for k in _SUMMARY_KEYS if k in full}
     summary["tool_signatures"] = tool_signatures
     summary["argument_aliases"] = _ALIAS_DOC
+    summary["argument_value_sets"] = value_sets
     summary["latency_note"] = full["latency_profile"]["note"]
     summary["detail"] = "summary"
     summary["more"] = (

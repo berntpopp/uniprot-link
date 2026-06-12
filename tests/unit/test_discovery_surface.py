@@ -35,6 +35,22 @@ async def test_capabilities_summary_is_default_and_light() -> None:
 
 
 @pytest.mark.asyncio
+async def test_capabilities_exposes_argument_value_sets() -> None:
+    """F1: enum value sets are discoverable BEFORE a failed call."""
+    mcp = create_uniprot_mcp()
+    env = _structured(await mcp.call_tool("get_server_capabilities", {}))
+    avs = env["argument_value_sets"]
+    assert avs["get_protein_go_terms"]["aspect"] == [
+        "biological_process",
+        "molecular_function",
+        "cellular_component",
+    ]
+    assert avs["get_server_capabilities"]["detail"] == ["summary", "full"]
+    assert avs["run_sparql_query"]["result_format"][0] == "json"
+    assert avs["get_protein"]["response_mode"] == ["minimal", "compact", "standard", "full"]
+
+
+@pytest.mark.asyncio
 async def test_capabilities_full_restores_heavy_blocks() -> None:
     mcp = create_uniprot_mcp()
     env = _structured(await mcp.call_tool("get_server_capabilities", {"detail": "full"}))

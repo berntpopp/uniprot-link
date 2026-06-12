@@ -4,9 +4,39 @@ from __future__ import annotations
 
 from uniprot_link.mcp.arg_help import (
     did_you_mean,
+    enum_values_for,
     normalize_alias_args,
     tool_signature,
 )
+
+
+def test_enum_values_for_direct_enum() -> None:
+    schema = {"properties": {"detail": {"enum": ["summary", "full"], "type": "string"}}}
+    assert enum_values_for(schema, "detail") == ["summary", "full"]
+
+
+def test_enum_values_for_anyof_optional_branch() -> None:
+    # Literal[...] | None renders as anyOf: [{enum: [...]}, {type: null}].
+    schema = {
+        "properties": {
+            "aspect": {
+                "anyOf": [
+                    {"enum": ["biological_process", "molecular_function"], "type": "string"},
+                    {"type": "null"},
+                ]
+            }
+        }
+    }
+    assert enum_values_for(schema, "aspect") == ["biological_process", "molecular_function"]
+
+
+def test_enum_values_for_no_enum_returns_none() -> None:
+    schema = {"properties": {"limit": {"type": "integer", "minimum": 1, "maximum": 1000}}}
+    assert enum_values_for(schema, "limit") is None
+
+
+def test_enum_values_for_unknown_param_returns_none() -> None:
+    assert enum_values_for({"properties": {}}, "nope") is None
 
 
 def test_normalize_applies_alias_when_canonical_valid_and_absent() -> None:
@@ -92,3 +122,47 @@ def test_build_arg_error_envelope_missing_argument_wording() -> None:
     )
     assert "missing" in env["message"].lower()
     assert env["field"] == "accession"
+
+
+def test_build_arg_error_envelope_enum_value_lists_values_not_names() -> None:
+    from uniprot_link.mcp.envelope import build_arg_error_envelope
+
+    env = build_arg_error_envelope(
+        tool_name="get_protein_go_terms",
+        loc="aspect",
+        error_type="literal_error",
+        valid_params=["accession", "aspect", "limit"],
+        signature="get_protein_go_terms(accession, aspect=, limit=)",
+        suggestion=None,
+        enum_values=["biological_process", "molecular_function", "cellular_component"],
+    )
+    assert env["field"] == "aspect"
+    # Valid VALUES, never the argument names.
+    assert env["allowed_values"] == [
+        "biological_process",
+        "molecular_function",
+        "cellular_component",
+    ]
+    assert "accession" not in env["allowed_values"]
+    # Wording must say values, not "argument names".
+    assert "argument names" not in env["message"]
+    assert "value" in env["message"].lower()
+
+
+def test_build_arg_error_envelope_numeric_value_omits_allowed_values() -> None:
+    from uniprot_link.mcp.envelope import build_arg_error_envelope
+
+    env = build_arg_error_envelope(
+        tool_name="get_protein_features",
+        loc="limit",
+        error_type="less_than_equal",
+        valid_params=["accession", "feature_types", "limit"],
+        signature="get_protein_features(accession, feature_types=, limit=)",
+        suggestion=None,
+        value_message="Input should be less than or equal to 1000",
+    )
+    assert env["field"] == "limit"
+    assert "argument names" not in env["message"]
+    assert "less than or equal to 1000" in env["message"]
+    # No fabricated value list for a numeric-constraint error.
+    assert "allowed_values" not in env
