@@ -101,6 +101,59 @@ async def test_get_sequence_dedupes_canonical_and_minimal_strips_sequence(
 
 
 @pytest.mark.asyncio
+async def test_get_sequence_isoform_returns_specific_isoform(service_factory: Any) -> None:
+    """F2: an isoform accession returns THAT isoform's specific sequence, not not_found."""
+    status = make_select_json(
+        ["obsolete", "isoform_exists"], [{"obsolete": False, "isoform_exists": True}]
+    )
+    body = make_select_json(
+        ["isoform", "length", "mass", "value"],
+        [
+            {
+                "isoform": "http://purl.uniprot.org/isoforms/P05067-1",
+                "length": 770,
+                "mass": 86943,
+                "value": "MCANON",
+            },
+            {
+                "isoform": "http://purl.uniprot.org/isoforms/P05067-2",
+                "length": 365,
+                "value": "MISO2",
+            },
+        ],
+    )
+    svc = service_factory([("up:obsolete ?obsolete", status), ("up:sequence", body)])
+    res = await svc.get_sequence("P05067-2", response_mode="standard")
+    assert res["accession"] == "P05067"
+    assert res["requested_isoform"] == "P05067-2"
+    assert res["canonical"]["isoform"] == "P05067-2"
+    assert res["canonical"]["sequence"] == "MISO2"
+    assert res["isoforms"] == []  # isoform-specific request returns just that isoform
+
+
+@pytest.mark.asyncio
+async def test_get_sequence_bogus_isoform_is_not_found(service_factory: Any) -> None:
+    """F2: a non-existent isoform index is a clean not_found (consistent with get_protein)."""
+    status = make_select_json(
+        ["obsolete", "isoform_exists"], [{"obsolete": False, "isoform_exists": False}]
+    )
+    body = make_select_json(
+        ["isoform", "length", "mass", "value"],
+        [
+            {
+                "isoform": "http://purl.uniprot.org/isoforms/P05067-1",
+                "length": 770,
+                "mass": 86943,
+                "value": "MCANON",
+            }
+        ],
+    )
+    svc = service_factory([("up:obsolete ?obsolete", status), ("up:sequence", body)])
+    with pytest.raises(NotFoundError):
+        await svc.get_sequence("P05067-99")
+
+
+@pytest.mark.asyncio
 async def test_get_sequence_single_isoform_has_empty_isoforms(service_factory: Any) -> None:
     body = make_select_json(
         ["isoform", "length", "mass", "value"],

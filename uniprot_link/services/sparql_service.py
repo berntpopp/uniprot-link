@@ -268,22 +268,39 @@ class SparqlService(TaxonomyServiceMixin):
             )
         return S.apply_response_mode(payload, response_mode, kind="protein")
 
-    async def get_sequence(self, accession: str, response_mode: str = "compact") -> dict[str, Any]:
-        """Return the canonical sequence (and additional isoforms) for an entry.
+    async def get_sequence(
+        self, accession: str, response_mode: str = "compact", canonical_only: bool = False
+    ) -> dict[str, Any]:
+        """Return the canonical sequence (and isoforms), or a requested isoform (F2/F7).
 
-        Runs the obsolete-aware gate in parallel so an obsolete accession yields
-        the family-consistent obsolete error instead of a bare "no sequence" 404.
+        Runs the obsolete-aware gate first so an obsolete accession yields the
+        family-consistent obsolete error and a typo'd isoform a clean not_found. An
+        isoform accession (``P05067-2``) returns THAT isoform's specific sequence and
+        mass (canonical-only ``up:mass`` is computed when absent); ``canonical_only``
+        suppresses the additional-isoform list (token economy, F7).
         """
         query = Q.protein_sequence(accession)
-        _, (sequences_json, qmeta) = await asyncio.gather(
-            self.require_entry(accession), self._select_timed(query)
-        )
+        await self.require_entry(accession)
+        sequences_json, qmeta = await self._select_timed(query)
         sequences = S.shape_sequences(sequences_json)
         if not sequences:
             raise NotFoundError(f"No sequence found for accession '{accession}'.")
         acc = Q.validate_accession(accession).split("-")[0]
-        canonical = next((s for s in sequences if s["canonical"]), sequences[0])
-        others = [s for s in sequences if s is not canonical]
+        requested = accession.strip().upper()
+        is_isoform_request = requested != acc
+        if is_isoform_request:
+            canonical = next((s for s in sequences if s["isoform"] == requested), None)
+            if canonical is None:
+                raise NotFoundError(
+                    f"No isoform '{accession}' exists for entry {acc}. "
+                    "Call get_protein_sequence on the entry to list its isoforms."
+                )
+            others: list[dict[str, Any]] = []
+        else:
+            canonical = next((s for s in sequences if s["canonical"]), sequences[0])
+            others = [s for s in sequences if s is not canonical]
+        if canonical_only:
+            others = []
         if response_mode == "minimal":
             canonical = {k: v for k, v in canonical.items() if k != "sequence"}
             others = [{k: v for k, v in s.items() if k != "sequence"} for s in others]
@@ -293,13 +310,16 @@ class SparqlService(TaxonomyServiceMixin):
             canonical = _window_sequence(canonical)
             others = [_window_sequence(s) for s in others]
         # standard / full keep the full `sequence` string unchanged.
-        return {
+        payload: dict[str, Any] = {
             "accession": acc,
             "canonical": canonical,
             "isoform_count": len(sequences),
             "isoforms": others,
             **qmeta,
         }
+        if is_isoform_request:
+            payload["requested_isoform"] = requested
+        return payload
 
     async def require_entry(self, accession: str) -> S.EntryStatus:
         """Gate annotation lookups: raise on absent/obsolete/typo'd-isoform; return status.
