@@ -224,6 +224,13 @@ FEATURE_TYPES: dict[str, str] = {
     "helix": "Helix_Annotation",
     "turn": "Turn_Annotation",
     "mutagenesis": "Mutagenesis_Annotation",
+    # Range-bearing classes the unfiltered dump also emits (validated live on
+    # Q96T60). Without these, a returned `type` failed to round-trip into the
+    # filter vocabulary (Bug 1). Any further unmapped class is surfaced by
+    # shaping as `_unmapped:<Class>` so it is visibly non-filterable.
+    "natural_variant": "Natural_Variant_Annotation",
+    "alternative_sequence": "Alternative_Sequence_Annotation",
+    "sequence_conflict": "Sequence_Conflict_Annotation",
 }
 
 # Reverse: annotation class local-name -> friendly key (for round-tripping the

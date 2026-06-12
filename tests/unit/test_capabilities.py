@@ -24,6 +24,10 @@ def test_capabilities_advertises_response_modes_and_contracts() -> None:
     assert cap["response_modes"] == ["minimal", "compact", "standard", "full"]
     assert cap["default_response_mode"] == "compact"
     assert "domain" in cap["feature_types"]
+    # Bug 1: the dump-emitted classes now round-trip into the filter vocabulary.
+    assert "natural_variant" in cap["feature_types"]
+    assert "alternative_sequence" in cap["feature_types"]
+    assert "sequence_conflict" in cap["feature_types"]
     assert cap["read_only"] is True
     assert "not_found" in cap["not_found_contract"].lower()
 

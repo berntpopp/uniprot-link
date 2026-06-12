@@ -128,15 +128,25 @@ def shape_sequences(result_json: dict[str, Any] | None) -> list[dict[str, Any]]:
 
 
 def shape_features(result_json: dict[str, Any] | None) -> list[dict[str, Any]]:
-    """Shape feature rows; emit `type` in the feature_types filter vocabulary."""
+    """Shape feature rows; emit only filterable `type` keys (Bug 1).
+
+    A class in the registry round-trips into the feature_types filter. Any class
+    absent from the registry is emitted as ``_unmapped:<Class>`` so it is
+    *visibly* non-filterable rather than presenting a friendly key that the
+    filter would then reject.
+    """
     out: list[dict[str, Any]] = []
     for row in rows(result_json):
         cls = local_name(row["type"]) if row.get("type") else None
+        key: str | None
+        if cls is None:
+            key = None
+        else:
+            mapped = FEATURE_CLASS_TO_KEY.get(cls)
+            key = mapped if mapped is not None else f"_unmapped:{cls.replace('_Annotation', '')}"
         out.append(
             {
-                "type": FEATURE_CLASS_TO_KEY.get(cls, cls.replace("_Annotation", "").lower())
-                if cls
-                else None,
+                "type": key,
                 "begin": row.get("begin"),
                 "end": row.get("end"),
                 "description": row.get("comment"),
