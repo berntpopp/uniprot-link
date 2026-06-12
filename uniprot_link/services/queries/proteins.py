@@ -191,12 +191,14 @@ def protein_features(accession: str, feature_types: list[str] | None = None) -> 
         for ft in feature_types:
             cls = FEATURE_TYPES.get(ft.strip().lower())
             if cls is None:
-                # Echo the accepted keys inline so the agent self-corrects
-                # without a separate capabilities round trip.
-                allowed = ", ".join(sorted(FEATURE_TYPES))
+                # The full allowed list goes in the structured `allowed` field,
+                # never the (length-capped) message — so it can never truncate.
                 raise InvalidInputError(
-                    f"Unknown feature type '{ft}'. Allowed: {allowed}.",
+                    f"Unknown feature type '{ft}'. See allowed_values "
+                    "or call get_server_capabilities (feature_types).",
                     field="feature_types",
+                    allowed=sorted(FEATURE_TYPES),
+                    hint="feature_types keys are listed in get_server_capabilities.",
                 )
             classes.append(f"up:{cls}")
         type_block = f"  VALUES ?type {{ {' '.join(classes)} }}\n  ?a a ?type .\n"

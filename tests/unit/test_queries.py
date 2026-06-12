@@ -144,9 +144,14 @@ class TestProteinQueries:
     def test_features_unknown_type(self) -> None:
         with pytest.raises(InvalidInputError) as exc:
             q.protein_features("P05067", ["not_a_feature"])
-        # the error echoes the accepted keys inline (no extra round trip needed)
-        assert "domain" in str(exc.value)
-        assert "Allowed:" in str(exc.value)
+        # the full vocabulary is in structured `allowed`, not the capped message
+        e = exc.value
+        assert e.field == "feature_types"
+        assert e.allowed is not None
+        assert "domain" in e.allowed
+        # the full vocabulary is NOT dumped into the (length-capped) prose
+        assert "domain, " not in e.message
+        assert len(e.message) < 200
 
     def test_features_filter_uses_bound_values_join(self) -> None:
         # VALUES binds ?type first (fast); the slow FILTER(?type IN ...) is gone
