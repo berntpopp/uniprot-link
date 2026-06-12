@@ -244,22 +244,36 @@ GO_ASPECT_ROOTS: dict[str, str] = {
     "GO_0005575": "cellular_component",
 }
 
-# Common ECO evidence-ontology codes -> GO evidence code. UniProt GO annotations
-# carry an ECO IRI (e.g. ECO_0000314); these map the frequent ones to the
-# familiar three-letter GO codes. Unmapped ECO ids pass through as the raw id.
+# ECO evidence-ontology id -> GO three-letter evidence code. UniProt GO
+# annotations carry an ECO IRI (e.g. ECO_0000314); these map them via the
+# authoritative evidenceontology Default mapping (gaf-eco-mapping-derived.txt).
+# The raw ECO id is ALWAYS reported under a term's `evidence` list; only mapped
+# ids additionally appear under `evidence_codes` (an unmapped id is therefore
+# still visible as its raw ECO id, never silently dropped).
 ECO_TO_GO_CODE: dict[str, str] = {
     "ECO_0000314": "IDA",
     "ECO_0000316": "IGI",
     "ECO_0000353": "IPI",
     "ECO_0000315": "IMP",
     "ECO_0000270": "IEP",
+    "ECO_0000269": "EXP",
     "ECO_0000250": "ISS",
     "ECO_0000266": "ISO",
     "ECO_0000247": "ISA",
     "ECO_0000255": "ISM",
+    "ECO_0000317": "IGC",
     "ECO_0000318": "IBA",
+    "ECO_0000319": "IBD",
+    "ECO_0000320": "IKR",
+    "ECO_0000321": "IRD",
+    "ECO_0000245": "RCA",
     "ECO_0000501": "IEA",
     "ECO_0007669": "IEA",
+    "ECO_0007005": "HDA",
+    "ECO_0007007": "HEP",
+    "ECO_0007003": "HGI",
+    "ECO_0007001": "HMP",
+    "ECO_0006056": "HTP",
     "ECO_0000304": "TAS",
     "ECO_0000303": "NAS",
     "ECO_0000305": "IC",

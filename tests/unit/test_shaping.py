@@ -519,6 +519,30 @@ def test_shape_go_terms_includes_and_merges_evidence() -> None:
     assert "evidence" not in cc
 
 
+def test_shape_go_terms_maps_high_throughput_eco_codes() -> None:
+    body = make_select_json(
+        ["go", "label", "aspect", "eco"],
+        [
+            {
+                "go": "http://purl.obolibrary.org/obo/GO_0070062",
+                "label": "extracellular exosome",
+                "aspect": "http://purl.obolibrary.org/obo/GO_0005575",
+                "eco": "http://purl.obolibrary.org/obo/ECO_0007005",
+            },
+            {
+                "go": "http://purl.obolibrary.org/obo/GO_0070062",
+                "label": "extracellular exosome",
+                "aspect": "http://purl.obolibrary.org/obo/GO_0005575",
+                "eco": "http://purl.obolibrary.org/obo/ECO_0000269",
+            },
+        ],
+    )
+    term = S.shape_go_terms(body)["cellular_component"][0]
+    assert "HDA" in term["evidence_codes"]  # ECO_0007005
+    assert "EXP" in term["evidence_codes"]  # ECO_0000269
+    assert set(term["evidence"]) == {"ECO:0007005", "ECO:0000269"}  # raw ids retained
+
+
 def test_shape_example_list_dedupes_ids_and_ranks_native_first() -> None:
     native = "https://sparql.uniprot.org/.well-known/sparql-examples/26"
     federated = "https://sparql.rhea-db.org/.well-known/sparql-examples/114"
