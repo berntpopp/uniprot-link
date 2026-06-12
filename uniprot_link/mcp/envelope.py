@@ -29,10 +29,12 @@ from uniprot_link.services.constants import UNIPROT_RELEASE
 
 logger = logging.getLogger(__name__)
 
+# Per-call provenance kept lean: the static `endpoint` lives in capabilities,
+# not on every response. `uniprot_release` + the safety flag + a short citation
+# DOI stay (cheap, high grounding value).
 _BASE_META: dict[str, Any] = {
     "unsafe_for_clinical_use": True,
     "uniprot_release": UNIPROT_RELEASE,
-    "endpoint": "https://sparql.uniprot.org/sparql",
     "citation": "doi:10.1093/nar/gkae1010",
 }
 

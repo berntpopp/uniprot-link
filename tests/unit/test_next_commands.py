@@ -3,12 +3,25 @@ from __future__ import annotations
 from uniprot_link.mcp.next_commands import after_entry_subresource
 
 
-def test_after_entry_subresource_excludes_current_and_caps_at_three() -> None:
+def test_after_entry_subresource_excludes_current_and_caps_at_two() -> None:
     out = after_entry_subresource("P38398", "get_protein_features")
-    assert len(out) == 3
+    assert len(out) == 2
     assert all(c["arguments"]["accession"] == "P38398" for c in out)
     assert all(c["tool"] != "get_protein_features" for c in out)
     assert all("tool" in c and "arguments" in c for c in out)
+
+
+def test_after_entry_subresource_zero_count_points_home() -> None:
+    empty = after_entry_subresource("P05067", "get_protein_features", count=0)
+    assert {c["tool"] for c in empty} <= {"get_protein", "get_server_capabilities"}
+    nonempty = after_entry_subresource("P05067", "get_protein_features", count=5)
+    assert any(c["tool"] == "get_protein_variants" for c in nonempty)
+
+
+def test_after_get_protein_trimmed_to_two() -> None:
+    from uniprot_link.mcp.next_commands import after_get_protein
+
+    assert len(after_get_protein("P05067")) == 2
 
 
 def test_default_error_next_commands_protein_tool() -> None:

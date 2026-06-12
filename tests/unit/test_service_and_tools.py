@@ -285,7 +285,7 @@ async def test_provenance_is_compact() -> None:
     assert "recommended_citation" not in meta  # full text only in capabilities/resource
     assert meta["unsafe_for_clinical_use"] is True
     assert meta["uniprot_release"]
-    assert meta["endpoint"]
+    assert "endpoint" not in meta  # static endpoint lives in capabilities (token diet)
 
 
 @pytest.mark.asyncio
@@ -334,7 +334,19 @@ async def test_annotation_tool_attaches_next_commands(service_factory: Any) -> N
 
     routes = [
         ("ASK", {"head": {}, "boolean": True}),
-        ("Disease_Annotation", make_select_json(["disease", "diseaseLabel", "comment"], [])),
+        (
+            "Disease_Annotation",
+            make_select_json(
+                ["disease", "diseaseLabel", "comment"],
+                [
+                    {
+                        "disease": "http://purl.uniprot.org/diseases/100",
+                        "diseaseLabel": "Example disease",
+                        "comment": "involvement",
+                    }
+                ],
+            ),
+        ),
     ]
     svc = service_factory(routes)
     service_adapters.set_sparql_service(svc)
@@ -344,7 +356,7 @@ async def test_annotation_tool_attaches_next_commands(service_factory: Any) -> N
         payload = result.structured_content if hasattr(result, "structured_content") else result
         assert payload["success"] is True
         next_commands = payload["_meta"]["next_commands"]
-        assert len(next_commands) == 3
+        assert len(next_commands) == 2  # token diet: trimmed to the top 2
         assert all(c["arguments"]["accession"] == "P38398" for c in next_commands)
         assert all(c["tool"] != "get_protein_diseases" for c in next_commands)
         assert next_commands[0]["tool"] == "get_protein_variants"
@@ -482,3 +494,14 @@ async def test_get_sequence_compact_is_windowed(service_factory: Any) -> None:
     assert compact["canonical"]["sequence_preview"].endswith("K")
     standard = await svc.get_sequence("P05067", response_mode="standard")
     assert standard["canonical"]["sequence"] == seq
+
+
+@pytest.mark.asyncio
+async def test_success_meta_drops_endpoint_keeps_release() -> None:
+    async def ok() -> dict[str, Any]:
+        return {"value": 1}
+
+    out = await run_mcp_tool("get_protein", ok, context=McpErrorContext("get_protein"))
+    assert "endpoint" not in out["_meta"]
+    assert out["_meta"]["uniprot_release"]
+    assert out["_meta"]["unsafe_for_clinical_use"] is True

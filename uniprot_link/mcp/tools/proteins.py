@@ -193,7 +193,7 @@ def _register_sequence_and_features(mcp: FastMCP) -> None:
             payload = await get_sparql_service().get_features(accession, feature_types)
             payload["_meta"] = {
                 "next_commands": after_entry_subresource(
-                    payload["accession"], "get_protein_features"
+                    payload["accession"], "get_protein_features", count=payload.get("count")
                 )
             }
             return payload
@@ -230,7 +230,7 @@ def _register_annotations(mcp: FastMCP) -> None:
             )
             payload["_meta"] = {
                 "next_commands": after_entry_subresource(
-                    payload["accession"], "get_protein_variants"
+                    payload["accession"], "get_protein_variants", count=payload.get("count")
                 )
             }
             return payload
@@ -255,7 +255,7 @@ def _register_annotations(mcp: FastMCP) -> None:
             payload = await get_sparql_service().get_diseases(accession)
             payload["_meta"] = {
                 "next_commands": after_entry_subresource(
-                    payload["accession"], "get_protein_diseases"
+                    payload["accession"], "get_protein_diseases", count=payload.get("count")
                 )
             }
             return payload
@@ -317,7 +317,7 @@ def _register_annotations(mcp: FastMCP) -> None:
             payload = await get_sparql_service().get_go_terms(accession)
             payload["_meta"] = {
                 "next_commands": after_entry_subresource(
-                    payload["accession"], "get_protein_go_terms"
+                    payload["accession"], "get_protein_go_terms", count=payload.get("count")
                 )
             }
             return payload
