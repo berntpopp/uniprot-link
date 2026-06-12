@@ -80,3 +80,35 @@ class NotFoundError(SparqlClientError):
     def __init__(self, message: str = "No records found.") -> None:
         """Initialise with a 404 status code."""
         super().__init__(message, status_code=404)
+
+
+class ObsoleteEntryError(NotFoundError):
+    """A UniProtKB entry exists but is obsolete (demerged/deleted).
+
+    Subclasses :class:`NotFoundError` so it classifies as ``not_found`` in the
+    error envelope, but carries the obsolete accession and any replacement
+    accessions (``up:replacedBy``) so the envelope can flag ``obsolete: true`` and
+    chain the consumer to the live replacement(s).
+    """
+
+    def __init__(
+        self,
+        accession: str,
+        replaced_by: list[str] | None = None,
+        message: str | None = None,
+    ) -> None:
+        """Store the obsolete accession and any replacement accessions."""
+        self.accession = accession
+        self.replaced_by = replaced_by or []
+        if message is None:
+            if self.replaced_by:
+                message = (
+                    f"UniProtKB entry {accession} is obsolete (demerged). "
+                    f"Replaced by: {', '.join(self.replaced_by)}."
+                )
+            else:
+                message = (
+                    f"UniProtKB entry {accession} is obsolete (deleted) "
+                    "and has no replacement entry."
+                )
+        super().__init__(message)

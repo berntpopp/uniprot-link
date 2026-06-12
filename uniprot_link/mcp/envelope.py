@@ -19,12 +19,13 @@ from pydantic import ValidationError as PydanticValidationError
 from uniprot_link.exceptions import (
     InvalidInputError,
     NotFoundError,
+    ObsoleteEntryError,
     QuerySyntaxError,
     QueryTimeoutError,
     RateLimitError,
     ServiceUnavailableError,
 )
-from uniprot_link.mcp.next_commands import default_error_next_commands
+from uniprot_link.mcp.next_commands import cmd, default_error_next_commands
 
 logger = logging.getLogger(__name__)
 
@@ -112,6 +113,15 @@ def _error_envelope(exc: BaseException, context: McpErrorContext) -> dict[str, A
             envelope["allowed_values"] = exc.allowed
         if exc.hint is not None:
             envelope["hint"] = exc.hint
+    # An obsolete/demerged entry: flag it and chain to the live replacement(s).
+    if isinstance(exc, ObsoleteEntryError):
+        envelope["obsolete"] = True
+        envelope["replaced_by"] = exc.replaced_by
+        if exc.replaced_by:
+            envelope["_meta"]["next_commands"] = [
+                cmd("get_protein", accession=acc) for acc in exc.replaced_by[:2]
+            ]
+            return envelope  # explicit replacement chain wins over the defaults
     # next_commands on EVERY error: explicit fallback, else a sensible default.
     if context.fallback is not None:
         envelope["_meta"]["next_commands"] = [context.fallback]

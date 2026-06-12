@@ -417,6 +417,26 @@ async def test_map_identifiers_defaults_to_curated_dbs(service_factory: Any) -> 
 
 
 @pytest.mark.asyncio
+async def test_obsolete_entry_error_envelope_carries_replaced_by() -> None:
+    from uniprot_link.exceptions import ObsoleteEntryError
+
+    async def boom() -> dict[str, Any]:
+        raise ObsoleteEntryError("A0A009K1D9", replaced_by=["A0A9P2UQ24"])
+
+    out = await run_mcp_tool(
+        "get_protein_features",
+        boom,
+        context=McpErrorContext("get_protein_features"),
+    )
+    assert out["success"] is False
+    assert out["error_code"] == "not_found"
+    assert out["obsolete"] is True
+    assert out["replaced_by"] == ["A0A9P2UQ24"]
+    nxt = out["_meta"]["next_commands"]
+    assert nxt[0] == {"tool": "get_protein", "arguments": {"accession": "A0A9P2UQ24"}}
+
+
+@pytest.mark.asyncio
 async def test_error_envelope_surfaces_allowed_and_request_id() -> None:
     from uniprot_link.exceptions import InvalidInputError
 
