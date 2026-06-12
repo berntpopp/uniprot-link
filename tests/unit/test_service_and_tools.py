@@ -390,3 +390,48 @@ async def test_map_identifiers_defaults_to_curated_dbs(service_factory: Any) -> 
     res = await service.map_identifiers("P38398")
     assert res["requested_databases"] == COMMON_XREF_DATABASES
     assert "by_database" in res and "mapped_databases" in res
+
+
+@pytest.mark.asyncio
+async def test_error_envelope_surfaces_allowed_and_request_id() -> None:
+    from uniprot_link.exceptions import InvalidInputError
+
+    async def boom() -> dict[str, Any]:
+        raise InvalidInputError(
+            "Unknown feature type 'x'. See allowed_values.",
+            field="feature_types",
+            allowed=["domain", "region"],
+            hint="call get_server_capabilities",
+        )
+
+    out = await run_mcp_tool(
+        "get_protein_features", boom, context=McpErrorContext("get_protein_features")
+    )
+    assert out["success"] is False
+    assert out["error_code"] == "invalid_input"
+    assert out["field"] == "feature_types"
+    assert out["allowed_values"] == ["domain", "region"]
+    assert out["hint"] == "call get_server_capabilities"
+    assert out["_meta"]["request_id"]
+
+
+@pytest.mark.asyncio
+async def test_error_envelope_always_has_next_commands() -> None:
+    async def boom() -> dict[str, Any]:
+        raise NotFoundError("nope")
+
+    out = await run_mcp_tool(
+        "get_protein_features", boom, context=McpErrorContext("get_protein_features")
+    )
+    assert out["_meta"]["next_commands"]
+    assert out["_meta"]["next_commands"][0]["tool"] == "get_server_capabilities"
+
+
+@pytest.mark.asyncio
+async def test_success_meta_has_request_id() -> None:
+    async def ok() -> dict[str, Any]:
+        return {"value": 1}
+
+    out = await run_mcp_tool("get_protein", ok, context=McpErrorContext("get_protein"))
+    assert out["_meta"]["request_id"]
+    assert out["success"] is True

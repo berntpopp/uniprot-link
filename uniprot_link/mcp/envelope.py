@@ -9,6 +9,7 @@ masked message.
 from __future__ import annotations
 
 import logging
+import uuid
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from typing import Any
@@ -23,6 +24,7 @@ from uniprot_link.exceptions import (
     RateLimitError,
     ServiceUnavailableError,
 )
+from uniprot_link.mcp.next_commands import default_error_next_commands
 from uniprot_link.services.constants import UNIPROT_RELEASE
 
 logger = logging.getLogger(__name__)
@@ -43,6 +45,7 @@ class McpErrorContext:
 
     tool_name: str
     fallback: dict[str, Any] | None = field(default=None)
+    arguments: dict[str, Any] = field(default_factory=dict)
 
 
 class McpToolError(Exception):
@@ -57,6 +60,10 @@ class McpToolError(Exception):
 
 def _provenance_meta() -> dict[str, Any]:
     return dict(_BASE_META)
+
+
+def _request_id() -> str:
+    return uuid.uuid4().hex[:12]
 
 
 def _safe_message(exc: BaseException) -> str:
@@ -102,10 +109,23 @@ def _error_envelope(exc: BaseException, context: McpErrorContext) -> dict[str, A
         "message": message,
         "retryable": error_code in _RETRYABLE,
         "recovery_action": _recovery_action(error_code),
-        "_meta": {"tool": context.tool_name, **_provenance_meta()},
+        "_meta": {"tool": context.tool_name, **_provenance_meta(), "request_id": _request_id()},
     }
+    # Structured recovery data (kept OUT of the length-capped message).
+    if isinstance(exc, InvalidInputError):
+        if exc.field is not None:
+            envelope["field"] = exc.field
+        if exc.allowed is not None:
+            envelope["allowed_values"] = exc.allowed
+        if exc.hint is not None:
+            envelope["hint"] = exc.hint
+    # next_commands on EVERY error: explicit fallback, else a sensible default.
     if context.fallback is not None:
         envelope["_meta"]["next_commands"] = [context.fallback]
+    else:
+        envelope["_meta"]["next_commands"] = default_error_next_commands(
+            context.tool_name, error_code, context.arguments
+        )
     return envelope
 
 
@@ -122,7 +142,12 @@ async def run_mcp_tool(
         if isinstance(result, dict):
             result.setdefault("success", True)
             existing_meta: dict[str, Any] = result.get("_meta") or {}
-            result["_meta"] = {**_provenance_meta(), **existing_meta, "tool": tool_name}
+            result["_meta"] = {
+                **_provenance_meta(),
+                **existing_meta,
+                "tool": tool_name,
+                "request_id": _request_id(),
+            }
         return result
     except Exception as exc:  # broad catch is the error-boundary contract
         envelope = _error_envelope(exc, ctx)
