@@ -65,7 +65,10 @@ def _register_find_and_summary(mcp: FastMCP) -> None:
             "(KW-id or label), OR organism_taxon together with name_contains. "
             "Reviewed (Swiss-Prot) hits are ranked first. UniProt SPARQL has no "
             "general full-text index, so for broad text use search_example_queries "
-            "or run_sparql_query. Pair with get_protein for full detail."
+            "or run_sparql_query. Pair with get_protein for full detail. Results "
+            "are ordered reviewed-first, then by mnemonic, then accession (stable "
+            "across pages). Cold search can take several seconds; an identical "
+            "repeat is cached (~0 ms)."
         ),
     )
     async def find_proteins(

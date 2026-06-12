@@ -74,6 +74,42 @@ def build_capabilities() -> dict[str, Any]:
             "not repeated per-call to conserve context tokens."
         ),
         "per_call_meta": ["tool", "request_id", "next_commands"],
+        "latency_profile": {
+            "note": (
+                "Cold upstream SPARQL latency. An identical repeated call is "
+                "served from a 1h in-process cache in ~0 ms (see the `cached` "
+                "field on responses). Bands are coarse guidance, not promises."
+            ),
+            "bands": {
+                "fast": {
+                    "typical_ms": "0-700",
+                    "tools": [
+                        "get_protein",
+                        "get_protein_sequence",
+                        "get_protein_features",
+                        "get_protein_variants",
+                        "get_protein_diseases",
+                        "get_protein_cross_references",
+                        "get_protein_go_terms",
+                        "map_identifiers",
+                        "get_taxon (by id or curated common name)",
+                        "get_server_capabilities",
+                    ],
+                },
+                "medium": {
+                    "typical_ms": "1000-3000",
+                    "tools": ["search_example_queries", "get_example_query"],
+                },
+                "slow_cold_scan": {
+                    "typical_ms": "3000-12000",
+                    "tools": [
+                        "find_proteins (cold)",
+                        "get_taxon (uncached name scan)",
+                        "run_sparql_query (unbounded or federated)",
+                    ],
+                },
+            },
+        },
         "read_only": True,
         "not_found_contract": (
             "Nonexistent accessions/taxa return error_code 'not_found' on every "

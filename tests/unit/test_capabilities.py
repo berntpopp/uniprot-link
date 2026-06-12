@@ -32,6 +32,15 @@ def test_capabilities_advertises_response_modes_and_contracts() -> None:
     assert "not_found" in cap["not_found_contract"].lower()
 
 
+def test_capabilities_has_latency_profile() -> None:
+    cap = build_capabilities()
+    lp = cap["latency_profile"]
+    assert "note" in lp and "bands" in lp
+    listed = " ".join(t for band in lp["bands"].values() for t in band["tools"])
+    for tool in TOOLS:
+        assert tool in listed, f"{tool} missing from latency_profile"
+
+
 def test_capabilities_has_full_citation() -> None:
     from uniprot_link.mcp.capabilities import build_capabilities
 
