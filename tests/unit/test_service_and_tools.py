@@ -116,7 +116,7 @@ async def test_get_protein_bogus_accession_raises_not_found(service_factory: Any
     # Empty result set for the summary query -> not found.
     svc = service_factory([("a up:Protein", {"head": {"vars": []}, "results": {"bindings": []}})])
     with pytest.raises(NotFoundError):
-        await svc.get_protein("ZZZZZZ")
+        await svc.get_protein("Q9ZZZ9")
 
 
 @pytest.mark.asyncio
@@ -205,7 +205,7 @@ async def test_annotation_tools_not_found_when_entry_absent(service_factory: Any
         service.get_cross_references,
     ):
         with pytest.raises(NotFoundError):
-            await call("ZZZZZZ")
+            await call("Q9ZZZ9")
 
 
 @pytest.mark.asyncio

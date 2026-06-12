@@ -36,14 +36,14 @@ async def test_get_protein_bogus_is_not_found_live(service: SparqlService) -> No
     from uniprot_link.exceptions import NotFoundError
 
     with pytest.raises(NotFoundError):
-        await service.get_protein("ZZZZZZ")
+        await service.get_protein("Q1ZZZ1")
 
 
 async def test_features_bogus_is_not_found_live(service: SparqlService) -> None:
     from uniprot_link.exceptions import NotFoundError
 
     with pytest.raises(NotFoundError):
-        await service.get_features("ZZZZZZ")
+        await service.get_features("Q1ZZZ1")
 
 
 async def test_find_proteins_brca1(service: SparqlService) -> None:

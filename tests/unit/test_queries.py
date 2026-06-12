@@ -17,6 +17,14 @@ class TestValidation:
         with pytest.raises(InvalidInputError):
             q.validate_accession("not-an-accession!")
 
+    def test_validate_accession_rejects_numeric_blob(self) -> None:
+        # "999999" is 6 alnum chars but not a real UniProtKB accession; it must
+        # fail locally (cheap invalid_input) rather than round-trip for a 404.
+        with pytest.raises(InvalidInputError):
+            q.validate_accession("999999")
+        for good in ["P05067", "P05067-2", "A0A024R1R8", "Q96T60", "P38398"]:
+            assert q.validate_accession(good) == good.upper()
+
     def test_validate_taxon(self) -> None:
         assert q.validate_taxon(9606) == "9606"
         with pytest.raises(InvalidInputError):

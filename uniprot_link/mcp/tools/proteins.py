@@ -128,7 +128,10 @@ def _register_find_and_summary(mcp: FastMCP) -> None:
         return await run_mcp_tool(
             "get_protein",
             call,
-            context=McpErrorContext("get_protein", fallback=cmd("find_proteins", gene=accession)),
+            # No explicit fallback: the default recovery sanitizes the accession
+            # (a numeric/garbage value is never replayed as gene=...). See
+            # next_commands.protein_not_found_recovery.
+            context=McpErrorContext("get_protein", arguments={"accession": accession}),
         )
 
 

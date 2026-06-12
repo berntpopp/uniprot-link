@@ -11,7 +11,12 @@ import re
 
 from uniprot_link.exceptions import InvalidInputError
 
-_ACCESSION_RE = re.compile(r"^[A-Z0-9]{6,10}(-\d+)?$", re.IGNORECASE)
+# Official UniProtKB accession grammar (uniprot.org/help/accession_numbers),
+# plus an optional ``-N`` isoform suffix. Rejects digit blobs like "999999".
+_ACCESSION_RE = re.compile(
+    r"^([OPQ][0-9][A-Z0-9]{3}[0-9]|[A-NR-Z][0-9]([A-Z][A-Z0-9]{2}[0-9]){1,2})(-\d+)?$",
+    re.IGNORECASE,
+)
 _TAXON_RE = re.compile(r"^\d+$")
 _SELECT_LIMIT_RE = re.compile(r"\blimit\s+\d+", re.IGNORECASE)
 _COMMENT_RE = re.compile(r"#[^\n]*")
