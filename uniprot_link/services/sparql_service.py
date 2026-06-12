@@ -14,7 +14,7 @@ from uniprot_link.api.client import RESULT_FORMATS, SparqlClient
 from uniprot_link.exceptions import InvalidInputError, NotFoundError
 from uniprot_link.services import queries as Q
 from uniprot_link.services import shaping as S
-from uniprot_link.services.constants import FEATURE_TYPES, UNIPROT_RELEASE
+from uniprot_link.services.constants import COMMON_XREF_DATABASES, FEATURE_TYPES, UNIPROT_RELEASE
 
 if TYPE_CHECKING:
     from uniprot_link.config import SparqlEndpointConfig
@@ -296,8 +296,15 @@ class SparqlService:
         databases: list[str] | None = None,
         response_mode: str = "compact",
     ) -> dict[str, Any]:
-        """Map a UniProt accession to external database identifiers."""
-        result = await self.get_cross_references(accession, databases, response_mode)
+        """Map a UniProt accession to a curated set of external id databases.
+
+        Unlike get_cross_references (every xref database), map_identifiers focuses
+        on primary id-mapping targets by default (COMMON_XREF_DATABASES) so the
+        payload is small and mapping-oriented; pass ``databases`` to override.
+        """
+        effective = databases or COMMON_XREF_DATABASES
+        result = await self.get_cross_references(accession, effective, response_mode)
+        result["requested_databases"] = effective
         result["mapped_databases"] = list(result["by_database"].keys())
         return result
 

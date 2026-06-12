@@ -151,3 +151,10 @@ async def test_run_query_rejects_writes(service: SparqlService) -> None:
 
     with pytest.raises(InvalidInputError):
         await service.run_query("INSERT DATA { <a> <b> <c> }")
+
+
+async def test_map_identifiers_is_focused(service: SparqlService) -> None:
+    mapped = await service.map_identifiers("P38398")
+    full = await service.get_cross_references("P38398")
+    assert mapped["database_count"] <= full["database_count"]
+    assert mapped["requested_databases"]

@@ -369,3 +369,24 @@ async def test_run_sparql_query_error_offers_examples_fallback() -> None:
     assert env["success"] is False
     assert env["error_code"] == "query_syntax_error"
     assert any(c["tool"] == "search_example_queries" for c in env["_meta"]["next_commands"])
+
+
+@pytest.mark.asyncio
+async def test_map_identifiers_defaults_to_curated_dbs(service_factory: Any) -> None:
+    from tests.conftest import make_select_json
+    from uniprot_link.services.constants import COMMON_XREF_DATABASES
+
+    body = make_select_json(
+        ["db", "database", "xref"],
+        [
+            {
+                "db": "http://purl.uniprot.org/database/Ensembl",
+                "database": "Ensembl",
+                "xref": "http://purl.uniprot.org/ensembl/ENSP00000269305",
+            },
+        ],
+    )
+    service = service_factory([("rdfs:seeAlso", body), ("ASK", {"head": {}, "boolean": True})])
+    res = await service.map_identifiers("P38398")
+    assert res["requested_databases"] == COMMON_XREF_DATABASES
+    assert "by_database" in res and "mapped_databases" in res

@@ -268,8 +268,8 @@ def _register_annotations(mcp: FastMCP) -> None:
             "Return database cross-references for an entry, grouped by database "
             "(PDB, AlphaFoldDB, Ensembl, RefSeq, Reactome, STRING, InterPro, ...). "
             "Optionally restrict to specific databases. response_mode (default "
-            "compact) returns short ids; full restores raw IRIs. Use map_identifiers "
-            "for a focused id-mapping view."
+            "compact) returns short ids; full restores raw IRIs. "
+            "Returns every cross-reference database; use map_identifiers for a focused primary-id mapping."
         ),
     )
     async def get_protein_cross_references(
@@ -331,7 +331,8 @@ def _register_annotations(mcp: FastMCP) -> None:
             "Ensembl, RefSeq, HGNC, GeneID, KEGG, Reactome, ...). Optionally restrict "
             "to specific databases. Returns ids grouped by database plus the list of "
             "databases that had a match. response_mode (default compact) returns "
-            "short ids; full restores raw IRIs."
+            "short ids; full restores raw IRIs. "
+            "Defaults to primary id-mapping databases (PDB, Ensembl, RefSeq, HGNC, ...); for the exhaustive xref list use get_protein_cross_references."
         ),
     )
     async def map_identifiers(
