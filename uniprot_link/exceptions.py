@@ -54,10 +54,24 @@ class ServiceUnavailableError(SparqlClientError):
 class InvalidInputError(SparqlClientError):
     """A tool/service argument failed validation before any query ran."""
 
-    def __init__(self, message: str, field: str | None = None) -> None:
-        """Initialise with the offending field name when known."""
+    def __init__(
+        self,
+        message: str,
+        field: str | None = None,
+        *,
+        allowed: list[str] | None = None,
+        hint: str | None = None,
+    ) -> None:
+        """Initialise with the offending field and optional recovery data.
+
+        ``allowed`` and ``hint`` are surfaced as structured top-level keys on the
+        error envelope (``allowed_values``/``hint``) so a consumer never has to
+        parse them out of a (length-capped) message.
+        """
         super().__init__(message)
         self.field = field
+        self.allowed = allowed
+        self.hint = hint
 
 
 class NotFoundError(SparqlClientError):
