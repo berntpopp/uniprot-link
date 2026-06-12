@@ -132,6 +132,68 @@ async def test_get_sequence_isoform_returns_specific_isoform(service_factory: An
 
 
 @pytest.mark.asyncio
+async def test_get_sequence_canonical_only_omits_isoforms(service_factory: Any) -> None:
+    """F7: canonical_only returns just the canonical record (token economy)."""
+    body = make_select_json(
+        ["isoform", "length", "mass", "value"],
+        [
+            {
+                "isoform": "http://purl.uniprot.org/isoforms/P05067-1",
+                "length": 770,
+                "mass": 86943,
+                "value": "MCANON",
+            },
+            {
+                "isoform": "http://purl.uniprot.org/isoforms/P05067-2",
+                "length": 365,
+                "value": "MISO2",
+            },
+        ],
+    )
+    svc = service_factory([("up:obsolete ?obsolete", _ACTIVE_STATUS), ("up:sequence", body)])
+    res = await svc.get_sequence("P05067", canonical_only=True, response_mode="standard")
+    assert res["isoforms"] == []
+    assert res["isoform_count"] == 2  # count still truthful
+    assert res["canonical"]["isoform"] == "P05067-1"
+
+
+@pytest.mark.asyncio
+async def test_get_protein_sequence_tool_accepts_canonical_only(service_factory: Any) -> None:
+    """F7: the tool surface exposes canonical_only end-to-end via the facade."""
+    from uniprot_link.mcp.facade import create_uniprot_mcp
+
+    body = make_select_json(
+        ["isoform", "length", "mass", "value"],
+        [
+            {
+                "isoform": "http://purl.uniprot.org/isoforms/P05067-1",
+                "length": 770,
+                "mass": 86943,
+                "value": "MCANON",
+            },
+            {
+                "isoform": "http://purl.uniprot.org/isoforms/P05067-2",
+                "length": 365,
+                "value": "MISO2",
+            },
+        ],
+    )
+    svc = service_factory([("up:obsolete ?obsolete", _ACTIVE_STATUS), ("up:sequence", body)])
+    service_adapters.set_sparql_service(svc)
+    try:
+        mcp = create_uniprot_mcp()
+        result = await mcp.call_tool(
+            "get_protein_sequence",
+            {"accession": "P05067", "canonical_only": True, "response_mode": "standard"},
+        )
+        payload = result.structured_content if hasattr(result, "structured_content") else result
+        assert payload["success"] is True
+        assert payload["isoforms"] == []
+    finally:
+        service_adapters.set_sparql_service(None)
+
+
+@pytest.mark.asyncio
 async def test_get_sequence_bogus_isoform_is_not_found(service_factory: Any) -> None:
     """F2: a non-existent isoform index is a clean not_found (consistent with get_protein)."""
     status = make_select_json(

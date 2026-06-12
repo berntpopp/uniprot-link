@@ -245,19 +245,30 @@ def _register_sequence_and_features(mcp: FastMCP) -> None:
         description=(
             "Return the amino-acid sequence(s) for an entry: the canonical isoform "
             "(length, mass, sequence) plus any additional (non-canonical) isoforms. "
-            "Pass an accession; isoform suffixes are normalised to the parent entry. "
+            "Pass a canonical accession for all isoforms, or an isoform accession "
+            "(e.g. P05067-2) to get THAT isoform's specific sequence and mass. "
             "response_mode controls verbosity: minimal=metadata only; compact "
             "(default)=length/mass + a first/last-30-residue sequence_preview "
             "(sequence_truncated:true) — cheap for large proteins; standard/full "
-            "return the complete sequence string. "
-            "Signature: get_protein_sequence(accession, response_mode=)."
+            "return the complete sequence string. Set canonical_only=true to return "
+            "only the canonical isoform (skip the additional-isoform list). "
+            "Signature: get_protein_sequence(accession, response_mode=, canonical_only=)."
         ),
     )
     async def get_protein_sequence(
-        accession: _ACC, response_mode: ResponseMode = "compact"
+        accession: _ACC,
+        response_mode: ResponseMode = "compact",
+        canonical_only: Annotated[
+            bool,
+            Field(
+                description="Return only the canonical isoform (omit the additional-isoform list)."
+            ),
+        ] = False,
     ) -> dict[str, Any]:
         async def call() -> dict[str, Any]:
-            payload = await get_sparql_service().get_sequence(accession, response_mode)
+            payload = await get_sparql_service().get_sequence(
+                accession, response_mode, canonical_only=canonical_only
+            )
             payload["_meta"] = {
                 "next_commands": after_entry_subresource(
                     payload["accession"], "get_protein_sequence"
