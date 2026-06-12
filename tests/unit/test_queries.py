@@ -168,6 +168,15 @@ class TestProteinQueries:
         q_all = q.protein_variants("P38398", limit=50)
         assert "OPTIONAL { ?a skos:related ?d . ?d skos:prefLabel ?disease }" in q_all
 
+    def test_protein_variants_count_is_a_cheap_typed_count(self) -> None:
+        query = q.protein_variants_count("P38398")
+        assert "COUNT(DISTINCT ?a)" in query
+        assert "up:Natural_Variant_Annotation" in query
+        assert "up:range" not in query  # no expensive FALDO range join
+        assert "skos:related" not in query
+        disease = q.protein_variants_count("P38398", disease_associated_only=True)
+        assert "?a skos:related ?d ." in disease
+
     def test_features_filter(self) -> None:
         query = q.protein_features("P05067", ["domain", "transmembrane"])
         assert "up:Domain_Extent_Annotation" in query

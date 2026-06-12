@@ -412,6 +412,81 @@ async def test_features_limit_truncates(service_factory: Any) -> None:
 
 
 @pytest.mark.asyncio
+async def test_features_truncation_standard_envelope(service_factory: Any) -> None:
+    """F4/F5: truncated = {returned, total, reason, recovery}; total is the TRUE count."""
+    feats = make_select_json(
+        ["type", "begin", "end", "comment"],
+        [
+            {
+                "type": "http://purl.uniprot.org/core/Domain_Extent_Annotation",
+                "begin": i,
+                "end": i + 1,
+                "comment": "d",
+            }
+            for i in range(5)
+        ],
+    )
+    routes = [("up:obsolete ?obsolete", _ACTIVE_STATUS), ("up:range", feats)]
+    svc = service_factory(routes)
+    res = await svc.get_features("P05067", limit=3)
+    t = res["truncated"]
+    assert t["returned"] == 3
+    assert t["total"] == 5  # true total, not the page size (F4)
+    assert "limit" in t["reason"]
+    assert t["recovery"]
+
+
+@pytest.mark.asyncio
+async def test_variants_truncation_reports_true_total(service_factory: Any) -> None:
+    """F5: variants truncation carries the exact total via a cheap count query."""
+    rows = [
+        {"begin": i, "end": i, "substitution": "A", "comment": "x", "disease": "D"}
+        for i in range(2)
+    ]
+    routes = [
+        ("up:obsolete ?obsolete", _ACTIVE_STATUS),
+        ("COUNT(DISTINCT ?a)", make_select_json(["n"], [{"n": 7}])),
+        (
+            "Natural_Variant_Annotation",
+            make_select_json(["begin", "end", "substitution", "comment", "disease"], rows),
+        ),
+    ]
+    svc = service_factory(routes)
+    res = await svc.get_variants("P38398", limit=2)
+    t = res["truncated"]
+    assert t["returned"] == res["count"]
+    assert t["total"] == 7
+    assert "reason" in t and "recovery" in t
+
+
+@pytest.mark.asyncio
+async def test_find_proteins_truncation_reports_total(service_factory: Any) -> None:
+    data = make_select_json(
+        ["protein", "mnemonic", "reviewed", "taxid", "organism"],
+        [
+            {
+                "protein": f"http://purl.uniprot.org/uniprot/P0000{i}",
+                "mnemonic": f"M{i}_HUMAN",
+                "reviewed": True,
+                "taxid": "http://purl.uniprot.org/taxonomy/9606",
+                "organism": "Homo sapiens",
+            }
+            for i in range(2)
+        ],
+    )
+    routes = [
+        ("COUNT(DISTINCT ?protein)", make_select_json(["n"], [{"n": 42}])),
+        ("up:reviewed true", data),
+    ]
+    svc = service_factory(routes)
+    res = await svc.find_proteins(gene="TP53", reviewed=True, limit=2)
+    t = res["truncated"]
+    assert t["returned"] == 2
+    assert t["total"] == 42
+    assert "reason" in t and "recovery" in t
+
+
+@pytest.mark.asyncio
 async def test_go_terms_aspect_filter_limit_and_counts(service_factory: Any) -> None:
     rows_ = [
         {
@@ -438,6 +513,9 @@ async def test_go_terms_aspect_filter_limit_and_counts(service_factory: Any) -> 
     assert bp_only["count"] == 3
     limited = await svc.get_go_terms("P05067", limit=2)
     assert limited["count"] == 2 and limited["truncated"]["total"] == 4
+    # F5: standardized envelope carries returned + reason too.
+    assert limited["truncated"]["returned"] == 2
+    assert "reason" in limited["truncated"] and "recovery" in limited["truncated"]
 
 
 @pytest.mark.asyncio
@@ -474,6 +552,10 @@ async def test_run_query_select_truncation(service_factory: Any) -> None:
     assert out["row_count"] == 2
     assert out["limit_injected"] is True
     assert "truncated" in out
+    # F5: standardized envelope carries `returned`; `total` is intentionally
+    # omitted for an arbitrary query (not cheaply computable).
+    assert out["truncated"]["returned"] == 2
+    assert "reason" in out["truncated"] and "recovery" in out["truncated"]
 
 
 @pytest.mark.asyncio

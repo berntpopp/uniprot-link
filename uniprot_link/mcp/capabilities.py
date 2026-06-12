@@ -55,6 +55,7 @@ _SUMMARY_KEYS: tuple[str, ...] = (
     "recommended_workflows",
     "error_codes",
     "limits",
+    "truncation_contract",
     "read_only",
 )
 
@@ -157,6 +158,17 @@ def build_capabilities() -> dict[str, Any]:
             "replaced_by:[...]}; sequence/features/variants/diseases/go/xref/map "
             "raise an obsolete-flagged not_found. replaced_by may list multiple "
             "accessions (a demerge can split into several)."
+        ),
+        "truncation_contract": (
+            "When a list is capped, the response carries `truncated` with a "
+            "standard shape: {returned, total, reason, recovery}. `returned` is "
+            "this page's size; `total` is the true available count where cheaply "
+            "computable (features, GO terms, variants, find_proteins); `recovery` "
+            "is the concrete next step (raise limit / page via offset / add a "
+            "filter). run_sparql_query omits `total` (an arbitrary query's full "
+            "count is not computable without re-running it). Cross-reference "
+            "compact mode reports per-database {returned, total} under "
+            "truncated_databases."
         ),
         "result_ordering": {
             "find_proteins": (

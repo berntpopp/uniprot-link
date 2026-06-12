@@ -21,6 +21,7 @@ from uniprot_link.services.queries.proteins import (
     protein_sequence,
     protein_summary,
     protein_variants,
+    protein_variants_count,
 )
 from uniprot_link.services.queries.taxonomy import (
     resolve_taxon_by_name,
@@ -52,6 +53,7 @@ __all__ = [
     "protein_sequence",
     "protein_summary",
     "protein_variants",
+    "protein_variants_count",
     "resolve_taxon_by_name",
     "search_example_queries",
     "taxon_ancestors",

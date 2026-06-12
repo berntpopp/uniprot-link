@@ -43,6 +43,10 @@ def _sort_by_mnemonic(proteins: list[dict[str, Any]]) -> list[dict[str, Any]]:
 
 
 _SEQUENCE_PREVIEW = 30
+# Features are fetched up to this cap (bound on one accession -- a single QLever
+# plan regardless of the integer), then sliced to the caller's display `limit` in
+# Python, so the truncation envelope can report the TRUE total (F4).
+_FEATURE_FETCH_CAP = 1000
 
 
 def _window_sequence(seq: dict[str, Any]) -> dict[str, Any]:
@@ -162,7 +166,10 @@ class SparqlService:
                 **meta,
             }
             if injected and len(data) >= effective_limit:
+                # `total` is intentionally omitted: an arbitrary query's full count
+                # is not cheaply computable without re-running it.
                 payload["truncated"] = {
+                    "returned": len(data),
                     "reason": f"auto LIMIT {effective_limit} applied",
                     "recovery": "re-run with an explicit higher LIMIT in the query, "
                     "or pass a larger `limit`.",
@@ -197,7 +204,12 @@ class SparqlService:
             proteins, qmeta = await self._find_reviewed_first(kwargs, limit, offset)
         payload: dict[str, Any] = {"count": len(proteins), "proteins": proteins, **qmeta}
         if len(proteins) >= limit:
+            # A grand COUNT (anchors only; reviewed honored) gives the true total --
+            # run only on a full page, so the common single-page call pays nothing.
+            total = await self._count(Q.find_proteins(reviewed=reviewed, count=True, **kwargs))
             payload["truncated"] = {
+                "returned": len(proteins),
+                **({"total": total} if total is not None else {}),
                 "reason": f"page limit {limit} reached",
                 "recovery": f"call again with offset={offset + limit}.",
             }
@@ -342,13 +354,14 @@ class SparqlService:
         limit: int = 200,
     ) -> dict[str, Any]:
         """Return sequence features with coordinates (token-lean via limit)."""
-        limit = Q.clamp_limit(limit, default=200, maximum=1000)
-        query = Q.protein_features(accession, feature_types, limit=limit)
+        display_limit = Q.clamp_limit(limit, default=200, maximum=1000)
+        # Fetch up to the cap (not the display limit) so the true total is known.
+        query = Q.protein_features(accession, feature_types, limit=_FEATURE_FETCH_CAP)
         _, (data_json, qmeta) = await asyncio.gather(
             self.require_entry(accession), self._select_timed(query)
         )
         all_features = S.shape_features(data_json)
-        features = all_features[:limit]
+        features = all_features[:display_limit]
         acc = Q.validate_accession(accession).split("-")[0]
         payload: dict[str, Any] = {
             "accession": acc,
@@ -356,10 +369,11 @@ class SparqlService:
             "features": features,
             **qmeta,
         }
-        if len(all_features) >= limit:
+        if len(all_features) > display_limit:
             payload["truncated"] = {
-                "reason": f"limit {limit} reached",
+                "returned": len(features),
                 "total": len(all_features),
+                "reason": f"limit {display_limit} reached",
                 "recovery": "raise `limit` or pass feature_types to narrow.",
             }
         if feature_types and not features:
@@ -409,12 +423,20 @@ class SparqlService:
         # The SPARQL LIMIT caps pre-merge rows; compare against the raw row count
         # (not the merged variant count) so truncation is never under-reported.
         if len(S.rows(data_json)) >= limit:
+            total = await self._count(Q.protein_variants_count(accession, disease_associated_only))
             payload["truncated"] = {
+                "returned": len(variants),
+                **({"total": total} if total is not None else {}),
                 "reason": f"limit {limit} reached",
                 "recovery": "raise `limit`, or set disease_associated_only=true to focus on "
                 "disease-linked variants.",
             }
         return payload
+
+    async def _count(self, count_query: str) -> int | None:
+        """Run a ``COUNT(... AS ?n)`` query and return the integer, or ``None``."""
+        rows = S.rows(await self._select(count_query))
+        return int(rows[0]["n"]) if rows and "n" in rows[0] else None
 
     async def get_diseases(self, accession: str) -> dict[str, Any]:
         """Return disease annotations."""

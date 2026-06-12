@@ -462,6 +462,7 @@ def project_go_terms(
         out["truncated"] = {
             "returned": limit,
             "total": total,
+            "reason": f"limit {limit} reached",
             "recovery": "raise `limit` or filter by `aspect`.",
         }
     returned = sum(len(v) for v in grouped.values())

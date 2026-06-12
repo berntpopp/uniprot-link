@@ -311,6 +311,23 @@ WHERE {{
 LIMIT {limit}"""
 
 
+def protein_variants_count(accession: str, disease_associated_only: bool = False) -> str:
+    """Build a cheap ``COUNT(DISTINCT ?a)`` of an entry's natural variants.
+
+    Counts the typed annotations directly -- no FALDO range join -- so it is far
+    cheaper than the data query and yields the true total for the standardized
+    truncation envelope (F5). Runs only when the variants page is truncated.
+    """
+    acc = validate_accession(accession).split("-")[0]
+    disease = "  ?a skos:related ?d .\n" if disease_associated_only else ""
+    return f"""{prefix_block()}
+SELECT (COUNT(DISTINCT ?a) AS ?n)
+WHERE {{
+  uniprotkb:{acc} up:annotation ?a .
+  ?a a up:Natural_Variant_Annotation .
+{disease}}}"""
+
+
 def protein_diseases(accession: str) -> str:
     """Build a SELECT for disease annotations linked to an entry.
 
