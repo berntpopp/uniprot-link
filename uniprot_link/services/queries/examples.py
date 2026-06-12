@@ -1,0 +1,67 @@
+"""SPARQL builders for the curated example-query catalog (sparql-examples graph)."""
+
+from __future__ import annotations
+
+from uniprot_link.exceptions import InvalidInputError
+from uniprot_link.services.constants import SPARQL_EXAMPLES_GRAPH, prefix_block
+from uniprot_link.services.queries.validation import escape_literal
+
+
+def search_example_queries(text: str | None = None, limit: int = 25) -> str:
+    """Build a SELECT over the curated example catalog (optional text filter)."""
+    text_filter = ""
+    if text:
+        tokens = [escape_literal(t) for t in text.strip().split() if t][:6]
+        if tokens:
+            clauses = " || ".join(
+                f'CONTAINS(LCASE(?comment), LCASE("{t}")) || '
+                f'EXISTS {{ ?ex schema:keywords ?k2 . FILTER(CONTAINS(LCASE(?k2), LCASE("{t}"))) }}'
+                for t in tokens
+            )
+            text_filter = f"    FILTER({clauses})\n"
+    return f"""{prefix_block()}
+SELECT ?ex ?comment ?type
+       (GROUP_CONCAT(DISTINCT ?kw; separator=", ") AS ?keywords)
+WHERE {{
+  GRAPH <{SPARQL_EXAMPLES_GRAPH}> {{
+    ?ex a sh:SPARQLExecutable ; rdfs:comment ?comment .
+    OPTIONAL {{ ?ex schema:keywords ?kw }}
+    OPTIONAL {{ ?ex a ?type .
+               FILTER(?type IN (sh:SPARQLSelectExecutable, sh:SPARQLAskExecutable,
+                                sh:SPARQLConstructExecutable)) }}
+{text_filter}  }}
+}}
+GROUP BY ?ex ?comment ?type
+ORDER BY ?ex
+LIMIT {limit}"""
+
+
+def get_example_query(example_iri: str) -> str:
+    """Build a SELECT for a single example's full query text and metadata."""
+    if not example_iri.startswith(("http://", "https://")):
+        raise InvalidInputError(
+            "example_id must be a full IRI as returned by search_example_queries.",
+            field="example_id",
+        )
+    iri = f"<{example_iri}>"
+    return f"""{prefix_block()}
+PREFIX ex_ont: <https://purl.expasy.org/sparql-examples/ontology#>
+SELECT ?comment ?query ?type
+       (GROUP_CONCAT(DISTINCT ?kw; separator=", ") AS ?keywords)
+       (GROUP_CONCAT(DISTINCT ?fed; separator=", ") AS ?federatesWith)
+WHERE {{
+  GRAPH <{SPARQL_EXAMPLES_GRAPH}> {{
+    {iri} rdfs:comment ?comment .
+    OPTIONAL {{ {iri} sh:select ?sel }}
+    OPTIONAL {{ {iri} sh:ask ?ask }}
+    OPTIONAL {{ {iri} sh:construct ?con }}
+    BIND(COALESCE(?sel, ?ask, ?con) AS ?query)
+    OPTIONAL {{ {iri} schema:keywords ?kw }}
+    OPTIONAL {{ {iri} ex_ont:federatesWith ?fed }}
+    OPTIONAL {{ {iri} a ?type .
+               FILTER(?type IN (sh:SPARQLSelectExecutable, sh:SPARQLAskExecutable,
+                                sh:SPARQLConstructExecutable)) }}
+  }}
+}}
+GROUP BY ?comment ?query ?type
+LIMIT 1"""
