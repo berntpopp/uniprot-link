@@ -33,10 +33,11 @@ if TYPE_CHECKING:
 
 _ACC = Annotated[
     str,
-    Field(
-        description="UniProtKB accession, e.g. P05067 (isoforms like P05067-2 accepted).",
-        min_length=6,
-    ),
+    # No min_length: schema-level rejection would surface a raw pydantic error
+    # instead of the server's structured envelope. Let validate_accession in the
+    # query builder raise InvalidInputError (field="accession") so a bad value
+    # flows through the polished error envelope with a helpful example + recovery.
+    Field(description="UniProtKB accession, e.g. P05067 (isoforms like P05067-2 accepted)."),
 ]
 
 ResponseMode = Annotated[
@@ -128,9 +129,11 @@ def _register_find_and_summary(mcp: FastMCP) -> None:
             "Return the core summary for a single UniProtKB entry by accession: "
             "mnemonic, reviewed flag, recommended/short name, gene(s), organism + "
             "taxon, protein existence, sequence length and mass, a function summary, "
-            "and creation/modification dates. `_meta.next_commands` points at the "
-            "sequence/features/variants/diseases/xref tools. response_mode "
-            "(default compact) controls verbosity; full restores raw IRIs."
+            "and creation/modification dates, plus has_variants/has_diseases/"
+            "has_structure presence flags that drive content-aware next_commands. "
+            "An obsolete/demerged accession returns a flagged obsolete record "
+            "(obsolete:true + replaced_by). response_mode (default compact) controls "
+            "verbosity; standard/full add the created/modified dates."
         ),
     )
     async def get_protein(
