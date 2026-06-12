@@ -56,6 +56,25 @@ def test_capabilities_has_latency_profile() -> None:
         assert tool in listed, f"{tool} missing from latency_profile"
 
 
+def test_latency_bands_do_not_promise_features_diseases_as_fast() -> None:
+    """F4: features/diseases measured ~2s cold; they must not be advertised as fast (0-700ms)."""
+    bands = build_capabilities()["latency_profile"]["bands"]
+    assert "get_protein_features" not in bands["fast"]["tools"]
+    assert "get_protein_diseases" not in bands["fast"]["tools"]
+    medium = " ".join(bands["medium"]["tools"])
+    assert "get_protein_features" in medium
+    assert "get_protein_diseases" in medium
+
+
+def test_limits_document_find_proteins_page_size() -> None:
+    """F5: the 25-per-page find_proteins behavior is documented (not just default_select_limit:50)."""
+    limits = build_capabilities()["limits"]
+    assert limits["find_proteins_page_size"] == 25
+    assert limits["find_proteins_max_limit"] == 200
+    assert limits["cross_reference_compact_id_cap"] == 25
+    assert "run_sparql_query" in limits["default_select_limit_note"]
+
+
 def test_capabilities_has_full_citation() -> None:
     from uniprot_link.mcp.capabilities import build_capabilities
 

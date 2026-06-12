@@ -113,15 +113,20 @@ def build_capabilities() -> dict[str, Any]:
                 "served from a 1h in-process cache in ~0 ms (see the `cached` "
                 "field on responses). Bands are coarse guidance, not promises."
             ),
+            "guidance": (
+                "Bands track the QUERY CLASS you can detect, not a single number: "
+                "a bound accession/mnemonic/gene lookup is fast; a tool that joins "
+                "FALDO ranges or disease vocabularies is medium; an unbounded scan "
+                "(no anchor) or federation can approach the 45-min QLever cap. "
+                "Figures are observed cold latencies, not guarantees."
+            ),
             "bands": {
                 "fast": {
                     "typical_ms": "0-700",
                     "tools": [
                         "get_protein",
                         "get_protein_sequence",
-                        "get_protein_features",
                         "get_protein_variants",
-                        "get_protein_diseases",
                         "get_protein_cross_references",
                         "get_protein_go_terms",
                         "map_identifiers",
@@ -130,13 +135,20 @@ def build_capabilities() -> dict[str, Any]:
                     ],
                 },
                 "medium": {
-                    "typical_ms": "1000-3000",
-                    "tools": ["search_example_queries", "get_example_query"],
+                    "typical_ms": "700-2500",
+                    "tools": [
+                        # F4: features (FALDO range join) and diseases (disease
+                        # vocabulary join) measured ~1.6-2.3s cold -- not "fast".
+                        "get_protein_features",
+                        "get_protein_diseases",
+                        "search_example_queries",
+                        "get_example_query",
+                    ],
                 },
                 "slow_cold_scan": {
-                    "typical_ms": "3000-12000",
+                    "typical_ms": "2500-12000",
                     "tools": [
-                        "find_proteins (cold)",
+                        "find_proteins (cold; mnemonic anchor is fast-pathed)",
                         "find_proteins_batch (cold; N genes resolved concurrently)",
                         "get_taxon (uncached name scan)",
                         "run_sparql_query (unbounded or federated)",
@@ -203,7 +215,15 @@ def build_capabilities() -> dict[str, Any]:
         ],
         "limits": {
             "default_select_limit": 50,
+            "default_select_limit_note": (
+                "Applies to run_sparql_query: the LIMIT auto-injected into an "
+                "unbounded SELECT. NOT the find_proteins page size (see "
+                "find_proteins_page_size)."
+            ),
             "max_select_limit": 10000,
+            "find_proteins_page_size": 25,
+            "find_proteins_max_limit": 200,
+            "cross_reference_compact_id_cap": 25,
             "server_query_timeout_minutes": 45,
             "find_proteins_requires_anchor": (
                 "gene, mnemonic, ec_number, keyword, or organism_taxon+name_contains"
