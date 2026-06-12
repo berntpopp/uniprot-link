@@ -110,6 +110,60 @@ async def test_bogus_isoform_index_is_not_found_live(service: SparqlService) -> 
     assert real["isoform"] == "P05067-2"
 
 
+async def test_features_isoform_returns_base_features_live(service: SparqlService) -> None:
+    """F1: an isoform accession returns the entry's features + an isoform note (never silent 0)."""
+    iso = await service.get_features("P05067-2", ["domain", "region"])
+    canonical = await service.get_features("P05067", ["domain", "region"])
+    assert iso["count"] == canonical["count"]
+    assert iso["count"] >= 1
+    assert iso["accession"] == "P05067"
+    assert iso["requested_accession"] == "P05067-2"
+    assert "isoform_note" in iso
+
+
+async def test_go_terms_isoform_returns_entry_terms_live(service: SparqlService) -> None:
+    """F1-twin: GO terms for an isoform accession resolve to the entry's terms."""
+    iso = await service.get_go_terms("P05067-2")
+    assert iso["count"] >= 1
+    assert iso["requested_accession"] == "P05067-2"
+
+
+async def test_sequence_isoform_specific_live(service: SparqlService) -> None:
+    """F2: an isoform accession returns THAT isoform's specific sequence, not not_found."""
+    iso = await service.get_sequence("P05067-2", response_mode="standard")
+    assert iso["accession"] == "P05067"
+    assert iso["requested_isoform"] == "P05067-2"
+    assert iso["canonical"]["isoform"] == "P05067-2"
+    assert iso["isoforms"] == []
+    # isoform-specific: its own sequence, and a (computed) mass since up:mass is
+    # canonical-only.
+    assert iso["canonical"]["sequence"]
+    assert iso["canonical"]["length"] != 770  # differs from the canonical -1
+    assert isinstance(iso["canonical"]["mass_da"], int)
+
+
+async def test_sequence_canonical_only_live(service: SparqlService) -> None:
+    """F7: canonical_only returns only the canonical isoform for a multi-isoform entry."""
+    res = await service.get_sequence("P05067", canonical_only=True, response_mode="minimal")
+    assert res["isoforms"] == []
+    assert res["isoform_count"] >= 2  # APP has many isoforms; count stays truthful
+    assert res["canonical"]["isoform"] == "P05067-1"
+
+
+async def test_find_proteins_mnemonic_fast_path_live(service: SparqlService) -> None:
+    """F3: an exact mnemonic anchor resolves correctly via the single-query fast path."""
+    res = await service.find_proteins(mnemonic="NAA10_HUMAN")
+    assert res["count"] == 1
+    assert res["proteins"][0]["accession"] == "P41227"
+
+
+async def test_find_proteins_gene_surfaces_reviewed_count_live(service: SparqlService) -> None:
+    """F9: a bare gene anchor discloses reviewed_count (Swiss-Prot vs TrEMBL)."""
+    res = await service.find_proteins(gene="BRCA1", organism_taxon=9606, limit=25)
+    assert "reviewed_count" in res
+    assert res["reviewed_count"] >= 1
+
+
 async def test_get_protein_presence_flags_live(service: SparqlService) -> None:
     """Content-aware chaining: APP has variants, diseases, and PDB structures."""
     out = await service.get_protein("P05067")
