@@ -42,6 +42,18 @@ async def test_get_protein_shapes_summary(service_factory: Any) -> None:
 
 
 @pytest.mark.asyncio
+async def test_get_protein_omits_requested_accession_when_identical(service_factory: Any) -> None:
+    """F7: requested_accession is a token tax when it equals accession -- omit it."""
+    svc = service_factory([("up:recommendedName", _SUMMARY)])
+    out = await svc.get_protein("P05067")
+    assert out["accession"] == "P05067"
+    assert "requested_accession" not in out
+    # Case-only difference normalizes silently -> still omitted.
+    out_lower = await svc.get_protein("p05067")
+    assert "requested_accession" not in out_lower
+
+
+@pytest.mark.asyncio
 async def test_get_protein_response_mode_minimal_drops_function(service_factory: Any) -> None:
     body = make_select_json(
         ["mnemonic", "reviewed", "fullName", "function"],
@@ -123,7 +135,8 @@ async def test_get_protein_obsolete_returns_flagged_record(service_factory: Any)
     assert out["obsolete_reason"] == "demerged"
     assert out["mnemonic"] == "A0A009K1D9_ACIBA"
     assert "sequence_length" not in out and "mass_da" not in out  # nothing fabricated
-    assert out["requested_accession"] == "A0A009K1D9"
+    # F7: input equals the normalized accession -> the echo is omitted.
+    assert "requested_accession" not in out
 
 
 @pytest.mark.asyncio
@@ -709,6 +722,29 @@ async def test_annotation_tool_attaches_next_commands(service_factory: Any) -> N
         assert all(c["arguments"]["accession"] == "P38398" for c in next_commands)
         assert all(c["tool"] != "get_protein_diseases" for c in next_commands)
         assert next_commands[0]["tool"] == "get_protein_variants"
+    finally:
+        service_adapters.set_sparql_service(None)
+
+
+@pytest.mark.asyncio
+async def test_run_sparql_query_success_has_next_commands(service_factory: Any) -> None:
+    """F8: run_sparql_query success carries _meta.next_commands like every tool."""
+    from uniprot_link.mcp.facade import create_uniprot_mcp
+
+    rows = make_select_json(
+        ["protein"], [{"protein": "http://purl.uniprot.org/uniprot/P05067"}]
+    )
+    svc = service_factory([("SELECT", rows)])
+    service_adapters.set_sparql_service(svc)
+    try:
+        mcp = create_uniprot_mcp()
+        result = await mcp.call_tool(
+            "run_sparql_query", {"query": "SELECT ?protein WHERE { ?protein ?p ?o }"}
+        )
+        payload = result.structured_content if hasattr(result, "structured_content") else result
+        assert payload["success"] is True
+        nxt = payload["_meta"]["next_commands"]
+        assert nxt and nxt[0] == {"tool": "get_protein", "arguments": {"accession": "P05067"}}
     finally:
         service_adapters.set_sparql_service(None)
 

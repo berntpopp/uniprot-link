@@ -8,7 +8,7 @@ from pydantic import Field
 
 from uniprot_link.mcp.annotations import READ_ONLY_OPEN_WORLD
 from uniprot_link.mcp.envelope import McpErrorContext, run_mcp_tool
-from uniprot_link.mcp.next_commands import after_get_example, cmd
+from uniprot_link.mcp.next_commands import after_get_example, after_run_sparql, cmd
 from uniprot_link.mcp.schemas import (
     EXAMPLE_DETAIL_SCHEMA,
     EXAMPLE_LIST_SCHEMA,
@@ -66,12 +66,14 @@ def register_query_tools(mcp: FastMCP) -> None:
     ) -> dict[str, Any]:
         async def call() -> dict[str, Any]:
             service = get_sparql_service()
-            return await service.run_query(
+            payload = await service.run_query(
                 query,
                 result_format=result_format,
                 limit=limit,
                 timeout=float(timeout_seconds) if timeout_seconds else None,
             )
+            payload["_meta"] = {"next_commands": after_run_sparql(payload)}
+            return payload
 
         return await run_mcp_tool(
             "run_sparql_query",

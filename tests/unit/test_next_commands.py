@@ -1,6 +1,30 @@
 from __future__ import annotations
 
-from uniprot_link.mcp.next_commands import after_entry_subresource
+from uniprot_link.mcp.next_commands import after_entry_subresource, after_run_sparql
+
+
+def test_after_run_sparql_offers_get_protein_on_accession_iri() -> None:
+    payload = {
+        "query_type": "SELECT",
+        "rows": [{"protein": "http://purl.uniprot.org/uniprot/P05067"}],
+    }
+    nxt = after_run_sparql(payload)
+    assert nxt[0] == {"tool": "get_protein", "arguments": {"accession": "P05067"}}
+
+
+def test_after_run_sparql_recognizes_bare_accession() -> None:
+    nxt = after_run_sparql({"query_type": "SELECT", "rows": [{"acc": "P38398"}]})
+    assert nxt[0] == {"tool": "get_protein", "arguments": {"accession": "P38398"}}
+
+
+def test_after_run_sparql_falls_back_to_examples() -> None:
+    nxt = after_run_sparql({"query_type": "SELECT", "rows": [{"x": "42"}]})
+    assert nxt[0]["tool"] == "search_example_queries"
+
+
+def test_after_run_sparql_ask_falls_back_to_examples() -> None:
+    nxt = after_run_sparql({"query_type": "ASK", "boolean": True})
+    assert nxt and nxt[0]["tool"] == "search_example_queries"
 
 
 def test_after_entry_subresource_excludes_current_and_caps_at_two() -> None:

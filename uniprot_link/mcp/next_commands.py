@@ -5,7 +5,8 @@ from __future__ import annotations
 import re
 from typing import Any
 
-from uniprot_link.services.queries.validation import looks_like_accession
+from uniprot_link.exceptions import InvalidInputError
+from uniprot_link.services.queries.validation import looks_like_accession, validate_accession
 
 _PROTEIN_TOOLS = {
     "get_protein",
@@ -135,3 +136,33 @@ def after_get_example(query: str | None) -> list[dict[str, Any]]:
     if not query:
         return []
     return [cmd("run_sparql_query", query=query)]
+
+
+def _accession_in_value(value: Any) -> str | None:
+    """Extract a UniProtKB accession from a cell value (bare or entry/isoform IRI)."""
+    if not isinstance(value, str):
+        return None
+    candidate = value.rsplit("/", 1)[-1] if value.startswith("http") else value
+    try:
+        return validate_accession(candidate)
+    except InvalidInputError:
+        return None
+
+
+def after_run_sparql(payload: dict[str, Any]) -> list[dict[str, Any]]:
+    """Next steps after a raw query (F8: the chaining contract is universal).
+
+    If a SELECT row exposes a UniProtKB accession (bare or as an entry IRI), offer
+    to pull that entry; otherwise point at the example catalog to refine the query.
+    """
+    if payload.get("query_type") == "SELECT":
+        for row in payload.get("rows", [])[:5]:
+            if isinstance(row, dict):
+                for value in row.values():
+                    acc = _accession_in_value(value)
+                    if acc:
+                        return [
+                            cmd("get_protein", accession=acc),
+                            cmd("search_example_queries"),
+                        ]
+    return [cmd("search_example_queries")]

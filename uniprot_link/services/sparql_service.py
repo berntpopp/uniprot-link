@@ -273,7 +273,8 @@ class SparqlService:
             )
         if status.obsolete:
             record = S.build_obsolete_record(acc, status, summary)
-            record["requested_accession"] = accession
+            if accession.strip().upper() != acc:
+                record["requested_accession"] = accession
             return {**record, **qmeta}
         if status.isoform_exists is False:
             raise NotFoundError(
@@ -282,12 +283,11 @@ class SparqlService:
             )
         if summary is None:
             raise NotFoundError(f"No UniProtKB entry found for accession '{accession}'.")
-        payload: dict[str, Any] = {
-            "accession": acc,
-            "requested_accession": accession,
-            **summary,
-            **qmeta,
-        }
+        payload: dict[str, Any] = {"accession": acc, **summary, **qmeta}
+        # F7: echo requested_accession ONLY when it differs from the resolved base
+        # (isoform suffix / redirect) -- omit the pure-token-tax identity echo.
+        if accession.strip().upper() != acc:
+            payload["requested_accession"] = accession
         if status.isoform_exists:
             payload["isoform"] = accession
             payload["isoform_note"] = (
