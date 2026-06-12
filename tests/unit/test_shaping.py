@@ -297,9 +297,13 @@ def test_shape_variants_adds_wildtype_and_notation():
     assert out[176]["wild_type"] == "L"
     assert out[176]["variant_type"] == "substitution"
     assert out[176]["notation"] == "L176F"
+    assert out[176]["substitution"] == "F"
     assert out[408]["wild_type"] == "T"
     assert out[408]["variant_type"] == "other"
     assert "notation" not in out[408]
+    # C6: an empty substitution is omitted, never emitted as "" (which reads as
+    # "substitutes to nothing").
+    assert "substitution" not in out[408]
 
 
 def test_apply_response_mode_projects_protein_payload() -> None:

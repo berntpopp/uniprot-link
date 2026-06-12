@@ -171,7 +171,7 @@ def shape_variants(result_json: dict[str, Any] | None) -> list[dict[str, Any]]:
                 "begin": row.get("begin"),
                 "end": row.get("end"),
                 "wild_type": row.get("wildType") or None,
-                "substitution": row.get("substitution"),
+                "substitution": row.get("substitution") or None,
                 "description": row.get("comment"),
                 "diseases": [],
             },
@@ -202,6 +202,10 @@ def _classify_variant(v: dict[str, Any]) -> dict[str, Any]:
         v["notation"] = f"{wt}{begin}{sub}"
     if v.get("wild_type") is None:
         v.pop("wild_type", None)
+    # Omit an absent/empty substitution rather than emit "" (C6): an empty string
+    # reads as "substitutes to nothing"; absence + variant_type:"other" is clear.
+    if not v.get("substitution"):
+        v.pop("substitution", None)
     return v
 
 
