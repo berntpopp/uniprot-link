@@ -41,13 +41,14 @@ ORDER BY ?depth"""
 
 
 def resolve_taxon_by_name(name: str, limit: int = 10) -> str:
-    """Build a SELECT resolving a scientific/common name to taxon ids."""
+    """Build a SELECT resolving a scientific/common name to taxon ids (with rank)."""
     n = escape_literal(name.strip())
     return f"""{prefix_block()}
-SELECT ?taxon ?scientificName ?commonName
+SELECT ?taxon ?scientificName ?commonName ?rank
 WHERE {{
   ?taxon a up:Taxon ; up:scientificName ?scientificName .
   OPTIONAL {{ ?taxon up:commonName ?commonName }}
+  OPTIONAL {{ ?taxon up:rank ?rank }}
   FILTER(LCASE(?scientificName) = LCASE("{n}") || CONTAINS(LCASE(?scientificName), LCASE("{n}")))
 }}
 ORDER BY ?scientificName

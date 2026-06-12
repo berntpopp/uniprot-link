@@ -335,10 +335,11 @@ class SparqlService:
             payload["elapsed_ms"] = max(core_m["elapsed_ms"], anc_m["elapsed_ms"])
             payload["cached"] = core_m["cached"] and anc_m["cached"]
             return payload
-        matches = S.shape_taxon_resolutions(await self._select(Q.resolve_taxon_by_name(taxon)))
+        rows_json, qmeta = await self._select_timed(Q.resolve_taxon_by_name(taxon))
+        matches = S.shape_taxon_resolutions(rows_json)
         if not matches:
             raise NotFoundError(f"No taxon matched '{taxon}'.")
-        return {"query": taxon, "match_count": len(matches), "matches": matches}
+        return {"query": taxon, "match_count": len(matches), "matches": matches, **qmeta}
 
     # --- Example catalog ----------------------------------------------------
 

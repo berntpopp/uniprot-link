@@ -322,3 +322,20 @@ def test_apply_response_mode_projects_protein_payload() -> None:
     assert apply_response_mode(full, "standard", kind="protein") == full
     # projection must not mutate the caller's payload (it may be cached upstream)
     assert "function" in full and "created" in full
+
+
+def test_shape_taxon_resolutions_includes_rank() -> None:
+    body = make_select_json(
+        ["taxon", "scientificName", "commonName", "rank"],
+        [
+            {
+                "taxon": "http://purl.uniprot.org/taxonomy/9606",
+                "scientificName": "Homo sapiens",
+                "commonName": "Human",
+                "rank": "http://purl.uniprot.org/core/Species",
+            }
+        ],
+    )
+    out = S.shape_taxon_resolutions(body)
+    assert out[0]["taxon_id"] == "9606"
+    assert out[0]["rank"] == "Species"

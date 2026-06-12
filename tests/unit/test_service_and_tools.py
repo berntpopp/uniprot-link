@@ -435,3 +435,24 @@ async def test_success_meta_has_request_id() -> None:
     out = await run_mcp_tool("get_protein", ok, context=McpErrorContext("get_protein"))
     assert out["_meta"]["request_id"]
     assert out["success"] is True
+
+
+@pytest.mark.asyncio
+async def test_get_taxon_by_name_has_timing_and_matches(service_factory: Any) -> None:
+    from tests.conftest import make_select_json
+
+    body = make_select_json(
+        ["taxon", "scientificName", "commonName", "rank"],
+        [
+            {
+                "taxon": "http://purl.uniprot.org/taxonomy/9606",
+                "scientificName": "Homo sapiens",
+                "commonName": "Human",
+                "rank": "",
+            }
+        ],
+    )
+    svc = service_factory([("a up:Taxon", body)])
+    out = await svc.get_taxon("Homo sapiens")
+    assert "elapsed_ms" in out and "cached" in out
+    assert out["matches"][0]["taxon_id"] == "9606"

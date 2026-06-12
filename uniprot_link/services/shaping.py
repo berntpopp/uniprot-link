@@ -272,15 +272,19 @@ def shape_ancestors(
 
 
 def shape_taxon_resolutions(result_json: dict[str, Any] | None) -> list[dict[str, Any]]:
-    """Shape taxon name-resolution rows."""
-    return [
-        {
+    """Shape taxon name-resolution rows (parity with by-id: includes rank)."""
+    out: list[dict[str, Any]] = []
+    for row in rows(result_json):
+        match: dict[str, Any] = {
             "taxon_id": taxid_from_uri(row.get("taxon", "")),
             "scientific_name": row.get("scientificName"),
             "common_name": row.get("commonName"),
+            "rank": local_name(row["rank"]).replace("Taxonomic_Rank_", "")
+            if row.get("rank")
+            else None,
         }
-        for row in rows(result_json)
-    ]
+        out.append({k: v for k, v in match.items() if v not in (None, "")})
+    return out
 
 
 def shape_example_list(result_json: dict[str, Any] | None) -> list[dict[str, Any]]:

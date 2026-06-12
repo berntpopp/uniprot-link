@@ -47,6 +47,16 @@ def register_taxonomy_tools(mcp: FastMCP) -> None:
                 payload["_meta"] = {
                     "next_commands": [cmd("find_proteins", organism_taxon=int(payload["taxon_id"]))]
                 }
+            elif payload.get("matches"):
+                # By-name resolution: chain into id detail + a protein search so
+                # name -> id -> find never dead-ends (Bug 5).
+                top = payload["matches"][0]["taxon_id"]
+                payload["_meta"] = {
+                    "next_commands": [
+                        cmd("get_taxon", taxon=top),
+                        cmd("find_proteins", organism_taxon=int(top)),
+                    ]
+                }
             return payload
 
         return await run_mcp_tool("get_taxon", call, context=McpErrorContext("get_taxon"))
