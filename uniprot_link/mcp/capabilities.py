@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING, Any
 from uniprot_link import __version__
 from uniprot_link.api.client import RESULT_FORMATS
 from uniprot_link.buildinfo import build_info
+from uniprot_link.mcp.arg_help import ARG_ALIASES, tool_signature
 from uniprot_link.mcp.resources import (
     RECOMMENDED_CITATION,
     RESEARCH_USE_NOTICE,
@@ -28,6 +29,34 @@ from uniprot_link.services.shaping import RESPONSE_MODES
 
 if TYPE_CHECKING:
     from fastmcp import FastMCP
+
+# Reverse the alias map to {canonical: [accepted synonyms]} for human-facing docs.
+_ALIAS_DOC: dict[str, list[str]] = {}
+for _alias, _canonical in sorted(ARG_ALIASES.items()):
+    _ALIAS_DOC.setdefault(_canonical, []).append(_alias)
+
+# The light "summary" projection keeps just what a cold consumer needs to call any
+# tool without guessing an argument name; the heavy reference blocks (named graphs,
+# prefixes, vocabularies) stay behind detail='full' / uniprot://capabilities.
+_SUMMARY_KEYS: tuple[str, ...] = (
+    "server",
+    "server_version",
+    "build",
+    "uniprot_release",
+    "endpoint",
+    "sparql_engine",
+    "research_use_only",
+    "research_use_notice",
+    "recommended_citation",
+    "tools",
+    "tool_count",
+    "response_modes",
+    "default_response_mode",
+    "recommended_workflows",
+    "error_codes",
+    "limits",
+    "read_only",
+)
 
 TOOLS: list[str] = [
     "get_server_capabilities",
@@ -169,12 +198,63 @@ def build_capabilities() -> dict[str, Any]:
     }
 
 
+async def collect_tool_signatures(mcp: FastMCP) -> dict[str, str]:
+    """Map every registered tool to its rendered signature (from the live schema)."""
+    tools = sorted(await mcp.list_tools(), key=lambda t: t.name)
+    return {t.name: tool_signature(t.name, t.parameters or {}) for t in tools}
+
+
+async def build_tools_overview(mcp: FastMCP) -> dict[str, Any]:
+    """Lightweight discovery payload: name, one-line summary, and call signature."""
+    tools = sorted(await mcp.list_tools(), key=lambda t: t.name)
+    entries: list[dict[str, str]] = []
+    for tool in tools:
+        summary = (tool.description or "").split(". ")[0].strip()
+        entries.append(
+            {
+                "name": tool.name,
+                "summary": summary[:160],
+                "signature": tool_signature(tool.name, tool.parameters or {}),
+            }
+        )
+    return {"server": "uniprot-link", "tool_count": len(entries), "tools": entries}
+
+
+def project_capabilities(detail: str, tool_signatures: dict[str, str]) -> dict[str, Any]:
+    """Return the full capabilities payload, or a light summary (default).
+
+    ``detail='full'`` returns everything (named graphs, prefixes, vocabularies);
+    ``detail='summary'`` returns just identity/build, the tool list WITH signatures,
+    accepted argument aliases, workflows, error taxonomy, and limits.
+    """
+    full = build_capabilities()
+    full["tool_signatures"] = tool_signatures
+    full["argument_aliases"] = _ALIAS_DOC
+    if detail == "full":
+        full["detail"] = "full"
+        return full
+    summary: dict[str, Any] = {k: full[k] for k in _SUMMARY_KEYS if k in full}
+    summary["tool_signatures"] = tool_signatures
+    summary["argument_aliases"] = _ALIAS_DOC
+    summary["latency_note"] = full["latency_profile"]["note"]
+    summary["detail"] = "summary"
+    summary["more"] = (
+        "Call get_server_capabilities(detail='full') or read uniprot://capabilities "
+        "for named graphs, prefixes, and vocabularies; uniprot://tools lists signatures."
+    )
+    return summary
+
+
 def register_capability_resources(mcp: FastMCP) -> None:
     """Register the uniprot:// resource family on a FastMCP instance."""
 
     @mcp.resource("uniprot://capabilities", mime_type="application/json")
     def capabilities() -> str:
         return json.dumps(build_capabilities(), indent=2)
+
+    @mcp.resource("uniprot://tools", mime_type="application/json")
+    async def tools_overview() -> str:
+        return json.dumps(await build_tools_overview(mcp), indent=2)
 
     @mcp.resource("uniprot://usage", mime_type="text/plain")
     def usage() -> str:
