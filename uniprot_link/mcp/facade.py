@@ -5,6 +5,7 @@ from __future__ import annotations
 from fastmcp import FastMCP
 
 from uniprot_link.mcp.capabilities import register_capability_resources
+from uniprot_link.mcp.middleware import ArgValidationMiddleware
 from uniprot_link.mcp.resources import UNIPROT_SERVER_INSTRUCTIONS
 from uniprot_link.mcp.tools import (
     register_discovery_tools,
@@ -27,5 +28,6 @@ def create_uniprot_mcp() -> FastMCP:
     register_protein_tools(mcp)
     register_taxonomy_tools(mcp)
     register_capability_resources(mcp)
+    mcp.add_middleware(ArgValidationMiddleware())
 
     return mcp
