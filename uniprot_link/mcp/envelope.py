@@ -132,6 +132,46 @@ def _error_envelope(exc: BaseException, context: McpErrorContext) -> dict[str, A
     return envelope
 
 
+def build_arg_error_envelope(
+    *,
+    tool_name: str,
+    loc: str,
+    error_type: str,
+    valid_params: list[str],
+    signature: str,
+    suggestion: str | None,
+) -> dict[str, Any]:
+    """Standard invalid-input envelope for an argument-binding failure.
+
+    Used by :class:`~uniprot_link.mcp.middleware.ArgValidationMiddleware` so a wrong
+    argument *name*, *type*, or a *missing required* argument routes through the same
+    contract as value-level errors instead of leaking a raw pydantic ``ValidationError``.
+    """
+    if error_type == "missing_argument":
+        head = f"Missing required argument `{loc}` for {tool_name}."
+    elif error_type == "unexpected_keyword_argument":
+        head = f"Unknown argument `{loc}` for {tool_name}."
+    else:
+        head = f"Invalid value for argument `{loc}` of {tool_name}."
+    dym = f" Did you mean `{suggestion}`?" if suggestion else ""
+    message = f"{head}{dym} Valid argument names are listed in allowed_values."
+    return {
+        "success": False,
+        "error_code": "invalid_input",
+        "message": message[:280],
+        "retryable": False,
+        "recovery_action": "reformulate_input",
+        "field": loc,
+        "allowed_values": valid_params,
+        "hint": signature,
+        "_meta": {
+            "tool": tool_name,
+            "request_id": _request_id(),
+            "next_commands": [cmd("get_server_capabilities")],
+        },
+    }
+
+
 async def run_mcp_tool(
     tool_name: str,
     call: Callable[[], Awaitable[dict[str, Any]]],
