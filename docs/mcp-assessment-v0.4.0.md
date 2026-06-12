@@ -177,3 +177,33 @@ tools** and a handful of **minor data-representation nits**. Nothing is broken.
 of most MCPs — the error/observability/chaining design in particular is
 reference-quality. The remaining work is latency on the scan/search tools and a
 few minor payload-representation cleanups.
+
+---
+
+## v0.5.0 Uplift — findings closed (2026-06-12)
+
+The eight findings above were each closed in the v0.5.0 pass (branch
+`v0.5.0-assessment-uplift`; spec + plan under `docs/superpowers/`). Every change
+was confirmed against the live endpoint and locked by a unit and/or integration
+test. No SPARQL query-builder semantics changed (QLever risk surface untouched).
+
+| Finding (v0.4.0) | Fix (v0.5.0) | Dimension lifted |
+|------------------|--------------|------------------|
+| Repeated `_meta` boilerplate | **C1** Static provenance (research-use flag, citation DOI, release) demoted to `get_server_capabilities`; per-call `_meta` is now just `{tool, request_id, next_commands}`. New `provenance_policy` + `per_call_meta` keys document it. ~30–40 tok/call saved. | Token efficiency 7 → ~9–10 |
+| No advertised latency | **C2** New `latency_profile` band map in capabilities + one-line latency cues on `find_proteins`, `get_taxon`, `run_sparql_query`. | Speed/latency 7 → ~9; Discoverability |
+| `get_taxon` by-name ~40× slower | **C3** Curated `COMMON_TAXA` index resolves ~30 model-organism names (human, mouse, yeast, E. coli, SARS-CoV-2, …) with **zero** network round-trips (~11 s → ~0 ms); long-tail names still scan. All 20 ids verified live. | Speed/latency |
+| `domain`/`region` trap | **C4** `get_protein_features(['domain'])` now attaches a `domain_region_hint` and prepends a ready `['domain','region']` next-command, independent of result count. | Correctness + chaining |
+| Malformed-accession recovery suggested `find_proteins(gene=<bad>)` | **C5** `looks_like_gene_symbol` excludes real + near-miss accessions (e.g. `Q96T60XYZ`) while still redirecting genuine genes (`BRCA1`, `G6PD`). | Error handling 9 → 10 |
+| `substitution:""` for inapplicable field | **C6** Empty substitution is omitted (house style); `variant_type:"other"` carries the meaning. No fabricated `notation`. | Structured output 9 → 10 |
+| Non-canonical isoform `mass_da:null` | **C7** Isoform mass is computed from the sequence (average residue masses), flagged `mass_computed:true`; the table is locked by a test matching UniProt's canonical 57076 Da within 2 Da. | Structured output 9 → 10 |
+| Opaque `find_proteins` ordering | **C8** Total sort `reviewed → mnemonic → accession` (unique tiebreak); documented in capabilities `result_ordering` and the tool description. | Discoverability/determinism |
+
+**Deliberately not done** (engineering judgment, see spec §5): blind pre-warming
+of `find_proteins` (cache is query-keyed, so warming one gene does nothing for
+the next — advertising latency + the taxon index are the real wins); fabricating
+a `T408del`-style notation (UniProt does not assert the change is a deletion).
+
+**Expected re-score:** Token efficiency and Speed/latency — the two dimensions
+that capped v0.4.0 at 8.5 — both rise to ~9; the correctness/representation nits
+clear Error handling and Structured output to 10. Net **> 9.5 / 10**, pending an
+independent live re-assessment against a redeployed build.

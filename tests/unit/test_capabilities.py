@@ -20,7 +20,7 @@ def test_capabilities_advertises_response_modes_and_contracts() -> None:
     from uniprot_link.mcp.capabilities import build_capabilities
 
     cap = build_capabilities()
-    assert cap["server_version"] == "0.4.0"
+    assert cap["server_version"] == "0.5.0"
     assert cap["response_modes"] == ["minimal", "compact", "standard", "full"]
     assert cap["default_response_mode"] == "compact"
     assert "domain" in cap["feature_types"]
