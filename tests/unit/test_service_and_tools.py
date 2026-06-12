@@ -521,6 +521,21 @@ async def test_success_meta_is_lean() -> None:
     assert "request_id" in out["_meta"]
 
 
+def test_sort_by_mnemonic_is_total_with_accession_tiebreak() -> None:
+    """Entries sharing (or lacking) a mnemonic order by accession, stably."""
+    from uniprot_link.services.sparql_service import _sort_by_mnemonic
+
+    page = [
+        {"accession": "P00002", "mnemonic": "DUP_HUMAN"},
+        {"accession": "P00001", "mnemonic": "DUP_HUMAN"},
+        {"accession": "P00003", "mnemonic": None},
+    ]
+    out = _sort_by_mnemonic(page)
+    assert [p["accession"] for p in out] == ["P00001", "P00002", "P00003"]
+    # Deterministic across repeated calls regardless of input order.
+    assert _sort_by_mnemonic(list(reversed(page))) == out
+
+
 @pytest.mark.asyncio
 async def test_features_domain_without_region_hints(service_factory: Any) -> None:
     """Requesting ['domain'] (not region) attaches a domain->region nudge."""

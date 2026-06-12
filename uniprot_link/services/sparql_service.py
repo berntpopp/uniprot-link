@@ -26,8 +26,20 @@ if TYPE_CHECKING:
 
 
 def _sort_by_mnemonic(proteins: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """Sort a (small, already-LIMITed) protein page by mnemonic, Nones last."""
-    return sorted(proteins, key=lambda p: (p.get("mnemonic") is None, p.get("mnemonic") or ""))
+    """Sort a (small, already-LIMITed) page by mnemonic then accession.
+
+    Accession is the unique final tiebreak, making the order total and the page
+    deterministic across identical calls (pagination stability) even when two
+    entries share -- or lack -- a mnemonic.
+    """
+    return sorted(
+        proteins,
+        key=lambda p: (
+            p.get("mnemonic") is None,
+            p.get("mnemonic") or "",
+            p.get("accession") or "",
+        ),
+    )
 
 
 _SEQUENCE_PREVIEW = 30

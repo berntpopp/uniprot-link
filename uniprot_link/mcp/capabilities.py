@@ -116,6 +116,12 @@ def build_capabilities() -> dict[str, Any]:
             "get_protein*/get_taxon tool; run_sparql_query rejects write/UPDATE "
             "queries as 'invalid_input' (read-only)."
         ),
+        "result_ordering": {
+            "find_proteins": (
+                "Reviewed (Swiss-Prot) first, then by mnemonic (entry name), then "
+                "accession -- deterministic across identical calls and pages."
+            ),
+        },
         "recommended_workflows": [
             "accession -> get_protein -> get_protein_{sequence,features,variants,diseases}",
             "gene + organism_taxon -> find_proteins -> get_protein",

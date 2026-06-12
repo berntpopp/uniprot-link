@@ -32,6 +32,12 @@ def test_capabilities_advertises_response_modes_and_contracts() -> None:
     assert "not_found" in cap["not_found_contract"].lower()
 
 
+def test_capabilities_documents_result_ordering() -> None:
+    cap = build_capabilities()
+    ordering = cap["result_ordering"]["find_proteins"]
+    assert "accession" in ordering and "reviewed" in ordering.lower()
+
+
 def test_capabilities_has_latency_profile() -> None:
     cap = build_capabilities()
     lp = cap["latency_profile"]
