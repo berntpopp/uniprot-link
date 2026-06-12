@@ -302,7 +302,7 @@ class SparqlService:
         on primary id-mapping targets by default (COMMON_XREF_DATABASES) so the
         payload is small and mapping-oriented; pass ``databases`` to override.
         """
-        effective = databases or COMMON_XREF_DATABASES
+        effective = list(databases or COMMON_XREF_DATABASES)
         result = await self.get_cross_references(accession, effective, response_mode)
         result["requested_databases"] = effective
         result["mapped_databases"] = list(result["by_database"].keys())
