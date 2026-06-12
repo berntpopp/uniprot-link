@@ -147,10 +147,42 @@ LIMIT {limit} OFFSET {offset}"""
 
 
 def entry_exists_ask(accession: str) -> str:
-    """Build an ASK that is true iff the UniProtKB entry exists."""
+    """Build an ASK that is true iff the UniProtKB entry exists.
+
+    Deprecated: cannot distinguish obsolete entries (they keep ``a up:Protein``).
+    Use :func:`entry_status` for the obsolete-aware gate.
+    """
     base = validate_accession(accession).split("-")[0]
     return f"""{prefix_block()}
 ASK {{ uniprotkb:{base} a up:Protein }}"""
+
+
+def entry_status(accession: str) -> str:
+    """Build a SELECT classifying an entry as active / obsolete / absent.
+
+    0 rows -> absent. A row with ``up:obsolete true`` -> obsolete (with any
+    ``up:replacedBy`` accessions). Otherwise active. When the accession carries a
+    ``-N`` isoform suffix, an ``EXISTS`` probe reports whether that isoform is
+    real (so get_protein can reject a typo'd index, F-ISO). Obsolete entries keep
+    ``a up:Protein`` (verified live on Z9Z9Z9 / A0A009K1D9), so the bare existence
+    ASK could not distinguish them -- this query can.
+    """
+    acc = validate_accession(accession)
+    base = acc.split("-")[0]
+    iso_select = ""
+    iso_bind = ""
+    if "-" in acc:
+        iso_select = " ?isoform_exists"
+        iso_bind = (
+            f"\n  BIND(EXISTS {{ uniprotkb:{base} up:sequence isoform:{acc} }} "
+            "AS ?isoform_exists)"
+        )
+    return f"""{prefix_block()}
+SELECT ?obsolete ?replacedBy{iso_select} WHERE {{
+  uniprotkb:{base} a up:Protein .
+  OPTIONAL {{ uniprotkb:{base} up:obsolete ?obsolete }}
+  OPTIONAL {{ uniprotkb:{base} up:replacedBy ?replacedBy }}{iso_bind}
+}}"""
 
 
 def protein_summary(accession: str) -> str:

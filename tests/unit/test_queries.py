@@ -73,6 +73,21 @@ class TestProteinSummaryAnchor:
         assert "uniprotkb:P05067 a up:Protein ." in query
 
 
+class TestEntryStatus:
+    def test_entry_status_builds_obsolete_aware_gate(self) -> None:
+        query = q.entry_status("P05067")
+        assert "a up:Protein" in query
+        assert "up:obsolete ?obsolete" in query
+        assert "up:replacedBy ?replacedBy" in query
+        assert "isoform_exists" not in query  # no suffix -> no isoform probe
+
+    def test_entry_status_probes_isoform_when_suffix_present(self) -> None:
+        query = q.entry_status("P05067-2")
+        assert "isoform:P05067-2" in query
+        assert "isoform_exists" in query
+        assert "uniprotkb:P05067 a up:Protein" in query  # anchors on base
+
+
 class TestLimitInjection:
     def test_injects_limit_when_absent(self) -> None:
         out, injected = q.inject_limit("SELECT ?s WHERE { ?s ?p ?o }", default=50, maximum=10000)

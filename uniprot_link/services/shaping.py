@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import Any
 
 from uniprot_link.services.constants import (
@@ -89,6 +90,34 @@ def shape_find_proteins(result_json: dict[str, Any] | None) -> list[dict[str, An
             }
         )
     return out
+
+
+@dataclass(frozen=True)
+class EntryStatus:
+    """Three-state result of the entry_status probe (active / obsolete / absent)."""
+
+    exists: bool
+    obsolete: bool
+    replaced_by: list[str]
+    isoform_exists: bool | None
+
+
+def shape_entry_status(result_json: dict[str, Any] | None, requested: str) -> EntryStatus:
+    """Classify entry_status rows into active / obsolete / absent (+ isoform).
+
+    ``isoform_exists`` is ``None`` unless the request carried a ``-N`` suffix.
+    ``replaced_by`` collects every ``up:replacedBy`` accession (sorted, deduped) --
+    a demerged entry can have more than one (verified live on A0A075B5G1).
+    """
+    data = rows(result_json)
+    if not data:
+        return EntryStatus(exists=False, obsolete=False, replaced_by=[], isoform_exists=None)
+    obsolete = any(r.get("obsolete") is True for r in data)
+    replaced = sorted({accession_from_uri(r["replacedBy"]) for r in data if r.get("replacedBy")})
+    iso: bool | None = None
+    if "-" in requested:
+        iso = any(r.get("isoform_exists") is True for r in data)
+    return EntryStatus(exists=True, obsolete=obsolete, replaced_by=replaced, isoform_exists=iso)
 
 
 def shape_protein_summary(result_json: dict[str, Any] | None) -> dict[str, Any] | None:

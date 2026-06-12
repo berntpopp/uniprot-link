@@ -306,6 +306,35 @@ def test_shape_variants_adds_wildtype_and_notation():
     assert "substitution" not in out[408]
 
 
+def test_shape_entry_status_active_obsolete_absent_isoform() -> None:
+    from uniprot_link.services.shaping import shape_entry_status
+
+    active = make_select_json(["obsolete"], [{"obsolete": False}])
+    st = shape_entry_status(active, "P05067")
+    assert st.exists and not st.obsolete and st.replaced_by == []
+
+    obsolete = make_select_json(
+        ["obsolete", "replacedBy"],
+        [
+            {"obsolete": True, "replacedBy": "http://purl.uniprot.org/uniprot/A0A9P2UQ24"},
+            {"obsolete": True, "replacedBy": "http://purl.uniprot.org/uniprot/B0B0B0"},
+        ],
+    )
+    st = shape_entry_status(obsolete, "A0A009K1D9")
+    assert st.exists and st.obsolete
+    assert st.replaced_by == ["A0A9P2UQ24", "B0B0B0"]  # sorted, deduped
+
+    absent = make_select_json([], [])
+    st = shape_entry_status(absent, "Q9ZZZ9")
+    assert not st.exists and not st.obsolete
+
+    iso = make_select_json(
+        ["obsolete", "isoform_exists"], [{"obsolete": False, "isoform_exists": True}]
+    )
+    st = shape_entry_status(iso, "P05067-2")
+    assert st.isoform_exists is True
+
+
 def test_apply_response_mode_projects_protein_payload() -> None:
     from uniprot_link.services.shaping import apply_response_mode
 
