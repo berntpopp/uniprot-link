@@ -505,3 +505,47 @@ async def test_success_meta_drops_endpoint_keeps_release() -> None:
     assert "endpoint" not in out["_meta"]
     assert out["_meta"]["uniprot_release"]
     assert out["_meta"]["unsafe_for_clinical_use"] is True
+
+
+@pytest.mark.asyncio
+async def test_find_proteins_reviewed_first_then_spill(service_factory: Any) -> None:
+    from tests.conftest import make_select_json
+
+    count_body = make_select_json(["n"], [{"n": 1}])
+    reviewed = make_select_json(
+        ["protein", "mnemonic", "reviewed", "taxid", "organism"],
+        [
+            {
+                "protein": "http://purl.uniprot.org/uniprot/P38398",
+                "mnemonic": "BRCA1_HUMAN",
+                "reviewed": True,
+                "taxid": "http://purl.uniprot.org/taxonomy/9606",
+                "organism": "Homo sapiens",
+            }
+        ],
+    )
+    unreviewed = make_select_json(
+        ["protein", "mnemonic", "reviewed", "taxid", "organism"],
+        [
+            {
+                "protein": "http://purl.uniprot.org/uniprot/A0A1",
+                "mnemonic": "A0A1_HUMAN",
+                "reviewed": False,
+                "taxid": "http://purl.uniprot.org/taxonomy/9606",
+                "organism": "Homo sapiens",
+            }
+        ],
+    )
+    # Route by the distinctive substrings the two-phase queries contain.
+    svc = service_factory(
+        [
+            ("COUNT(DISTINCT ?protein)", count_body),
+            ("up:reviewed true", reviewed),
+            ("up:reviewed false", unreviewed),
+        ]
+    )
+    out = await svc.find_proteins(gene="BRCA1", limit=25, offset=0)
+    accs = [p["accession"] for p in out["proteins"]]
+    assert accs[0] == "P38398"  # reviewed first
+    assert "A0A1" in accs  # then the TrEMBL spill
+    assert out["proteins"][0]["reviewed"] is True

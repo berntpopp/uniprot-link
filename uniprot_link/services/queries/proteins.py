@@ -29,12 +29,23 @@ def find_proteins(
     name_contains: str | None = None,
     limit: int = 25,
     offset: int = 0,
+    count: bool = False,
 ) -> str:
     """Build a SELECT for proteins matching structured filters.
 
     At least one strong anchor (gene, mnemonic, ec_number, keyword) — or the
     pair (organism_taxon + name_contains) — is required to avoid scanning the
     48-billion-triple UniProtKB graph.
+
+    ``count=True`` returns ``SELECT (COUNT(DISTINCT ?protein) AS ?n)`` with no
+    ORDER BY/LIMIT — the cheap reviewed-segment size probe for the service's
+    two-phase pagination.
+
+    There is **no SPARQL ORDER BY**: a pre-LIMIT ``ORDER BY DESC(?reviewed)
+    ?mnemonic`` sorted the full match set and was the find_proteins latency
+    hotspot (8.7s -> ~3s on broad keywords, verified live). The service applies
+    reviewed-first ranking via two bound segment queries and sorts each returned
+    page by mnemonic in Python (``shaping``), per the AGENTS.md QLever discipline.
     """
     filters: list[str] = []
     strong = False
@@ -108,6 +119,20 @@ def find_proteins(
     # mnemonic/reviewed/organism (and any encodedBy) joins already imply
     # protein-hood. Leading with the selective filter keeps the join bound.
     body = "\n".join(filters)
+    if count:
+        # Include the name-filter join only when name_contains is the anchor
+        # (the OPTIONAL name otherwise does not affect the count).
+        name_join = name_pattern if name_contains else ""
+        return f"""{prefix_block()}
+SELECT (COUNT(DISTINCT ?protein) AS ?n)
+WHERE {{
+{body}
+  ?protein up:mnemonic ?mnemonic ;
+           up:reviewed ?reviewed ;
+           up:organism ?taxid .
+{name_join}
+}}"""
+    # No ORDER BY: the page is bound + LIMITed cheaply, then sorted in Python.
     return f"""{prefix_block()}
 SELECT ?protein ?mnemonic ?reviewed ?name ?taxid ?organism
 WHERE {{
@@ -118,7 +143,6 @@ WHERE {{
   ?taxid up:scientificName ?organism .
 {name_pattern}
 }}
-ORDER BY DESC(?reviewed) ?mnemonic
 LIMIT {limit} OFFSET {offset}"""
 
 

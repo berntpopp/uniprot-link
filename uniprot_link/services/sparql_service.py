@@ -20,6 +20,11 @@ if TYPE_CHECKING:
     from uniprot_link.config import SparqlEndpointConfig
 
 
+def _sort_by_mnemonic(proteins: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Sort a (small, already-LIMITed) protein page by mnemonic, Nones last."""
+    return sorted(proteins, key=lambda p: (p.get("mnemonic") is None, p.get("mnemonic") or ""))
+
+
 _SEQUENCE_PREVIEW = 30
 
 
@@ -157,12 +162,22 @@ class SparqlService:
     # --- Proteins -----------------------------------------------------------
 
     async def find_proteins(self, **kwargs: Any) -> dict[str, Any]:
-        """Search UniProtKB by structured filters."""
+        """Search UniProtKB by structured filters.
+
+        Reviewed-first by default: when ``reviewed`` is unset, the Swiss-Prot
+        segment is queried (and ranked) before TrEMBL. Each returned page is
+        sorted by mnemonic in Python — the builder emits no SPARQL ORDER BY (a
+        pre-LIMIT global sort was the latency hotspot).
+        """
         limit = Q.clamp_limit(kwargs.pop("limit", 25), default=25, maximum=200)
         offset = max(0, int(kwargs.pop("offset", 0)))
-        query = Q.find_proteins(limit=limit, offset=offset, **kwargs)
-        result, qmeta = await self._select_timed(query)
-        proteins = S.shape_find_proteins(result)
+        reviewed = kwargs.pop("reviewed", None)
+        if reviewed is not None:
+            query = Q.find_proteins(limit=limit, offset=offset, reviewed=reviewed, **kwargs)
+            result, qmeta = await self._select_timed(query)
+            proteins = _sort_by_mnemonic(S.shape_find_proteins(result))
+        else:
+            proteins, qmeta = await self._find_reviewed_first(kwargs, limit, offset)
         payload: dict[str, Any] = {"count": len(proteins), "proteins": proteins, **qmeta}
         if len(proteins) >= limit:
             payload["truncated"] = {
@@ -170,6 +185,40 @@ class SparqlService:
                 "recovery": f"call again with offset={offset + limit}.",
             }
         return payload
+
+    async def _find_reviewed_first(
+        self, anchors: dict[str, Any], limit: int, offset: int
+    ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+        """Two-phase paginate: Swiss-Prot (reviewed) segment, then TrEMBL fill.
+
+        A cheap bound COUNT of the reviewed segment locates the boundary so the
+        offset maps across the two segments. Most selective anchors are fully
+        served by the reviewed segment in a single fill query.
+        """
+        cr_json, m_count = await self._select_timed(Q.find_proteins(reviewed=True, count=True, **anchors))
+        cr_rows = S.rows(cr_json)
+        cr = int(cr_rows[0]["n"]) if cr_rows and "n" in cr_rows[0] else 0
+        elapsed = m_count["elapsed_ms"]
+        cached = m_count["cached"]
+        collected: list[dict[str, Any]] = []
+        if offset < cr:
+            r_limit = min(limit, cr - offset)
+            rj, m_r = await self._select_timed(
+                Q.find_proteins(reviewed=True, limit=r_limit, offset=offset, **anchors)
+            )
+            collected.extend(_sort_by_mnemonic(S.shape_find_proteins(rj)))
+            elapsed += m_r["elapsed_ms"]
+            cached = cached and m_r["cached"]
+        remaining = limit - len(collected)
+        if remaining > 0:
+            u_offset = max(0, offset - cr)
+            uj, m_u = await self._select_timed(
+                Q.find_proteins(reviewed=False, limit=remaining, offset=u_offset, **anchors)
+            )
+            collected.extend(_sort_by_mnemonic(S.shape_find_proteins(uj)))
+            elapsed += m_u["elapsed_ms"]
+            cached = cached and m_u["cached"]
+        return collected, {"elapsed_ms": round(elapsed, 1), "cached": cached}
 
     async def get_protein(self, accession: str, response_mode: str = "compact") -> dict[str, Any]:
         """Return the core summary for a single entry."""

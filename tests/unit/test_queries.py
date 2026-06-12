@@ -200,3 +200,21 @@ class TestExampleQueries:
         query = q.search_example_queries("protein domain architecture")
         # one CONTAINS clause per token, OR-combined
         assert query.count("CONTAINS(LCASE(?comment)") >= 3 or query.count("||") >= 2
+
+
+class TestFindProteinsTwoPhase:
+    def test_no_pre_limit_global_sort(self) -> None:
+        q_ = q.find_proteins(gene="BRCA1", reviewed=True)
+        assert "up:reviewed true" in q_
+        assert "DESC(?reviewed)" not in q_
+        assert "ORDER BY" not in q_  # sorted in Python; no pre-LIMIT global sort
+
+    def test_count_mode_builds_count_query(self) -> None:
+        q_ = q.find_proteins(gene="BRCA1", reviewed=True, count=True)
+        assert "COUNT(DISTINCT ?protein)" in q_
+        assert "LIMIT" not in q_
+
+    def test_count_mode_includes_name_filter_when_name_contains(self) -> None:
+        q_ = q.find_proteins(organism_taxon=9606, name_contains="kinase", count=True)
+        assert "COUNT(DISTINCT ?protein)" in q_
+        assert "CONTAINS(LCASE(?name)" in q_
