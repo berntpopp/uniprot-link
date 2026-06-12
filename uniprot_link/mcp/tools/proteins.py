@@ -322,9 +322,12 @@ def _register_annotations(mcp: FastMCP) -> None:
         description=(
             "Return database cross-references for an entry, grouped by database "
             "(PDB, AlphaFoldDB, Ensembl, RefSeq, Reactome, STRING, InterPro, ...). "
-            "Optionally restrict to specific databases. response_mode (default "
-            "compact) returns short ids; full restores raw IRIs. "
-            "Returns every cross-reference database; use map_identifiers for a focused primary-id mapping. "
+            "Optionally restrict to specific databases (case-sensitive); any "
+            "requested name that matched nothing is echoed under "
+            "unmatched_databases with a did-you-mean, so a typo never reads as "
+            "'no data'. response_mode (default compact) returns short ids; full "
+            "restores raw IRIs. Returns every cross-reference database; use "
+            "map_identifiers for a focused primary-id mapping. "
             "Signature: get_protein_cross_references(accession, databases=, response_mode=)."
         ),
     )

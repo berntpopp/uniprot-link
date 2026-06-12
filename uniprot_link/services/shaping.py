@@ -2,17 +2,35 @@
 
 from __future__ import annotations
 
+import difflib
 from dataclasses import dataclass
 from typing import Any
 
 from uniprot_link.services.constants import (
     AVERAGE_RESIDUE_MASS,
+    COMMON_XREF_DATABASES,
     ECO_TO_GO_CODE,
     FEATURE_CLASS_TO_KEY,
     GO_ASPECT_ROOTS,
     PREFIXES,
     WATER_MASS,
 )
+
+
+def suggest_xref_database(name: str) -> str | None:
+    """Best case-insensitive match for an unmatched xref database name, else ``None``.
+
+    Cross-reference DB names are case-sensitive (``PDB``, ``AlphaFoldDB``); a case
+    slip or near-miss (``alphafolddb``) is mapped to the canonical common-DB
+    spelling so an unmatched filter can carry a did-you-mean (F2).
+    """
+    if not name:
+        return None
+    lowered = {db.lower(): db for db in COMMON_XREF_DATABASES}
+    if name.lower() in lowered:
+        return lowered[name.lower()]
+    matches = difflib.get_close_matches(name.lower(), list(lowered), n=1, cutoff=0.7)
+    return lowered[matches[0]] if matches else None
 
 _UNIPROT_ACC_PREFIXES = (
     "http://purl.uniprot.org/uniprot/",

@@ -440,7 +440,33 @@ class SparqlService:
         grouped = S.shape_cross_references(data_json, short=response_mode != "full")
         projected = S.project_cross_references(grouped, mode=response_mode)
         acc = Q.validate_accession(accession).split("-")[0]
-        return {"accession": acc, **projected, **qmeta}
+        payload: dict[str, Any] = {"accession": acc, **projected, **qmeta}
+        # F2: an explicit `databases` filter must never silently read as "no data".
+        # Echo the request and flag any requested name that matched nothing, so a
+        # typo is distinguishable from a genuinely-absent (but valid) database.
+        if databases is not None:
+            payload["requested_databases"] = list(databases)
+            matched = set(projected.get("counts", {}))
+            unmatched = [d for d in databases if d not in matched]
+            if unmatched:
+                payload["unmatched_databases"] = unmatched
+                hint: dict[str, Any] = {
+                    "message": (
+                        "These requested database names matched no cross-reference "
+                        "for this entry. Names are case-sensitive (e.g. PDB, "
+                        "AlphaFoldDB) -- see common_xref_databases in "
+                        "get_server_capabilities. A valid name simply means the "
+                        "entry has no such cross-reference."
+                    ),
+                    "unmatched_databases": unmatched,
+                }
+                did_you_mean = {
+                    d: match for d in unmatched if (match := S.suggest_xref_database(d))
+                }
+                if did_you_mean:
+                    hint["did_you_mean"] = did_you_mean
+                payload["database_hint"] = hint
+        return payload
 
     async def get_go_terms(
         self, accession: str, aspect: str | None = None, limit: int = 0
@@ -468,11 +494,18 @@ class SparqlService:
         identifier core (MAP_IDENTIFIER_DATABASES) so the payload is small and
         mapping-oriented; pass ``databases`` to override.
         """
+        user_supplied = databases is not None
         effective = list(databases or MAP_IDENTIFIER_DATABASES)
         result = await self.get_cross_references(accession, effective, response_mode)
         result["requested_databases"] = effective
         # `counts` is present in every mode (by_database is omitted in minimal).
         result["mapped_databases"] = list(result.get("counts", {}).keys())
+        if not user_supplied:
+            # Default primary-id set: a protein legitimately lacking some default
+            # database is not an error, so drop the unmatched-name noise (the
+            # typo-catch stays active when the caller passes `databases`).
+            result.pop("unmatched_databases", None)
+            result.pop("database_hint", None)
         return result
 
     # --- Taxonomy -----------------------------------------------------------

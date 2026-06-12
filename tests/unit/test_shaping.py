@@ -629,3 +629,9 @@ def test_canonical_mass_is_not_marked_computed() -> None:
     canonical = shape_sequences(body)[0]
     assert canonical["mass_da"] == 86943
     assert "mass_computed" not in canonical
+
+
+def test_suggest_xref_database_case_insensitive() -> None:
+    assert S.suggest_xref_database("alphafolddb") == "AlphaFoldDB"
+    assert S.suggest_xref_database("pdb") == "PDB"
+    assert S.suggest_xref_database("zzzzzz") is None

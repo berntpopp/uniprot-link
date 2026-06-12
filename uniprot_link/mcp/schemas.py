@@ -92,6 +92,9 @@ CROSS_REFERENCES_SCHEMA = _envelope(
     counts=_OBJ,
     by_database=_OBJ,
     truncated_databases=_OBJ,
+    requested_databases=_ARR,
+    unmatched_databases=_ARR,
+    database_hint=_OBJ,
 )
 
 GO_TERMS_SCHEMA = _envelope(
@@ -105,6 +108,8 @@ MAP_IDENTIFIERS_SCHEMA = _envelope(
     by_database=_OBJ,
     requested_databases=_ARR,
     mapped_databases=_ARR,
+    unmatched_databases=_ARR,
+    database_hint=_OBJ,
     truncated_databases=_OBJ,
 )
 

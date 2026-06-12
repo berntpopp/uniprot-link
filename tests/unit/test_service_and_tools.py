@@ -321,6 +321,76 @@ async def test_cross_references_short_by_default_full_on_request(service_factory
 
 
 @pytest.mark.asyncio
+async def test_cross_references_unknown_db_reports_unmatched(service_factory: Any) -> None:
+    """F2: a typo'd database is disclosed via unmatched_databases, not silent-empty."""
+    routes = [("up:obsolete ?obsolete", _ACTIVE_STATUS), ("rdfs:seeAlso", _EMPTY)]
+    svc = service_factory(routes)
+    res = await svc.get_cross_references("P05067", databases=["NOTADB"])
+    assert res["requested_databases"] == ["NOTADB"]
+    assert res["unmatched_databases"] == ["NOTADB"]
+    assert res["database_count"] == 0
+    assert "database_hint" in res  # explains: typo vs genuinely-absent
+
+
+@pytest.mark.asyncio
+async def test_cross_references_partial_match_lists_only_unmatched(service_factory: Any) -> None:
+    body = make_select_json(
+        ["db", "database", "xref"],
+        [{"db": "http://purl.uniprot.org/database/PDB", "database": "PDB", "xref": "http://x/1AAP"}],
+    )
+    routes = [("up:obsolete ?obsolete", _ACTIVE_STATUS), ("rdfs:seeAlso", body)]
+    svc = service_factory(routes)
+    res = await svc.get_cross_references("P05067", databases=["PDB", "NOTADB"])
+    assert res["requested_databases"] == ["PDB", "NOTADB"]
+    assert res["unmatched_databases"] == ["NOTADB"]
+    assert "PDB" in res["counts"]
+
+
+@pytest.mark.asyncio
+async def test_cross_references_no_filter_omits_unmatched(service_factory: Any) -> None:
+    """No databases filter -> 'all' -> nothing is 'unmatched' (no noise)."""
+    body = make_select_json(
+        ["db", "database", "xref"],
+        [{"db": "http://purl.uniprot.org/database/PDB", "database": "PDB", "xref": "http://x/1AAP"}],
+    )
+    routes = [("up:obsolete ?obsolete", _ACTIVE_STATUS), ("rdfs:seeAlso", body)]
+    svc = service_factory(routes)
+    res = await svc.get_cross_references("P05067")
+    assert "unmatched_databases" not in res
+    assert "requested_databases" not in res
+
+
+@pytest.mark.asyncio
+async def test_cross_references_case_typo_gets_did_you_mean(service_factory: Any) -> None:
+    routes = [("up:obsolete ?obsolete", _ACTIVE_STATUS), ("rdfs:seeAlso", _EMPTY)]
+    svc = service_factory(routes)
+    res = await svc.get_cross_references("P05067", databases=["alphafolddb"])
+    assert res["unmatched_databases"] == ["alphafolddb"]
+    assert res["database_hint"]["did_you_mean"]["alphafolddb"] == "AlphaFoldDB"
+
+
+@pytest.mark.asyncio
+async def test_map_identifiers_default_set_has_no_unmatched_noise(service_factory: Any) -> None:
+    """Default primary-id set: a protein legitimately lacking some is NOT an error."""
+    body = make_select_json(
+        ["db", "database", "xref"],
+        [
+            {
+                "db": "http://purl.uniprot.org/database/Ensembl",
+                "database": "Ensembl",
+                "xref": "http://purl.uniprot.org/ensembl/ENSP00000269305",
+            }
+        ],
+    )
+    svc = service_factory([("rdfs:seeAlso", body), ("up:obsolete ?obsolete", _ACTIVE_STATUS)])
+    res = await svc.map_identifiers("P38398")  # default set
+    assert "unmatched_databases" not in res
+    # But an EXPLICIT typo is still caught.
+    typo = await svc.map_identifiers("P38398", databases=["NOTADB"])
+    assert typo["unmatched_databases"] == ["NOTADB"]
+
+
+@pytest.mark.asyncio
 async def test_features_limit_truncates(service_factory: Any) -> None:
     feats = make_select_json(
         ["type", "begin", "end", "comment"],
