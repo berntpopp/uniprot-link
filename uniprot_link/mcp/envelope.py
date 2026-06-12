@@ -25,19 +25,14 @@ from uniprot_link.exceptions import (
     ServiceUnavailableError,
 )
 from uniprot_link.mcp.next_commands import default_error_next_commands
-from uniprot_link.services.constants import UNIPROT_RELEASE
 
 logger = logging.getLogger(__name__)
 
-# Per-call provenance kept lean: the static `endpoint` lives in capabilities,
-# not on every response. `uniprot_release` + the safety flag + a short citation
-# DOI stay (cheap, high grounding value).
-_BASE_META: dict[str, Any] = {
-    "unsafe_for_clinical_use": True,
-    "uniprot_release": UNIPROT_RELEASE,
-    "citation": "doi:10.1093/nar/gkae1010",
-}
-
+# Per-call _meta is kept lean: static provenance (research-use restriction,
+# citation DOI, UniProt release) lives ONLY in get_server_capabilities. Repeating
+# it on every response is non-actionable token overhead (MCP/Anthropic context
+# economy). Per-call _meta carries only dynamic fields: tool, request_id,
+# next_commands.
 _RETRYABLE = {"rate_limited", "upstream_unavailable", "query_timeout"}
 
 
@@ -58,10 +53,6 @@ class McpToolError(Exception):
         super().__init__(message)
         self.error_code = error_code
         self.message = message
-
-
-def _provenance_meta() -> dict[str, Any]:
-    return dict(_BASE_META)
 
 
 def _request_id() -> str:
@@ -111,7 +102,7 @@ def _error_envelope(exc: BaseException, context: McpErrorContext) -> dict[str, A
         "message": message,
         "retryable": error_code in _RETRYABLE,
         "recovery_action": _recovery_action(error_code),
-        "_meta": {"tool": context.tool_name, **_provenance_meta(), "request_id": _request_id()},
+        "_meta": {"tool": context.tool_name, "request_id": _request_id()},
     }
     # Structured recovery data (kept OUT of the length-capped message).
     if isinstance(exc, InvalidInputError):
@@ -145,7 +136,6 @@ async def run_mcp_tool(
             result.setdefault("success", True)
             existing_meta: dict[str, Any] = result.get("_meta") or {}
             result["_meta"] = {
-                **_provenance_meta(),
                 **existing_meta,
                 "tool": tool_name,
                 "request_id": _request_id(),

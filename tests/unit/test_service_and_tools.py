@@ -273,19 +273,31 @@ async def test_envelope_success_injects_meta() -> None:
     out = await run_mcp_tool("demo", call, context=McpErrorContext("demo"))
     assert out["success"] is True
     assert out["_meta"]["tool"] == "demo"
-    assert out["_meta"]["uniprot_release"]
+    assert "request_id" in out["_meta"]
 
 
 @pytest.mark.asyncio
-async def test_provenance_is_compact() -> None:
-    from uniprot_link.mcp.envelope import _provenance_meta
+async def test_per_call_meta_is_lean() -> None:
+    """Per-call _meta carries only dynamic fields; static provenance is demoted."""
+    from uniprot_link.mcp.capabilities import build_capabilities
 
-    meta = _provenance_meta()
-    assert meta["citation"] == "doi:10.1093/nar/gkae1010"
-    assert "recommended_citation" not in meta  # full text only in capabilities/resource
-    assert meta["unsafe_for_clinical_use"] is True
-    assert meta["uniprot_release"]
-    assert "endpoint" not in meta  # static endpoint lives in capabilities (token diet)
+    async def call() -> dict[str, Any]:
+        return {"value": 1}
+
+    out = await run_mcp_tool("demo", call, context=McpErrorContext("demo"))
+    meta = out["_meta"]
+    assert set(meta) <= {"tool", "request_id", "next_commands"}
+    assert "unsafe_for_clinical_use" not in meta
+    assert "uniprot_release" not in meta
+    assert "citation" not in meta
+    assert "endpoint" not in meta
+    # Provenance stays authoritative in the discovery surface.
+    cap = build_capabilities()
+    assert cap["research_use_only"] is True
+    assert cap["uniprot_release"]
+    assert "Nucleic Acids Res" in cap["recommended_citation"]
+    assert cap["per_call_meta"] == ["tool", "request_id", "next_commands"]
+    assert "provenance_policy" in cap
 
 
 @pytest.mark.asyncio
@@ -497,14 +509,16 @@ async def test_get_sequence_compact_is_windowed(service_factory: Any) -> None:
 
 
 @pytest.mark.asyncio
-async def test_success_meta_drops_endpoint_keeps_release() -> None:
+async def test_success_meta_is_lean() -> None:
     async def ok() -> dict[str, Any]:
         return {"value": 1}
 
     out = await run_mcp_tool("get_protein", ok, context=McpErrorContext("get_protein"))
     assert "endpoint" not in out["_meta"]
-    assert out["_meta"]["uniprot_release"]
-    assert out["_meta"]["unsafe_for_clinical_use"] is True
+    assert "uniprot_release" not in out["_meta"]
+    assert "unsafe_for_clinical_use" not in out["_meta"]
+    assert out["_meta"]["tool"] == "get_protein"
+    assert "request_id" in out["_meta"]
 
 
 @pytest.mark.asyncio

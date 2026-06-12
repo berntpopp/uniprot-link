@@ -68,6 +68,12 @@ def build_capabilities() -> dict[str, Any]:
         "common_xref_databases": COMMON_XREF_DATABASES,
         "response_modes": list(RESPONSE_MODES),
         "default_response_mode": "compact",
+        "provenance_policy": (
+            "Static provenance (research-use restriction, citation, UniProt "
+            "release) is declared here and applies to ALL tool outputs; it is "
+            "not repeated per-call to conserve context tokens."
+        ),
+        "per_call_meta": ["tool", "request_id", "next_commands"],
         "read_only": True,
         "not_found_contract": (
             "Nonexistent accessions/taxa return error_code 'not_found' on every "
