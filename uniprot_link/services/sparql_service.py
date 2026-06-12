@@ -298,6 +298,24 @@ class SparqlService:
                 "message": "No features matched the requested types for this entry.",
                 "accepted_feature_types": sorted(FEATURE_TYPES.keys()),
             }
+        # The domain/region trap: UniProt types catalytic/binding/interaction
+        # domain-scale architecture as `region`, not `domain`. A ['domain'] query
+        # silently misses it, so nudge toward `region` whenever domain was asked
+        # for without it (independent of count -- the partial-hit case is the trap).
+        requested = {ft.strip().lower() for ft in (feature_types or [])}
+        if "domain" in requested and "region" not in requested:
+            payload["domain_region_hint"] = {
+                "message": (
+                    "UniProt types some domain-scale architecture as 'region' "
+                    "(catalytic, binding, or interaction regions), not 'domain'. "
+                    "Re-request with feature_types including 'region' to capture "
+                    "the full domain architecture."
+                ),
+                "suggestion": {
+                    "tool": "get_protein_features",
+                    "arguments": {"accession": acc, "feature_types": ["domain", "region"]},
+                },
+            }
         return payload
 
     async def get_variants(

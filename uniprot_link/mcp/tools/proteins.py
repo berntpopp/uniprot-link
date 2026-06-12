@@ -209,11 +209,14 @@ def _register_sequence_and_features(mcp: FastMCP) -> None:
     ) -> dict[str, Any]:
         async def call() -> dict[str, Any]:
             payload = await get_sparql_service().get_features(accession, feature_types)
-            payload["_meta"] = {
-                "next_commands": after_entry_subresource(
-                    payload["accession"], "get_protein_features", count=payload.get("count")
-                )
-            }
+            nxt = after_entry_subresource(
+                payload["accession"], "get_protein_features", count=payload.get("count")
+            )
+            hint = payload.get("domain_region_hint")
+            if hint and hint.get("suggestion"):
+                # Surface the region re-query as the first ready-to-call step.
+                nxt = [hint["suggestion"], *nxt][:2]
+            payload["_meta"] = {"next_commands": nxt}
             return payload
 
         return await run_mcp_tool(

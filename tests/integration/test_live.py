@@ -260,3 +260,14 @@ async def test_get_taxon_common_name_is_instant_live(service: SparqlService) -> 
     assert out["match_source"] == "curated_common_index"
     assert out["matches"][0]["taxon_id"] == "9606"
     assert out["elapsed_ms"] == 0.0
+
+
+async def test_features_domain_region_hint_live(service: SparqlService) -> None:
+    """v0.5.0 C4: ['domain'] on PNKP nudges toward region-typed architecture."""
+    out = await service.get_features("Q96T60", ["domain"])
+    hint = out["domain_region_hint"]
+    assert hint["suggestion"]["arguments"]["feature_types"] == ["domain", "region"]
+    # And the region-inclusive query surfaces the catalytic/kinase regions.
+    both = await service.get_features("Q96T60", ["domain", "region"])
+    assert both["count"] > out["count"]
+    assert "domain_region_hint" not in both

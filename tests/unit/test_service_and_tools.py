@@ -522,6 +522,33 @@ async def test_success_meta_is_lean() -> None:
 
 
 @pytest.mark.asyncio
+async def test_features_domain_without_region_hints(service_factory: Any) -> None:
+    """Requesting ['domain'] (not region) attaches a domain->region nudge."""
+    feats = make_select_json(
+        ["type", "begin", "end", "comment"],
+        [
+            {
+                "type": "http://purl.uniprot.org/core/Domain_Extent_Annotation",
+                "begin": 6,
+                "end": 110,
+                "comment": "FHA",
+            }
+        ],
+    )
+    svc = service_factory([("ASK", {"head": {}, "boolean": True}), ("up:range", feats)])
+    out = await svc.get_features("Q96T60", ["domain"])
+    hint = out["domain_region_hint"]
+    assert hint["suggestion"]["arguments"]["feature_types"] == ["domain", "region"]
+    assert hint["suggestion"]["arguments"]["accession"] == "Q96T60"
+    # When region is already requested, no nudge.
+    out2 = await svc.get_features("Q96T60", ["domain", "region"])
+    assert "domain_region_hint" not in out2
+    # Unfiltered query: no nudge either.
+    out3 = await svc.get_features("Q96T60")
+    assert "domain_region_hint" not in out3
+
+
+@pytest.mark.asyncio
 async def test_get_taxon_common_name_is_curated(service_factory: Any) -> None:
     """A model-organism name resolves with no SPARQL call (curated fast path)."""
     svc = service_factory([])  # any endpoint call would return empty -> not_found
