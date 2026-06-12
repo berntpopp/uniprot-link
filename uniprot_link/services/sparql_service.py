@@ -549,9 +549,18 @@ class SparqlService:
                 "cached": True,
             }
         rows_json, qmeta = await self._select_timed(Q.resolve_taxon_by_name(taxon))
-        matches = S.shape_taxon_resolutions(rows_json)
+        matches = S.rank_taxon_matches(S.shape_taxon_resolutions(rows_json), taxon)
         if not matches:
             raise NotFoundError(f"No taxon matched '{taxon}'.")
+        # Tag the best hit when it is an exact name match so a consumer (and the
+        # next_command that chains off matches[0]) lands on the right organism.
+        q = taxon.strip().lower()
+        top = matches[0]
+        if q in {
+            (top.get("scientific_name") or "").lower(),
+            (top.get("common_name") or "").lower(),
+        }:
+            top["match_quality"] = "exact"
         return {
             "query": taxon,
             "match_count": len(matches),

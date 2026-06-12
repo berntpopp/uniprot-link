@@ -855,6 +855,31 @@ async def test_get_taxon_common_name_is_curated(service_factory: Any) -> None:
 
 
 @pytest.mark.asyncio
+async def test_get_taxon_name_scan_ranks_exact_first(service_factory: Any) -> None:
+    """F3: an exact scientific-name hit is ranked first so chaining is correct."""
+    body = make_select_json(
+        ["taxon", "scientificName", "rank"],
+        [
+            {
+                "taxon": "http://purl.uniprot.org/taxonomy/2506766",
+                "scientificName": "Takifugu chinensis x Takifugu rubripes",
+                "rank": "",
+            },
+            {
+                "taxon": "http://purl.uniprot.org/taxonomy/31033",
+                "scientificName": "Takifugu rubripes",
+                "rank": "http://purl.uniprot.org/core/Species",
+            },
+        ],
+    )
+    svc = service_factory([("up:scientificName", body)])
+    out = await svc.get_taxon("Takifugu rubripes")
+    assert out["match_source"] == "endpoint_scan"
+    assert out["matches"][0]["taxon_id"] == "31033"  # exact, not the hybrid
+    assert out["matches"][0]["match_quality"] == "exact"
+
+
+@pytest.mark.asyncio
 async def test_get_taxon_uncommon_name_falls_through(service_factory: Any) -> None:
     """An uncommon name hits the endpoint scan and is tagged accordingly."""
     body = make_select_json(

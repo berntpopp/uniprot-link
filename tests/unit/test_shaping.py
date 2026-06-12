@@ -635,3 +635,22 @@ def test_suggest_xref_database_case_insensitive() -> None:
     assert S.suggest_xref_database("alphafolddb") == "AlphaFoldDB"
     assert S.suggest_xref_database("pdb") == "PDB"
     assert S.suggest_xref_database("zzzzzz") is None
+
+
+def test_rank_taxon_matches_puts_exact_scientific_name_first() -> None:
+    matches = [
+        {"taxon_id": "2506766", "scientific_name": "Takifugu chinensis x Takifugu rubripes"},
+        {"taxon_id": "9999", "scientific_name": "Takifugu rubripes virus"},
+        {"taxon_id": "31033", "scientific_name": "Takifugu rubripes"},
+    ]
+    ranked = S.rank_taxon_matches(matches, "Takifugu rubripes")
+    assert ranked[0]["taxon_id"] == "31033"  # exact, not the hybrid/virus
+
+
+def test_rank_taxon_matches_exact_common_name_beats_substring() -> None:
+    matches = [
+        {"taxon_id": "1", "scientific_name": "Canis lupus familiaris something"},
+        {"taxon_id": "9615", "scientific_name": "Canis lupus familiaris", "common_name": "Dog"},
+    ]
+    ranked = S.rank_taxon_matches(matches, "dog")
+    assert ranked[0]["taxon_id"] == "9615"

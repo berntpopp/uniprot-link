@@ -30,9 +30,12 @@ def register_taxonomy_tools(mcp: FastMCP) -> None:
             "id (e.g. 9606) for full detail (scientific/common name, rank, the DIRECT "
             "parent, and an optional ordered lineage from species up to root), or a "
             "scientific/common name to get candidate taxon ids. Use the resolved "
-            "taxon id with find_proteins(organism_taxon=...). Numeric-id and "
-            "common-organism-name lookups are fast (~0 ms for common names); an "
-            "uncommon name triggers a multi-second taxonomy scan. "
+            "taxon id with find_proteins(organism_taxon=...). Name matches are "
+            "ranked best-first (an exact scientific/common-name hit leads, tagged "
+            "match_quality:'exact'), so matches[0] and next_commands point at the "
+            "right organism. Numeric-id and common-organism-name lookups are fast "
+            "(~0 ms for common names); an uncommon name triggers a multi-second "
+            "taxonomy scan. "
             "Signature: get_taxon(taxon, include_lineage=)."
         ),
     )

@@ -524,6 +524,36 @@ def shape_taxon_resolutions(result_json: dict[str, Any] | None) -> list[dict[str
     return out
 
 
+def rank_taxon_matches(
+    matches: list[dict[str, Any]], query: str
+) -> list[dict[str, Any]]:
+    """Rank name-scan matches so the best (exact) hit is first (F3).
+
+    Tiers (best first): exact scientific_name, exact common_name,
+    scientific_name prefix, then substring. Within a tier, non-hybrids (no
+    " x ") rank before hybrids, then shorter names, then alphabetical -- so a
+    plain binomial ("Takifugu rubripes") wins over a hybrid or a virus that also
+    contains the query. The endpoint's alphabetical ORDER BY otherwise buries the
+    exact hit and the next_command chains to the wrong organism.
+    """
+    q = (query or "").strip().lower()
+
+    def sort_key(match: dict[str, Any]) -> tuple[int, bool, int, str]:
+        sci = (match.get("scientific_name") or "").lower()
+        common = (match.get("common_name") or "").lower()
+        if sci == q:
+            tier = 0
+        elif common == q:
+            tier = 1
+        elif sci.startswith(q):
+            tier = 2
+        else:
+            tier = 3
+        return (tier, " x " in sci, len(sci), sci)
+
+    return sorted(matches, key=sort_key)
+
+
 def shape_example_list(result_json: dict[str, Any] | None) -> list[dict[str, Any]]:
     """Shape example-catalog search rows: dedupe by id, rank native above federated.
 
