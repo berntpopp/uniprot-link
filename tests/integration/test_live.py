@@ -55,7 +55,10 @@ async def test_find_proteins_brca1(service: SparqlService) -> None:
 async def test_sequence_canonical(service: SparqlService) -> None:
     out = await service.get_sequence("P05067")
     assert out["canonical"]["length"] == 770
-    assert out["canonical"]["sequence"].startswith("MLPGLALL")
+    # compact (default) returns a preview; the full string is in standard/full.
+    assert out["canonical"]["sequence_preview"].startswith("MLPGLALL")
+    full = await service.get_sequence("P05067", response_mode="standard")
+    assert full["canonical"]["sequence"].startswith("MLPGLALL")
 
 
 async def test_diseases_brca1(service: SparqlService) -> None:
@@ -158,3 +161,83 @@ async def test_map_identifiers_is_focused(service: SparqlService) -> None:
     full = await service.get_cross_references("P38398")
     assert mapped["database_count"] <= full["database_count"]
     assert mapped["requested_databases"]
+
+
+# --- v0.4.0 uplift live assertions -------------------------------------------
+
+
+async def test_features_natural_variant_round_trips_live(service: SparqlService) -> None:
+    # Bug 1: a type the dump emits must re-filter successfully.
+    res = await service.get_features("Q96T60", ["natural_variant"])
+    assert res["count"] >= 1
+    assert all(f["type"] == "natural_variant" for f in res["features"])
+
+
+async def test_features_unknown_type_returns_allowed_live(service: SparqlService) -> None:
+    # Bug 2: the full vocabulary is in structured `allowed`, never truncated.
+    from uniprot_link.exceptions import InvalidInputError
+
+    with pytest.raises(InvalidInputError) as exc:
+        await service.get_features("Q96T60", ["definitely_not_a_type"])
+    assert exc.value.allowed and "domain" in exc.value.allowed
+
+
+async def test_sequence_compact_is_windowed_live(service: SparqlService) -> None:
+    # Bug 6: compact returns a preview, standard the full string.
+    compact = await service.get_sequence("P05067", response_mode="compact")
+    assert "sequence" not in compact["canonical"]
+    assert compact["canonical"]["sequence_truncated"] is True
+    standard = await service.get_sequence("P05067", response_mode="standard")
+    assert len(standard["canonical"]["sequence"]) == standard["canonical"]["length"]
+
+
+async def test_taxon_by_name_has_timing_and_rank_live(service: SparqlService) -> None:
+    # Bug 5: by-name parity (timing + rank present).
+    res = await service.get_taxon("Homo sapiens")
+    assert "elapsed_ms" in res and "cached" in res
+    top = next((m for m in res["matches"] if m["taxon_id"] == "9606"), None)
+    assert top is not None and top.get("rank")
+
+
+async def test_diseases_have_distinct_definitions_live(service: SparqlService) -> None:
+    # Bug 9: definition is the clinical text, distinct per disease.
+    res = await service.get_diseases("Q96T60")
+    defs = {d["disease"]: d.get("definition") for d in res["diseases"]}
+    assert all(defs.values())  # every disease has a definition
+    assert len(set(defs.values())) == len(defs)  # and they differ
+
+
+async def test_go_terms_have_evidence_codes_live(service: SparqlService) -> None:
+    # Bug 10: ECO/GO evidence present on at least one term.
+    res = await service.get_go_terms("Q96T60")
+    terms = [t for aspect in res["by_aspect"].values() for t in aspect]
+    assert any(t.get("evidence_codes") for t in terms)
+
+
+async def test_find_proteins_default_page_is_responsive_live(service: SparqlService) -> None:
+    # Latency: the reviewed-first default page should be well under the old
+    # 6-9s hotspot. Generous bound to tolerate endpoint variance.
+    res = await service.find_proteins(keyword="KW-0007", limit=10)
+    assert res["count"] >= 1
+    assert res["elapsed_ms"] < 6000
+
+
+async def test_find_proteins_reviewed_first_live(service: SparqlService) -> None:
+    res = await service.find_proteins(gene="BRCA1", organism_taxon=9606, limit=5)
+    assert any(p["accession"] == "P38398" for p in res["proteins"])
+    assert res["proteins"][0]["reviewed"] is True
+
+
+async def test_malformed_query_gives_actionable_error_live(service: SparqlService) -> None:
+    # Bug 11: a malformed query yields query_syntax_error (detail or hint).
+    from uniprot_link.exceptions import QuerySyntaxError
+
+    with pytest.raises(QuerySyntaxError):
+        await service.run_query("SELECT ?x WHERE { FILTER(")
+
+
+async def test_example_search_has_no_duplicate_ids_live(service: SparqlService) -> None:
+    # Bug 12: dedupe by example id.
+    res = await service.search_examples("domain", limit=25)
+    ids = [e["example_id"] for e in res["examples"]]
+    assert len(ids) == len(set(ids))
