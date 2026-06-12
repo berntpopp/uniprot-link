@@ -337,7 +337,10 @@ def shape_cross_references(
         db = row.get("database") or local_name(row.get("db", ""))
         xref = row.get("xref", "")
         grouped.setdefault(db, []).append(local_name(xref) if short else xref)
-    return grouped
+    # Sort ids and database keys: QLever row order is not stable, so an unsorted
+    # payload hurt diffing/caching and differed between cross_references and
+    # map_identifiers for the same accession (F-SORT).
+    return {db: sorted(ids) for db, ids in sorted(grouped.items())}
 
 
 def shape_go_terms(result_json: dict[str, Any] | None) -> dict[str, list[dict[str, Any]]]:

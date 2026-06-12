@@ -157,6 +157,20 @@ def test_shape_cross_references_groups() -> None:
     assert len(out["PDB"]) == 2
 
 
+def test_shape_cross_references_sorts_ids_and_db_keys() -> None:
+    body = make_select_json(
+        ["db", "database", "xref"],
+        [
+            {"db": "http://purl.uniprot.org/database/PDB", "database": "PDB", "xref": "http://x/7JXN"},
+            {"db": "http://purl.uniprot.org/database/PDB", "database": "PDB", "xref": "http://x/1AAP"},
+            {"db": "http://purl.uniprot.org/database/RefSeq", "database": "RefSeq", "xref": "http://x/NP_2"},
+        ],
+    )
+    out = S.shape_cross_references(body)
+    assert out["PDB"] == ["1AAP", "7JXN"]  # ids sorted
+    assert list(out.keys()) == ["PDB", "RefSeq"]  # db keys sorted
+
+
 def test_shape_cross_references_short_vs_full_ids() -> None:
     body = make_select_json(
         ["db", "database", "xref"],
