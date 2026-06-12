@@ -1103,7 +1103,7 @@ async def test_success_meta_is_lean() -> None:
 
 def test_sort_by_mnemonic_is_total_with_accession_tiebreak() -> None:
     """Entries sharing (or lacking) a mnemonic order by accession, stably."""
-    from uniprot_link.services.sparql_service import _sort_by_mnemonic
+    from uniprot_link.services.service_base import _sort_by_mnemonic
 
     page = [
         {"accession": "P00002", "mnemonic": "DUP_HUMAN"},
@@ -1334,6 +1334,71 @@ async def test_find_proteins_batch_facade_fans_out_next_commands(service_factory
         assert {"Q96T60", "P41227"} <= accs
     finally:
         service_adapters.set_sparql_service(None)
+
+
+@pytest.mark.asyncio
+async def test_find_proteins_mnemonic_uses_single_query(service_factory: Any) -> None:
+    """F3: an exact mnemonic anchor issues ONE bound query (no two-phase reviewed-first)."""
+    data = make_select_json(
+        ["protein", "mnemonic", "reviewed", "taxid", "organism"],
+        [
+            {
+                "protein": "http://purl.uniprot.org/uniprot/P41227",
+                "mnemonic": "NAA10_HUMAN",
+                "reviewed": True,
+                "taxid": "http://purl.uniprot.org/taxonomy/9606",
+                "organism": "Homo sapiens",
+            }
+        ],
+    )
+    svc = service_factory([('up:mnemonic "NAA10_HUMAN"', data)])
+    res = await svc.find_proteins(mnemonic="NAA10_HUMAN")
+    assert res["count"] == 1
+    assert res["proteins"][0]["accession"] == "P41227"
+    # exactly one upstream call (no COUNT, no reviewed/unreviewed split)
+    assert len(svc.client.calls) == 1
+
+
+@pytest.mark.asyncio
+async def test_find_proteins_surfaces_reviewed_count(service_factory: Any) -> None:
+    """F9: a gene anchor (reviewed unset) carries reviewed_count + a TrEMBL hint."""
+    count_body = make_select_json(["n"], [{"n": 1}])
+    reviewed = make_select_json(
+        ["protein", "mnemonic", "reviewed", "taxid", "organism"],
+        [
+            {
+                "protein": "http://purl.uniprot.org/uniprot/P38398",
+                "mnemonic": "BRCA1_HUMAN",
+                "reviewed": True,
+                "taxid": "http://purl.uniprot.org/taxonomy/9606",
+                "organism": "Homo sapiens",
+            }
+        ],
+    )
+    unreviewed = make_select_json(
+        ["protein", "mnemonic", "reviewed", "taxid", "organism"],
+        [
+            {
+                "protein": "http://purl.uniprot.org/uniprot/A0A1",
+                "mnemonic": "A0A1_HUMAN",
+                "reviewed": False,
+                "taxid": "http://purl.uniprot.org/taxonomy/9606",
+                "organism": "Homo sapiens",
+            }
+        ],
+    )
+    svc = service_factory(
+        [
+            ("COUNT(DISTINCT ?protein)", count_body),
+            ("up:reviewed true", reviewed),
+            ("up:reviewed false", unreviewed),
+        ]
+    )
+    res = await svc.find_proteins(gene="BRCA1", limit=25, offset=0)
+    assert res["reviewed_count"] == 1
+    assert res["proteins"][0]["accession"] == "P38398"
+    assert "A0A1" in [p["accession"] for p in res["proteins"]]
+    assert "reviewed_hint" in res  # page has unreviewed entries
 
 
 @pytest.mark.asyncio

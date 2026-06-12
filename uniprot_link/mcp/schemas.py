@@ -54,7 +54,9 @@ CAPABILITIES_SCHEMA = _envelope(
     feature_types=_ARR,
 )
 
-FIND_PROTEINS_SCHEMA = _envelope(count=_INT, proteins=_ARR, truncated=_OBJ)
+FIND_PROTEINS_SCHEMA = _envelope(
+    count=_INT, proteins=_ARR, truncated=_OBJ, reviewed_count=_INT, reviewed_hint=_STR
+)
 
 FIND_PROTEINS_BATCH_SCHEMA = _envelope(
     gene_count=_INT,
