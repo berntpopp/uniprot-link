@@ -4,6 +4,64 @@ All notable changes to uniprot-link are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/) and the project uses semantic
 versioning.
 
+## [0.8.0] - 2026-06-12
+
+Closes every finding (F1–F8 + Part 1) of the v0.7.0 tester assessment
+([`mcp-assessment-v0.7.0-tester.md`](docs/mcp-assessment-v0.7.0-tester.md),
+overall **8/10**). Research-backed against the MCP spec, Anthropic's tool-writing
+and code-execution guidance, FastMCP, and Datadog's production lessons. Targets a
+re-rated **>9.5/10**. See
+[`docs/mcp-assessment-v0.8.0-closure.md`](docs/mcp-assessment-v0.8.0-closure.md).
+
+### Added
+
+- **`find_proteins_batch`** (15th tool): resolve several gene symbols to entries
+  in one call, running the lookups **concurrently** so N genes cost ~one cold
+  round-trip instead of N sequential ones. Returns `by_gene`, a gene-tagged flat
+  `proteins` list, `resolved_genes`, and `unresolved_genes` (no silent empty).
+  The canonical "domains for PNKP and NAA10" task drops from ~11 s to ~5 s. (Part 1)
+- **Enum value discoverability.** `get_server_capabilities` now carries
+  `argument_value_sets` ({tool: {arg: [valid values]}}) so an LLM can pick a valid
+  `aspect`/`detail`/`result_format`/`response_mode` before a failed call. (F1)
+- **`truncation_contract`** documented in capabilities; the standardized envelope
+  is `{returned, total, reason, recovery}`. (F4/F5)
+
+### Changed
+
+- **Invalid enum *value* errors** now list the field's valid **values** with
+  "Valid values are listed in allowed_values", instead of the argument **names**
+  with the wrong "argument names" wording. Routed through a value-error branch in
+  the arg-binding middleware. (F1)
+- **`get_protein_cross_references`** with an explicit `databases` filter echoes
+  `requested_databases` and flags any name that matched nothing under
+  `unmatched_databases` + `database_hint` (with a case-insensitive did-you-mean),
+  so a typo'd database no longer reads as a valid "no data" answer. (F2)
+- **`get_taxon`** name scan ranks an exact scientific/common-name hit first
+  (tagged `match_quality:"exact"`), so `matches[0]` and `next_commands` land on the
+  right organism. (F3)
+- **Truncation envelope standardized** to `{returned, total, reason, recovery}`
+  across `get_protein_features` (true total via fetch-at-cap), `get_protein_go_terms`
+  (adds `reason`), `get_protein_variants` and `find_proteins` (exact `total` via a
+  cheap COUNT, run only on a full page), and `run_sparql_query` (adds `returned`;
+  `total` omitted by design). (F4/F5)
+- **`find_proteins(name_contains=)`** matches per word (AND of `CONTAINS`), so
+  "polynucleotide kinase" matches "Bifunctional polynucleotide phosphatase/kinase"
+  instead of returning zero. Single-word input is unchanged. (F6)
+- **`get_protein_features`** hides secondary-structure (helix/strand/turn) by
+  default and discloses the count under `excluded_secondary_structure`; pass
+  `include_secondary_structure=true` (or name them in `feature_types`) to include
+  them — roughly halves the most common feature query's tokens. (Part 1)
+- **`get_protein`** echoes `requested_accession` only when it differs from the
+  resolved base accession (isoform/redirect); the identical echo is dropped. (F7)
+- **`run_sparql_query`** success now carries `_meta.next_commands` like every other
+  tool. (F8)
+
+### Internal
+
+- Split `ServiceBase` (cache + execution primitives) into `service_base.py`, the
+  `get_taxon` resolver into `service_taxonomy.py`, and the taxon shapers into
+  `shaping_taxonomy.py` to keep every module within the 600-line cap.
+
 ## [0.4.0] - 2026-06-12
 
 An assessment-driven uplift closing the 12 residual bugs from the v0.3.0

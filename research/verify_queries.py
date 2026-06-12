@@ -56,6 +56,10 @@ CASES = {
     "protein_features(P05067, [disulfide_bond])": q.protein_features("P05067", ["disulfide_bond"]),
     "protein_features(P05067, limit=5)": q.protein_features("P05067", limit=5),
     "protein_variants(P38398)": q.protein_variants("P38398", limit=10),
+    "protein_variants_count(P38398)": q.protein_variants_count("P38398"),  # F5 true total
+    "find_proteins(tax=9606, name='polynucleotide kinase')": q.find_proteins(  # F6 per-word
+        organism_taxon=9606, name_contains="polynucleotide kinase", limit=5
+    ),
     "protein_diseases(P38398)": q.protein_diseases("P38398"),
     "protein_cross_references(P05067, [PDB])": q.protein_cross_references("P05067", ["PDB"]),
     "protein_go_terms(P05067)": q.protein_go_terms("P05067"),
