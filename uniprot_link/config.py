@@ -1,0 +1,153 @@
+"""Configuration management for uniprot-link.
+
+Settings load from environment variables with the ``UNIPROT_LINK_`` prefix
+(nested models use ``__``, e.g. ``UNIPROT_LINK_SPARQL__TIMEOUT=45``).
+"""
+
+from __future__ import annotations
+
+from typing import Any, Literal
+
+from pydantic import BaseModel, Field, field_validator
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+from uniprot_link import __version__
+
+
+class SparqlEndpointConfig(BaseModel):
+    """UniProt SPARQL endpoint configuration."""
+
+    base_url: str = Field(
+        default="https://sparql.uniprot.org/sparql",
+        description="UniProt SPARQL endpoint URL.",
+    )
+    contact_email: str = Field(
+        default="bernt.popp@charite.de",
+        description=(
+            "Contact email embedded in the User-Agent. UniProt asks programmatic "
+            "clients to provide one so they can reach you about problems."
+        ),
+    )
+    timeout: int = Field(
+        default=30,
+        ge=1,
+        le=600,
+        description="Default per-request timeout in seconds (server hard limit is 45 min).",
+    )
+    rate_limit_per_second: float = Field(
+        default=3.0,
+        gt=0.0,
+        le=20.0,
+        description="Client-side request rate (requests per second).",
+    )
+    burst_size: int = Field(
+        default=5,
+        ge=1,
+        le=50,
+        description="Maximum burst size for the token-bucket rate limiter.",
+    )
+    max_retries: int = Field(
+        default=2,
+        ge=0,
+        le=6,
+        description="Retry attempts for transient (429/5xx/network) failures.",
+    )
+    retry_delay: float = Field(
+        default=1.0,
+        ge=0.1,
+        le=10.0,
+        description="Base delay (seconds) for exponential backoff between retries.",
+    )
+    default_limit: int = Field(
+        default=50,
+        ge=1,
+        le=10000,
+        description="LIMIT auto-injected into SELECT queries that lack one.",
+    )
+    max_limit: int = Field(
+        default=10000,
+        ge=1,
+        le=100000,
+        description="Hard cap on the LIMIT applied to any SELECT query.",
+    )
+
+    @property
+    def user_agent(self) -> str:
+        """User-Agent string with a contact mailbox, per UniProt etiquette."""
+        return f"uniprot-link/{__version__} (mailto:{self.contact_email})"
+
+    @field_validator("base_url")
+    @classmethod
+    def strip_trailing_slash(cls, v: str) -> str:
+        """Normalise the endpoint URL (no trailing slash)."""
+        return v.rstrip("/")
+
+
+class CacheConfigModel(BaseModel):
+    """In-process query cache configuration."""
+
+    size: int = Field(default=512, ge=0, le=10000, description="Max cached query results.")
+    ttl: int = Field(default=3600, ge=0, le=86400, description="Cache TTL in seconds.")
+
+
+class ServerSettings(BaseSettings):
+    """Top-level server settings."""
+
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        case_sensitive=False,
+        extra="ignore",
+        env_prefix="UNIPROT_LINK_",
+        env_nested_delimiter="__",
+    )
+
+    host: str = Field(default="127.0.0.1", description="Server host.")
+    port: int = Field(default=8000, ge=1024, le=65535, description="Server port.")
+    reload: bool = Field(default=False, description="Enable auto-reload in development.")
+
+    transport: Literal["unified", "http", "stdio"] = Field(
+        default="unified",
+        description="Server transport mode.",
+    )
+    mcp_path: str = Field(default="/mcp", description="MCP endpoint path.")
+
+    cors_origins: list[str] = Field(
+        default=["http://localhost:3000", "http://127.0.0.1:3000"],
+        description="Allowed CORS origins.",
+    )
+
+    log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] = Field(
+        default="INFO",
+        description="Logging level.",
+    )
+    log_format: Literal["json", "console"] = Field(
+        default="console",
+        description="Log format.",
+    )
+
+    sparql: SparqlEndpointConfig = Field(
+        default_factory=SparqlEndpointConfig,
+        description="UniProt SPARQL endpoint configuration.",
+    )
+    cache: CacheConfigModel = Field(
+        default_factory=CacheConfigModel,
+        description="Query cache configuration.",
+    )
+
+    @field_validator("mcp_path")
+    @classmethod
+    def validate_mcp_path(cls, v: str) -> str:
+        """Ensure the MCP path starts with a forward slash."""
+        return v if v.startswith("/") else f"/{v}"
+
+    @field_validator("cors_origins", mode="before")
+    @classmethod
+    def parse_cors_origins(cls, v: Any) -> list[str]:
+        """Parse CORS origins from a comma-separated string or list."""
+        if isinstance(v, str):
+            return [origin.strip() for origin in v.split(",") if origin.strip()]
+        return list(v) if v else []
+
+
+settings = ServerSettings()
