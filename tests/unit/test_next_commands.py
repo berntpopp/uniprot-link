@@ -18,10 +18,32 @@ def test_after_entry_subresource_zero_count_points_home() -> None:
     assert any(c["tool"] == "get_protein_variants" for c in nonempty)
 
 
-def test_after_get_protein_trimmed_to_two() -> None:
+def test_after_get_protein_is_content_aware() -> None:
     from uniprot_link.mcp.next_commands import after_get_protein
 
-    assert len(after_get_protein("P05067")) == 2
+    # No diseases/variants -> only sequence + features suggested (len 2).
+    plain = after_get_protein(
+        "P05067", has_variants=False, has_diseases=False, has_structure=False
+    )
+    tools = [c["tool"] for c in plain]
+    assert tools == ["get_protein_sequence", "get_protein_features"]
+    assert "get_protein_diseases" not in tools
+
+    # Disease-bearing entry surfaces diseases among the gated suggestions.
+    rich = after_get_protein(
+        "P05067", has_variants=True, has_diseases=True, has_structure=True
+    )
+    rtools = [c["tool"] for c in rich]
+    assert "get_protein_diseases" in rtools or "get_protein_variants" in rtools
+    assert len(rich) <= 3
+
+
+def test_after_obsolete_entry_points_at_replacement() -> None:
+    from uniprot_link.mcp.next_commands import after_obsolete_entry
+
+    out = after_obsolete_entry(["A0A9P2UQ24"])
+    assert out[0] == {"tool": "get_protein", "arguments": {"accession": "A0A9P2UQ24"}}
+    assert after_obsolete_entry([])[0]["tool"] == "get_server_capabilities"
 
 
 def test_default_error_next_commands_protein_tool() -> None:

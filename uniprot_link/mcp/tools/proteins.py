@@ -12,6 +12,7 @@ from uniprot_link.mcp.next_commands import (
     after_entry_subresource,
     after_find_proteins,
     after_get_protein,
+    after_obsolete_entry,
     cmd,
 )
 from uniprot_link.mcp.schemas import (
@@ -138,7 +139,16 @@ def _register_find_and_summary(mcp: FastMCP) -> None:
         async def call() -> dict[str, Any]:
             service = get_sparql_service()
             payload = await service.get_protein(accession, response_mode)
-            payload["_meta"] = {"next_commands": after_get_protein(payload["accession"])}
+            if payload.get("obsolete"):
+                nxt = after_obsolete_entry(payload.get("replaced_by", []))
+            else:
+                nxt = after_get_protein(
+                    payload["accession"],
+                    has_variants=bool(payload.get("has_variants")),
+                    has_diseases=bool(payload.get("has_diseases")),
+                    has_structure=bool(payload.get("has_structure")),
+                )
+            payload["_meta"] = {"next_commands": nxt}
             return payload
 
         return await run_mcp_tool(

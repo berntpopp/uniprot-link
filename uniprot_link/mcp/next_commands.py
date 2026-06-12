@@ -76,12 +76,36 @@ def after_find_proteins(accessions: list[str]) -> list[dict[str, Any]]:
     ]
 
 
-def after_get_protein(accession: str) -> list[dict[str, Any]]:
-    """After an entry summary: the two highest-value sub-resources (token diet)."""
-    return [
-        cmd("get_protein_sequence", accession=accession),
-        cmd("get_protein_features", accession=accession),
-    ]
+def after_get_protein(
+    accession: str,
+    *,
+    has_variants: bool = False,
+    has_diseases: bool = False,
+    has_structure: bool = False,
+) -> list[dict[str, Any]]:
+    """Suggest sub-resources, content-gated by what the entry actually has.
+
+    Sequence + features are always useful; the annotation tools are offered only
+    when the cheap presence flags say there is something to fetch -- avoiding the
+    static-suggestion trap (proposing diseases/variants on an entry that has
+    none). Trimmed to 3 (token diet).
+    """
+    chain = [cmd("get_protein_sequence", accession=accession)]
+    if has_diseases:
+        chain.append(cmd("get_protein_diseases", accession=accession))
+    if has_variants:
+        chain.append(cmd("get_protein_variants", accession=accession))
+    chain.append(cmd("get_protein_features", accession=accession))
+    if has_structure:
+        chain.append(cmd("get_protein_cross_references", accession=accession))
+    return chain[:3]
+
+
+def after_obsolete_entry(replaced_by: list[str]) -> list[dict[str, Any]]:
+    """After an obsolete get_protein: point at the live replacement entries."""
+    if not replaced_by:
+        return [cmd("get_server_capabilities")]
+    return [cmd("get_protein", accession=a) for a in replaced_by[:2]]
 
 
 def after_entry_subresource(
