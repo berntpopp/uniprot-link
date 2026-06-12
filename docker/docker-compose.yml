@@ -19,6 +19,10 @@ services:
       UNIPROT_LINK_LOG_FORMAT: json
       # Set a real contact mailbox per UniProt etiquette:
       UNIPROT_LINK_SPARQL__CONTACT_EMAIL: bernt.popp@charite.de
+      # Build provenance surfaced in /health and get_server_capabilities().build.
+      # Pass at up-time: UNIPROT_LINK_GIT_SHA=$(git rev-parse --short HEAD) ...
+      UNIPROT_LINK_GIT_SHA: ${UNIPROT_LINK_GIT_SHA:-unknown}
+      UNIPROT_LINK_BUILT_AT: ${UNIPROT_LINK_BUILT_AT:-}
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://localhost:8000/health"]
       interval: 30s
