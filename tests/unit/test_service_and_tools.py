@@ -760,6 +760,26 @@ async def test_run_query_select_truncation(service_factory: Any) -> None:
 
 
 @pytest.mark.asyncio
+async def test_run_query_csv_select_labels_query_type_select(service_factory: Any) -> None:
+    """F8: a SELECT projected to CSV is query_type SELECT (not RDF/raw) + serialization."""
+    svc = service_factory([])  # non-json returns empty text; classification is structural
+    out = await svc.run_query("SELECT ?s WHERE { ?s ?p ?o } LIMIT 1", result_format="csv")
+    assert out["query_type"] == "SELECT"
+    assert out["serialization"] == "csv"
+
+
+@pytest.mark.asyncio
+async def test_run_query_construct_turtle_labels_query_type_construct(service_factory: Any) -> None:
+    """F8: a CONSTRUCT to turtle keeps its true query form."""
+    svc = service_factory([])
+    out = await svc.run_query(
+        "CONSTRUCT { ?s ?p ?o } WHERE { ?s ?p ?o } LIMIT 1", result_format="turtle"
+    )
+    assert out["query_type"] == "CONSTRUCT"
+    assert out["serialization"] == "turtle"
+
+
+@pytest.mark.asyncio
 async def test_run_query_ask(service_factory: Any) -> None:
     svc = service_factory([("ASK", {"head": {"link": []}, "boolean": True})])
     out = await svc.run_query("ASK { ?s ?p ?o }")

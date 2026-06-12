@@ -48,7 +48,7 @@ class SparqlService(FindProteinsServiceMixin, TaxonomyServiceMixin):
                 f"Choose one of: {', '.join(RESULT_FORMATS)}.",
                 field="result_format",
             )
-        Q.classify_sparql_operation(query)  # raises InvalidInputError on writes
+        op = Q.classify_sparql_operation(query)  # raises InvalidInputError on writes
         effective_limit = Q.clamp_limit(
             limit or self.config.default_limit,
             default=self.config.default_limit,
@@ -59,7 +59,12 @@ class SparqlService(FindProteinsServiceMixin, TaxonomyServiceMixin):
         )
         result = await self.client.execute(prepared, result_format=result_format, timeout=timeout)
 
+        # F8: query_type reflects the actual query FORM (SELECT/ASK/CONSTRUCT/
+        # DESCRIBE); the serialization (json/csv/turtle/...) is reported separately
+        # so a SELECT projected to CSV is no longer mislabeled "RDF/raw".
+        known = op in {"SELECT", "ASK", "CONSTRUCT", "DESCRIBE"}
         meta: dict[str, Any] = {
+            "serialization": result_format,
             "result_format": result_format,
             "elapsed_ms": round(result.elapsed_ms, 1),
             "limit_injected": injected,
@@ -70,7 +75,7 @@ class SparqlService(FindProteinsServiceMixin, TaxonomyServiceMixin):
             data = S.rows(result.json)
             variables = result.json.get("head", {}).get("vars", [])
             payload: dict[str, Any] = {
-                "query_type": "SELECT",
+                "query_type": op if known else "SELECT",
                 "columns": variables,
                 "row_count": len(data),
                 "rows": data,
@@ -87,7 +92,7 @@ class SparqlService(FindProteinsServiceMixin, TaxonomyServiceMixin):
                 }
             return payload
         return {
-            "query_type": "RDF/raw",
+            "query_type": op if known else "RDF/raw",
             "content_type": result.content_type,
             "data": result.text,
             "byte_length": len(result.text),
