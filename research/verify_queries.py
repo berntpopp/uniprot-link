@@ -35,11 +35,12 @@ def run(query: str) -> tuple[int, object]:
         return exc.code, exc.read()[:200].decode("utf-8", "replace")
     except Exception as exc:  # noqa: BLE001
         return 0, f"{type(exc).__name__} after {_time.monotonic() - started:.1f}s"
+    elapsed_ms = round((_time.monotonic() - started) * 1000)
     if "boolean" in payload:
-        return 200, {"boolean": payload["boolean"]}
+        return 200, {"boolean": payload["boolean"], "ms": elapsed_ms}
     rows = payload.get("results", {}).get("bindings", [])
     sample = {k: v["value"][:60] for k, v in rows[0].items()} if rows else {}
-    return 200, {"rows": len(rows), "sample": sample}
+    return 200, {"rows": len(rows), "ms": elapsed_ms, "sample": sample}
 
 
 CASES = {
@@ -55,6 +56,16 @@ CASES = {
     "protein_sequence(P05067)": q.protein_sequence("P05067"),
     "protein_features(P05067, [disulfide_bond])": q.protein_features("P05067", ["disulfide_bond"]),
     "protein_features(P05067, limit=5)": q.protein_features("P05067", limit=5),
+    # F1: an isoform accession must anchor on the base entry (was a silent 0).
+    "protein_features(P05067-2, [domain,region]) F1": q.protein_features(
+        "P05067-2", ["domain", "region"]
+    ),
+    "protein_go_terms(P05067-2) F1-twin": q.protein_go_terms("P05067-2"),
+    "protein_cross_references(P05067-2) F1-twin": q.protein_cross_references("P05067-2"),
+    # F2: an isoform accession must return the full isoform set (base-anchored).
+    "protein_sequence(P05067-2) F2": q.protein_sequence("P05067-2"),
+    # F3: an exact mnemonic anchor is a single bound query (fast-path).
+    "find_proteins(mnemonic=NAA10_HUMAN) F3": q.find_proteins(mnemonic="NAA10_HUMAN", limit=5),
     "protein_variants(P38398)": q.protein_variants("P38398", limit=10),
     "protein_variants_count(P38398)": q.protein_variants_count("P38398"),  # F5 true total
     "find_proteins(tax=9606, name='polynucleotide kinase')": q.find_proteins(  # F6 per-word
