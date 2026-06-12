@@ -14,7 +14,12 @@ from uniprot_link.api.client import RESULT_FORMATS, SparqlClient
 from uniprot_link.exceptions import InvalidInputError, NotFoundError
 from uniprot_link.services import queries as Q
 from uniprot_link.services import shaping as S
-from uniprot_link.services.constants import COMMON_XREF_DATABASES, FEATURE_TYPES, UNIPROT_RELEASE
+from uniprot_link.services.constants import (
+    COMMON_XREF_DATABASES,
+    FEATURE_TYPES,
+    UNIPROT_RELEASE,
+    lookup_common_taxon,
+)
 
 if TYPE_CHECKING:
     from uniprot_link.config import SparqlEndpointConfig
@@ -412,11 +417,30 @@ class SparqlService:
             payload["elapsed_ms"] = max(core_m["elapsed_ms"], anc_m["elapsed_ms"])
             payload["cached"] = core_m["cached"] and anc_m["cached"]
             return payload
+        # Curated fast path: a model-organism name resolves with NO network round
+        # trip (the by-name scan is the ~40x latency offender). The long tail and
+        # disambiguation (e.g. subspecies) still fall through to the scan.
+        record = lookup_common_taxon(taxon)
+        if record is not None:
+            return {
+                "query": taxon,
+                "match_count": 1,
+                "matches": [record],
+                "match_source": "curated_common_index",
+                "elapsed_ms": 0.0,
+                "cached": True,
+            }
         rows_json, qmeta = await self._select_timed(Q.resolve_taxon_by_name(taxon))
         matches = S.shape_taxon_resolutions(rows_json)
         if not matches:
             raise NotFoundError(f"No taxon matched '{taxon}'.")
-        return {"query": taxon, "match_count": len(matches), "matches": matches, **qmeta}
+        return {
+            "query": taxon,
+            "match_count": len(matches),
+            "matches": matches,
+            "match_source": "endpoint_scan",
+            **qmeta,
+        }
 
     # --- Example catalog ----------------------------------------------------
 

@@ -265,3 +265,56 @@ ECO_TO_GO_CODE: dict[str, str] = {
     "ECO_0000305": "IC",
     "ECO_0000307": "ND",
 }
+
+
+# Curated name -> taxon-id index for model organisms (the overwhelming majority
+# of real name lookups). A hit lets get_taxon resolve a name with ZERO network
+# round-trips; misses fall through to the endpoint scan. Each taxon_id is the one
+# UniProt reviewed entries use, so it feeds find_proteins(organism_taxon=...)
+# directly. Records: (scientific_name, common_name|None, rank|None, taxon_id,
+# extra_aliases). Verified live against the endpoint on 2026-06-12.
+_COMMON_TAXA_RECORDS: tuple[tuple[str, str | None, str | None, str, tuple[str, ...]], ...] = (
+    ("Homo sapiens", "Human", "Species", "9606", ("human",)),
+    ("Mus musculus", "Mouse", "Species", "10090", ("mouse", "house mouse")),
+    ("Rattus norvegicus", "Rat", "Species", "10116", ("rat", "brown rat")),
+    ("Bos taurus", "Bovine", "Species", "9913", ("cow", "cattle", "bovine")),
+    ("Sus scrofa", "Pig", "Species", "9823", ("pig",)),
+    ("Gallus gallus", "Chicken", "Species", "9031", ("chicken",)),
+    ("Canis lupus familiaris", "Dog", "Subspecies", "9615", ("dog",)),
+    ("Macaca mulatta", "Rhesus macaque", "Species", "9544", ("rhesus macaque", "rhesus monkey")),
+    ("Pan troglodytes", "Chimpanzee", "Species", "9598", ("chimpanzee", "chimp")),
+    ("Danio rerio", "Zebrafish", "Species", "7955", ("zebrafish",)),
+    ("Xenopus tropicalis", "Western clawed frog", "Species", "8364", ("xenopus tropicalis",)),
+    ("Drosophila melanogaster", "Fruit fly", "Species", "7227", ("fruit fly", "drosophila")),
+    ("Caenorhabditis elegans", None, "Species", "6239", ("c. elegans", "c elegans", "roundworm")),
+    ("Arabidopsis thaliana", "Thale cress", "Species", "3702",
+     ("arabidopsis", "thale cress", "mouse-ear cress")),
+    ("Zea mays", "Maize", "Species", "4577", ("maize", "corn")),
+    ("Oryza sativa subsp. japonica", "Rice", None, "39947", ("rice", "oryza sativa")),
+    ("Saccharomyces cerevisiae (strain ATCC 204508 / S288c)", "Baker's yeast", "Strain", "559292",
+     ("saccharomyces cerevisiae", "baker's yeast", "bakers yeast", "brewer's yeast", "yeast",
+      "budding yeast")),
+    ("Schizosaccharomyces pombe (strain 972 / ATCC 24843)", "Fission yeast", "Strain", "284812",
+     ("schizosaccharomyces pombe", "fission yeast", "s. pombe")),
+    ("Escherichia coli (strain K12)", "E. coli K-12", "Strain", "83333",
+     ("escherichia coli", "e. coli", "e coli", "ecoli")),
+    ("Severe acute respiratory syndrome coronavirus 2", "SARS-CoV-2", None, "2697049",
+     ("sars-cov-2", "sars cov 2", "sars-cov2", "2019-ncov", "covid", "covid-19")),
+)
+
+# name (lowercased) -> curated record dict (taxon_id, scientific_name, [common_name], [rank]).
+COMMON_TAXA: dict[str, dict[str, str]] = {}
+for _sci, _common, _rank, _tid, _aliases in _COMMON_TAXA_RECORDS:
+    _record: dict[str, str] = {"taxon_id": _tid, "scientific_name": _sci}
+    if _common:
+        _record["common_name"] = _common
+    if _rank:
+        _record["rank"] = _rank
+    for _name in (_sci, _common, *_aliases):
+        if _name:
+            COMMON_TAXA[_name.lower()] = _record
+
+
+def lookup_common_taxon(name: str) -> dict[str, str] | None:
+    """Return a curated taxon record for a common organism name, else ``None``."""
+    return COMMON_TAXA.get(name.strip().lower())

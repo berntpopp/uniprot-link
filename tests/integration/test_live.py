@@ -241,3 +241,22 @@ async def test_example_search_has_no_duplicate_ids_live(service: SparqlService) 
     res = await service.search_examples("domain", limit=25)
     ids = [e["example_id"] for e in res["examples"]]
     assert len(ids) == len(set(ids))
+
+
+async def test_common_taxa_ids_resolve_live(service: SparqlService) -> None:
+    """v0.5.0 C3: every curated taxon id resolves; scientific name is consistent."""
+    from uniprot_link.services.constants import _COMMON_TAXA_RECORDS
+
+    for sci, _common, _rank, tid, _aliases in _COMMON_TAXA_RECORDS:
+        out = await service.get_taxon(tid)
+        got = out["scientific_name"].lower()
+        # The curated name shares its leading binomial with the endpoint's.
+        assert sci.lower().split(" (")[0][:12] in got, f"{tid}: {sci!r} vs {got!r}"
+
+
+async def test_get_taxon_common_name_is_instant_live(service: SparqlService) -> None:
+    """v0.5.0 C3: a common organism name resolves with no network round-trip."""
+    out = await service.get_taxon("Homo sapiens")
+    assert out["match_source"] == "curated_common_index"
+    assert out["matches"][0]["taxon_id"] == "9606"
+    assert out["elapsed_ms"] == 0.0

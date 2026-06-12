@@ -522,6 +522,41 @@ async def test_success_meta_is_lean() -> None:
 
 
 @pytest.mark.asyncio
+async def test_get_taxon_common_name_is_curated(service_factory: Any) -> None:
+    """A model-organism name resolves with no SPARQL call (curated fast path)."""
+    svc = service_factory([])  # any endpoint call would return empty -> not_found
+    out = await svc.get_taxon("Homo sapiens")
+    assert out["match_source"] == "curated_common_index"
+    assert out["match_count"] == 1
+    assert out["matches"][0]["taxon_id"] == "9606"
+    assert out["elapsed_ms"] == 0.0
+    assert out["cached"] is True
+    assert svc.client.calls == []  # the endpoint was never touched
+    assert (await svc.get_taxon("human"))["matches"][0]["taxon_id"] == "9606"
+    assert (await svc.get_taxon("yeast"))["matches"][0]["taxon_id"] == "559292"
+
+
+@pytest.mark.asyncio
+async def test_get_taxon_uncommon_name_falls_through(service_factory: Any) -> None:
+    """An uncommon name hits the endpoint scan and is tagged accordingly."""
+    body = make_select_json(
+        ["taxon", "scientificName", "rank"],
+        [
+            {
+                "taxon": "http://purl.uniprot.org/taxonomy/63221",
+                "scientificName": "Homo sapiens neanderthalensis",
+                "rank": "http://purl.uniprot.org/core/Subspecies",
+            }
+        ],
+    )
+    svc = service_factory([("up:scientificName", body)])
+    out = await svc.get_taxon("Homo sapiens neanderthalensis")
+    assert out["match_source"] == "endpoint_scan"
+    assert svc.client.calls  # the endpoint WAS queried
+    assert out["matches"][0]["taxon_id"] == "63221"
+
+
+@pytest.mark.asyncio
 async def test_find_proteins_reviewed_first_then_spill(service_factory: Any) -> None:
     from tests.conftest import make_select_json
 
