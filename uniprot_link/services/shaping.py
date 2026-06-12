@@ -155,6 +155,7 @@ def shape_variants(result_json: dict[str, Any] | None) -> list[dict[str, Any]]:
             {
                 "begin": row.get("begin"),
                 "end": row.get("end"),
+                "wild_type": row.get("wildType") or None,
                 "substitution": row.get("substitution"),
                 "description": row.get("comment"),
                 "diseases": [],
@@ -166,15 +167,27 @@ def shape_variants(result_json: dict[str, Any] | None) -> list[dict[str, Any]]:
         dbsnp = row.get("dbsnp")
         if dbsnp and "dbsnp" not in entry:
             entry["dbsnp"] = local_name(dbsnp)
-    out = list(merged.values())
+    out = [_classify_variant(v) for v in merged.values()]
     out.sort(
         key=lambda v: (
-            not v["diseases"],  # disease-associated first
+            not v["diseases"],
             v["begin"] is None,
             v["begin"] if isinstance(v["begin"], int) else 0,
         )
     )
     return out
+
+
+def _classify_variant(v: dict[str, Any]) -> dict[str, Any]:
+    """Add variant_type and (for simple substitutions) HGVS-style notation."""
+    sub, wt, begin, end = v.get("substitution"), v.get("wild_type"), v.get("begin"), v.get("end")
+    is_substitution = isinstance(sub, str) and len(sub) == 1 and begin == end and begin is not None
+    v["variant_type"] = "substitution" if is_substitution else "other"
+    if is_substitution and wt:
+        v["notation"] = f"{wt}{begin}{sub}"
+    if v.get("wild_type") is None:
+        v.pop("wild_type", None)
+    return v
 
 
 def shape_diseases(result_json: dict[str, Any] | None) -> list[dict[str, Any]]:

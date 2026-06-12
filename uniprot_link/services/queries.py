@@ -340,7 +340,7 @@ def protein_variants(
     else:
         disease_block = "  OPTIONAL { ?a skos:related ?d . ?d skos:prefLabel ?disease }"
     return f"""{prefix_block()}
-SELECT ?begin ?end ?substitution ?comment ?disease ?dbsnp
+SELECT ?begin ?end ?substitution ?wildType ?comment ?disease ?dbsnp
 WHERE {{
   uniprotkb:{acc} up:annotation ?a .
   ?a a up:Natural_Variant_Annotation ; up:range ?r .
@@ -350,6 +350,8 @@ WHERE {{
   OPTIONAL {{ ?a rdfs:comment ?comment }}
 {disease_block}
   OPTIONAL {{ ?a rdfs:seeAlso ?dbsnp . ?dbsnp up:database database:dbSNP }}
+  OPTIONAL {{ isoform:{acc}-1 rdf:value ?seq }}
+  BIND(SUBSTR(?seq, ?begin, 1 + ?end - ?begin) AS ?wildType)
 }}
 LIMIT {limit}"""
 

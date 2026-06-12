@@ -267,6 +267,41 @@ def test_shape_ancestors_root_taxon_has_no_parent() -> None:
     assert S.shape_ancestors(empty) == (None, [])
 
 
+def test_shape_variants_adds_wildtype_and_notation():
+    from tests.conftest import make_select_json
+    from uniprot_link.services.shaping import shape_variants
+
+    body = make_select_json(
+        ["begin", "end", "substitution", "wildType", "comment", "disease", "dbsnp"],
+        [
+            {
+                "begin": 176,
+                "end": 176,
+                "substitution": "F",
+                "wildType": "L",
+                "comment": "In MCSZ.",
+                "disease": "Microcephaly, seizures, and developmental delay",
+                "dbsnp": "http://purl.uniprot.org/dbsnp/rs267606957",
+            },
+            {
+                "begin": 408,
+                "end": 408,
+                "substitution": "",
+                "wildType": "T",
+                "comment": "In AOA4.",
+                "disease": "Ataxia-oculomotor apraxia 4",
+            },
+        ],
+    )
+    out = {v["begin"]: v for v in shape_variants(body)}
+    assert out[176]["wild_type"] == "L"
+    assert out[176]["variant_type"] == "substitution"
+    assert out[176]["notation"] == "L176F"
+    assert out[408]["wild_type"] == "T"
+    assert out[408]["variant_type"] == "other"
+    assert "notation" not in out[408]
+
+
 def test_apply_response_mode_projects_protein_payload() -> None:
     from uniprot_link.services.shaping import apply_response_mode
 

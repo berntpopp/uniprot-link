@@ -135,3 +135,19 @@ async def test_go_terms_real_aspects(service: SparqlService) -> None:
         res["by_aspect"]
     )
     assert "unknown" not in res["by_aspect"]
+
+
+async def test_variants_wildtype_and_notation(service: SparqlService) -> None:
+    res = await service.get_variants("Q96T60", 200)
+    by_pos = {v["begin"]: v for v in res["variants"]}
+    assert by_pos[176]["wild_type"] == "L"
+    assert by_pos[176]["notation"] == "L176F"
+    assert by_pos[408]["variant_type"] == "other"
+    assert "notation" not in by_pos[408]
+
+
+async def test_run_query_rejects_writes(service: SparqlService) -> None:
+    from uniprot_link.exceptions import InvalidInputError
+
+    with pytest.raises(InvalidInputError):
+        await service.run_query("INSERT DATA { <a> <b> <c> }")

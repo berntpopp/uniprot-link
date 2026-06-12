@@ -205,11 +205,11 @@ def _register_annotations(mcp: FastMCP) -> None:
         annotations=READ_ONLY_OPEN_WORLD,
         tags={"protein", "variants"},
         description=(
-            "Return natural-variant annotations for an entry: position, amino-acid "
-            "substitution, free-text description, structured linked `diseases`, and "
-            "`dbsnp` rsIDs. Set disease_associated_only=true to keep only "
-            "disease-linked variants. Useful for surveying disease-associated and "
-            "polymorphic variants in Swiss-Prot."
+            "Return natural-variant annotations for an entry: position, wild-type "
+            "residue, amino-acid substitution, an HGVS-style `notation` (e.g. "
+            "`L176F`) for simple substitutions, `variant_type` (substitution|other), "
+            "free-text description, structured linked `diseases`, and `dbsnp` rsIDs. "
+            "Set disease_associated_only=true to keep only disease-linked variants."
         ),
     )
     async def get_protein_variants(
