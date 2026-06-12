@@ -322,3 +322,21 @@ async def test_isoform_mass_is_computed_live(service: SparqlService) -> None:
     assert isinstance(iso2["mass_da"], int)
     assert iso2["mass_da"] > 0
     assert iso2["mass_computed"] is True
+
+
+async def test_pnkp_resolves_in_one_call_with_taxon_alias() -> None:
+    """The assessment's cold path: find PNKP via the `taxon` alias in ONE call."""
+    import json
+
+    from uniprot_link.mcp.facade import create_uniprot_mcp
+
+    mcp = create_uniprot_mcp()
+    result = await mcp.call_tool(
+        "find_proteins", {"gene": "PNKP", "taxon": "9606", "reviewed": True}
+    )
+    sc = result.structured_content
+    env = sc if isinstance(sc, dict) else json.loads(result.content[0].text)
+    assert env["success"] is True
+    assert env["_meta"]["argument_aliases_applied"] == [["taxon", "organism_taxon"]]
+    accessions = [p["accession"] for p in env["proteins"]]
+    assert "Q96T60" in accessions
