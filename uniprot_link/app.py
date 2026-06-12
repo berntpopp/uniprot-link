@@ -9,6 +9,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from uniprot_link import __version__
+from uniprot_link.buildinfo import build_info
 from uniprot_link.config import settings
 from uniprot_link.logging_config import configure_logging
 from uniprot_link.services.constants import UNIPROT_RELEASE
@@ -48,8 +49,8 @@ def create_app() -> FastAPI:
 
     @app.get("/health")
     async def health() -> dict[str, Any]:
-        """Liveness probe."""
-        return {"status": "ok", "service": "uniprot-link", "version": __version__}
+        """Liveness probe (reports build provenance for deploy checks)."""
+        return {"status": "ok", "service": "uniprot-link", **build_info()}
 
     @app.get("/")
     async def root() -> dict[str, Any]:

@@ -59,3 +59,12 @@ def test_settings_nested_env(monkeypatch) -> None:  # type: ignore[no-untyped-de
     settings = ServerSettings()
     assert settings.sparql.timeout == 42
     assert settings.port == 9001
+
+
+def test_capabilities_carries_build_stamp() -> None:
+    from uniprot_link import __version__
+    from uniprot_link.mcp.capabilities import build_capabilities
+
+    cap = build_capabilities()
+    assert cap["build"]["version"] == __version__
+    assert "git_sha" in cap["build"]

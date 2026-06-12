@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING, Any
 
 from uniprot_link import __version__
 from uniprot_link.api.client import RESULT_FORMATS
+from uniprot_link.buildinfo import build_info
 from uniprot_link.mcp.resources import (
     RECOMMENDED_CITATION,
     RESEARCH_USE_NOTICE,
@@ -50,6 +51,7 @@ def build_capabilities() -> dict[str, Any]:
     return {
         "server": "uniprot-link",
         "server_version": __version__,
+        "build": build_info(),
         "uniprot_release": UNIPROT_RELEASE,
         "endpoint": "https://sparql.uniprot.org/sparql",
         "sparql_engine": "QLever",
