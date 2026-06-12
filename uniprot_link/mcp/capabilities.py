@@ -65,6 +65,7 @@ TOOLS: list[str] = [
     "search_example_queries",
     "get_example_query",
     "find_proteins",
+    "find_proteins_batch",
     "get_protein",
     "get_protein_sequence",
     "get_protein_features",
@@ -136,6 +137,7 @@ def build_capabilities() -> dict[str, Any]:
                     "typical_ms": "3000-12000",
                     "tools": [
                         "find_proteins (cold)",
+                        "find_proteins_batch (cold; N genes resolved concurrently)",
                         "get_taxon (uncached name scan)",
                         "run_sparql_query (unbounded or federated)",
                     ],
@@ -186,6 +188,7 @@ def build_capabilities() -> dict[str, Any]:
         "recommended_workflows": [
             "accession -> get_protein -> get_protein_{sequence,features,variants,diseases}",
             "gene + organism_taxon -> find_proteins -> get_protein",
+            "several genes -> find_proteins_batch(genes=[...]) -> get_protein_features per hit",
             "organism name -> get_taxon -> find_proteins(organism_taxon=...)",
             "learn SPARQL -> search_example_queries -> get_example_query -> run_sparql_query",
         ],

@@ -7,10 +7,9 @@ tool layer wraps these with ``success``/``_meta``/``next_commands``.
 from __future__ import annotations
 
 import asyncio
-import time
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
-from uniprot_link.api.client import RESULT_FORMATS, SparqlClient
+from uniprot_link.api.client import RESULT_FORMATS
 from uniprot_link.exceptions import InvalidInputError, NotFoundError, ObsoleteEntryError
 from uniprot_link.services import queries as Q
 from uniprot_link.services import shaping as S
@@ -19,107 +18,17 @@ from uniprot_link.services.constants import (
     MAP_IDENTIFIER_DATABASES,
     SECONDARY_STRUCTURE_TYPES,
     UNIPROT_RELEASE,
-    lookup_common_taxon,
 )
-
-if TYPE_CHECKING:
-    from uniprot_link.config import SparqlEndpointConfig
-
-
-def _sort_by_mnemonic(proteins: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """Sort a (small, already-LIMITed) page by mnemonic then accession.
-
-    Accession is the unique final tiebreak, making the order total and the page
-    deterministic across identical calls (pagination stability) even when two
-    entries share -- or lack -- a mnemonic.
-    """
-    return sorted(
-        proteins,
-        key=lambda p: (
-            p.get("mnemonic") is None,
-            p.get("mnemonic") or "",
-            p.get("accession") or "",
-        ),
-    )
+from uniprot_link.services.service_base import (
+    _FEATURE_FETCH_CAP,
+    _sort_by_mnemonic,
+    _window_sequence,
+)
+from uniprot_link.services.service_taxonomy import TaxonomyServiceMixin
 
 
-_SEQUENCE_PREVIEW = 30
-# Features are fetched up to this cap (bound on one accession -- a single QLever
-# plan regardless of the integer), then sliced to the caller's display `limit` in
-# Python, so the truncation envelope can report the TRUE total (F4).
-_FEATURE_FETCH_CAP = 1000
-
-
-def _window_sequence(seq: dict[str, Any]) -> dict[str, Any]:
-    """Replace a full sequence string with a first/last-N preview (compact mode).
-
-    Short sequences (<= 2*N) are returned whole; longer ones become
-    ``sequence_preview`` + ``sequence_truncated: True`` and drop ``sequence``.
-    """
-    s = seq.get("sequence") or ""
-    out = {k: v for k, v in seq.items() if k != "sequence"}
-    if len(s) <= 2 * _SEQUENCE_PREVIEW:
-        if "sequence" in seq:
-            out["sequence"] = s
-        return out
-    out["sequence_preview"] = f"{s[:_SEQUENCE_PREVIEW]}...{s[-_SEQUENCE_PREVIEW:]}"
-    out["sequence_truncated"] = True
-    return out
-
-
-class _TTLCache:
-    """Tiny in-process TTL cache for ``(query, format)`` -> result payloads."""
-
-    def __init__(self, maxsize: int, ttl: int) -> None:
-        self._maxsize = maxsize
-        self._ttl = ttl
-        self._store: dict[str, tuple[float, Any]] = {}
-
-    def get(self, key: str) -> Any | None:
-        if self._maxsize <= 0:
-            return None
-        item = self._store.get(key)
-        if item is None:
-            return None
-        expires_at, value = item
-        if expires_at < time.monotonic():
-            self._store.pop(key, None)
-            return None
-        return value
-
-    def put(self, key: str, value: Any) -> None:
-        if self._maxsize <= 0:
-            return
-        if len(self._store) >= self._maxsize:
-            self._store.pop(next(iter(self._store)), None)
-        self._store[key] = (time.monotonic() + self._ttl, value)
-
-
-class SparqlService:
+class SparqlService(TaxonomyServiceMixin):
     """Coordinate query builders, the SPARQL client, and result shaping."""
-
-    def __init__(self, client: SparqlClient, config: SparqlEndpointConfig) -> None:
-        """Build the service around a client and endpoint configuration."""
-        self.client = client
-        self.config = config
-        self._cache = _TTLCache(maxsize=512, ttl=3600)
-
-    async def _select_timed(
-        self, query: str, *, timeout: float | None = None
-    ) -> tuple[dict[str, Any] | None, dict[str, Any]]:
-        """Execute a SELECT/ASK; return (json, {elapsed_ms, cached})."""
-        cache_key = f"json::{query}"
-        cached: dict[str, Any] | None = self._cache.get(cache_key)
-        if cached is not None:
-            return cached, {"elapsed_ms": 0.0, "cached": True}
-        result = await self.client.execute(query, result_format="json", timeout=timeout)
-        self._cache.put(cache_key, result.json)
-        return result.json, {"elapsed_ms": round(result.elapsed_ms, 1), "cached": False}
-
-    async def _select(self, query: str, *, timeout: float | None = None) -> dict[str, Any] | None:
-        """Execute a SELECT/ASK and return its parsed JSON (cached)."""
-        json_result, _ = await self._select_timed(query, timeout=timeout)
-        return json_result
 
     # --- Raw / power query --------------------------------------------------
 
@@ -215,6 +124,67 @@ class SparqlService:
                 "recovery": f"call again with offset={offset + limit}.",
             }
         return payload
+
+    async def find_proteins_batch(
+        self,
+        genes: list[str],
+        organism_taxon: int | None = None,
+        reviewed: bool | None = None,
+        limit_per_gene: int = 5,
+    ) -> dict[str, Any]:
+        """Resolve several gene symbols to entries CONCURRENTLY (Part 1 latency).
+
+        N genes cost ~one cold round-trip instead of N sequential ones (the felt
+        cost of a multi-gene task). Returns a gene->accessions map, a flat
+        gene-tagged protein list, and the genes that resolved to nothing (so an
+        unresolved symbol is never a silent empty).
+        """
+        unique: list[str] = []
+        seen: set[str] = set()
+        for raw in genes:
+            g = (raw or "").strip()
+            if g and g.lower() not in seen:
+                seen.add(g.lower())
+                unique.append(g)
+        if not unique:
+            raise InvalidInputError(
+                "find_proteins_batch needs at least one gene symbol.", field="genes"
+            )
+        per_gene = Q.clamp_limit(limit_per_gene, default=5, maximum=25)
+        results = await asyncio.gather(
+            *(
+                self.find_proteins(
+                    gene=g, organism_taxon=organism_taxon, reviewed=reviewed, limit=per_gene
+                )
+                for g in unique
+            )
+        )
+        by_gene: dict[str, list[str]] = {}
+        proteins: list[dict[str, Any]] = []
+        resolved: list[str] = []
+        unresolved: list[str] = []
+        elapsed = 0.0
+        cached = True
+        for gene, result in zip(unique, results, strict=True):
+            hits = result.get("proteins", [])
+            accessions = [p["accession"] for p in hits if p.get("accession")]
+            by_gene[gene] = accessions
+            (resolved if accessions else unresolved).append(gene)
+            proteins.extend({**p, "matched_gene": gene} for p in hits)
+            # Legs run concurrently: wall-clock is the slowest leg; the batch is
+            # only fully cached when every leg hit the cache.
+            elapsed = max(elapsed, float(result.get("elapsed_ms", 0.0)))
+            cached = cached and bool(result.get("cached", False))
+        return {
+            "gene_count": len(unique),
+            "count": len(proteins),
+            "by_gene": by_gene,
+            "proteins": proteins,
+            "resolved_genes": resolved,
+            "unresolved_genes": unresolved,
+            "elapsed_ms": round(elapsed, 1),
+            "cached": cached,
+        }
 
     async def _find_reviewed_first(
         self, anchors: dict[str, Any], limit: int, offset: int
@@ -454,11 +424,6 @@ class SparqlService:
             }
         return payload
 
-    async def _count(self, count_query: str) -> int | None:
-        """Run a ``COUNT(... AS ?n)`` query and return the integer, or ``None``."""
-        rows = S.rows(await self._select(count_query))
-        return int(rows[0]["n"]) if rows and "n" in rows[0] else None
-
     async def get_diseases(self, accession: str) -> dict[str, Any]:
         """Return disease annotations."""
         query = Q.protein_diseases(accession)
@@ -550,67 +515,6 @@ class SparqlService:
             result.pop("unmatched_databases", None)
             result.pop("database_hint", None)
         return result
-
-    # --- Taxonomy -----------------------------------------------------------
-
-    async def get_taxon(self, taxon: str, include_lineage: bool = False) -> dict[str, Any]:
-        """Resolve a taxon by id (digits) or scientific/common name."""
-        taxon = str(taxon).strip()
-        if taxon.isdigit():
-            (core_json, core_m), (anc_json, anc_m) = await asyncio.gather(
-                self._select_timed(Q.taxon_core(taxon)),
-                self._select_timed(Q.taxon_ancestors(taxon)),
-            )
-            core = S.shape_taxon_core(core_json)
-            if core is None:
-                raise NotFoundError(f"No taxon found for id '{taxon}'.")
-            parent, lineage = S.shape_ancestors(anc_json)
-            payload: dict[str, Any] = {"taxon_id": taxon, **core}
-            if parent:
-                payload["parent_taxon_id"] = parent["taxon_id"]
-                payload["parent_name"] = parent.get("scientific_name")
-                if parent.get("rank"):
-                    payload["parent_rank"] = parent["rank"]
-            if include_lineage and lineage:
-                payload["lineage"] = lineage
-            # The two queries run in parallel: wall-clock is the slower leg (max),
-            # and the result is only fully cached if both legs hit the cache.
-            payload["elapsed_ms"] = max(core_m["elapsed_ms"], anc_m["elapsed_ms"])
-            payload["cached"] = core_m["cached"] and anc_m["cached"]
-            return payload
-        # Curated fast path: a model-organism name resolves with NO network round
-        # trip (the by-name scan is the ~40x latency offender). The long tail and
-        # disambiguation (e.g. subspecies) still fall through to the scan.
-        record = lookup_common_taxon(taxon)
-        if record is not None:
-            return {
-                "query": taxon,
-                "match_count": 1,
-                "matches": [record],
-                "match_source": "curated_common_index",
-                "elapsed_ms": 0.0,
-                "cached": True,
-            }
-        rows_json, qmeta = await self._select_timed(Q.resolve_taxon_by_name(taxon))
-        matches = S.rank_taxon_matches(S.shape_taxon_resolutions(rows_json), taxon)
-        if not matches:
-            raise NotFoundError(f"No taxon matched '{taxon}'.")
-        # Tag the best hit when it is an exact name match so a consumer (and the
-        # next_command that chains off matches[0]) lands on the right organism.
-        q = taxon.strip().lower()
-        top = matches[0]
-        if q in {
-            (top.get("scientific_name") or "").lower(),
-            (top.get("common_name") or "").lower(),
-        }:
-            top["match_quality"] = "exact"
-        return {
-            "query": taxon,
-            "match_count": len(matches),
-            "matches": matches,
-            "match_source": "endpoint_scan",
-            **qmeta,
-        }
 
     # --- Example catalog ----------------------------------------------------
 

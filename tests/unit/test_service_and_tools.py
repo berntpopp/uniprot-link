@@ -349,7 +349,13 @@ async def test_cross_references_unknown_db_reports_unmatched(service_factory: An
 async def test_cross_references_partial_match_lists_only_unmatched(service_factory: Any) -> None:
     body = make_select_json(
         ["db", "database", "xref"],
-        [{"db": "http://purl.uniprot.org/database/PDB", "database": "PDB", "xref": "http://x/1AAP"}],
+        [
+            {
+                "db": "http://purl.uniprot.org/database/PDB",
+                "database": "PDB",
+                "xref": "http://x/1AAP",
+            }
+        ],
     )
     routes = [("up:obsolete ?obsolete", _ACTIVE_STATUS), ("rdfs:seeAlso", body)]
     svc = service_factory(routes)
@@ -364,7 +370,13 @@ async def test_cross_references_no_filter_omits_unmatched(service_factory: Any) 
     """No databases filter -> 'all' -> nothing is 'unmatched' (no noise)."""
     body = make_select_json(
         ["db", "database", "xref"],
-        [{"db": "http://purl.uniprot.org/database/PDB", "database": "PDB", "xref": "http://x/1AAP"}],
+        [
+            {
+                "db": "http://purl.uniprot.org/database/PDB",
+                "database": "PDB",
+                "xref": "http://x/1AAP",
+            }
+        ],
     )
     routes = [("up:obsolete ?obsolete", _ACTIVE_STATUS), ("rdfs:seeAlso", body)]
     svc = service_factory(routes)
@@ -731,9 +743,7 @@ async def test_run_sparql_query_success_has_next_commands(service_factory: Any) 
     """F8: run_sparql_query success carries _meta.next_commands like every tool."""
     from uniprot_link.mcp.facade import create_uniprot_mcp
 
-    rows = make_select_json(
-        ["protein"], [{"protein": "http://purl.uniprot.org/uniprot/P05067"}]
-    )
+    rows = make_select_json(["protein"], [{"protein": "http://purl.uniprot.org/uniprot/P05067"}])
     svc = service_factory([("SELECT", rows)])
     service_adapters.set_sparql_service(svc)
     try:
@@ -1064,6 +1074,90 @@ async def test_get_taxon_uncommon_name_falls_through(service_factory: Any) -> No
     assert out["match_source"] == "endpoint_scan"
     assert svc.client.calls  # the endpoint WAS queried
     assert out["matches"][0]["taxon_id"] == "63221"
+
+
+def _gene_hit(acc: str, mnem: str) -> dict[str, Any]:
+    return make_select_json(
+        ["protein", "mnemonic", "reviewed", "taxid", "organism"],
+        [
+            {
+                "protein": f"http://purl.uniprot.org/uniprot/{acc}",
+                "mnemonic": mnem,
+                "reviewed": True,
+                "taxid": "http://purl.uniprot.org/taxonomy/9606",
+                "organism": "Homo sapiens",
+            }
+        ],
+    )
+
+
+@pytest.mark.asyncio
+async def test_find_proteins_batch_resolves_each_gene(service_factory: Any) -> None:
+    """P1a: several gene symbols resolve in one call, tagged by gene."""
+    routes = [
+        ('"PNKP"', _gene_hit("Q96T60", "PNKP_HUMAN")),
+        ('"NAA10"', _gene_hit("P41227", "NAA10_HUMAN")),
+    ]
+    svc = service_factory(routes)
+    res = await svc.find_proteins_batch(["PNKP", "NAA10"], organism_taxon=9606, reviewed=True)
+    assert res["gene_count"] == 2
+    assert res["by_gene"]["PNKP"] == ["Q96T60"]
+    assert res["by_gene"]["NAA10"] == ["P41227"]
+    assert res["unresolved_genes"] == []
+    assert {p["matched_gene"] for p in res["proteins"]} == {"PNKP", "NAA10"}
+    assert "elapsed_ms" in res and "cached" in res
+
+
+@pytest.mark.asyncio
+async def test_find_proteins_batch_reports_unresolved_genes(service_factory: Any) -> None:
+    """An unresolved gene is disclosed, not silently dropped."""
+    routes = [('"PNKP"', _gene_hit("Q96T60", "PNKP_HUMAN"))]
+    svc = service_factory(routes)
+    res = await svc.find_proteins_batch(["PNKP", "ZZZ9"], organism_taxon=9606, reviewed=True)
+    assert res["by_gene"]["PNKP"] == ["Q96T60"]
+    assert res["unresolved_genes"] == ["ZZZ9"]
+    assert res["resolved_genes"] == ["PNKP"]
+
+
+@pytest.mark.asyncio
+async def test_find_proteins_batch_dedupes_genes(service_factory: Any) -> None:
+    routes = [('"PNKP"', _gene_hit("Q96T60", "PNKP_HUMAN"))]
+    svc = service_factory(routes)
+    res = await svc.find_proteins_batch(["PNKP", "pnkp", " PNKP "], reviewed=True)
+    assert res["gene_count"] == 1
+
+
+@pytest.mark.asyncio
+async def test_find_proteins_batch_empty_is_invalid_input(service_factory: Any) -> None:
+    from uniprot_link.exceptions import InvalidInputError
+
+    svc = service_factory([])
+    with pytest.raises(InvalidInputError):
+        await svc.find_proteins_batch([], organism_taxon=9606)
+
+
+@pytest.mark.asyncio
+async def test_find_proteins_batch_facade_fans_out_next_commands(service_factory: Any) -> None:
+    from uniprot_link.mcp.facade import create_uniprot_mcp
+
+    routes = [
+        ('"PNKP"', _gene_hit("Q96T60", "PNKP_HUMAN")),
+        ('"NAA10"', _gene_hit("P41227", "NAA10_HUMAN")),
+    ]
+    svc = service_factory(routes)
+    service_adapters.set_sparql_service(svc)
+    try:
+        mcp = create_uniprot_mcp()
+        result = await mcp.call_tool(
+            "find_proteins_batch",
+            {"genes": ["PNKP", "NAA10"], "organism_taxon": 9606, "reviewed": True},
+        )
+        payload = result.structured_content if hasattr(result, "structured_content") else result
+        assert payload["success"] is True
+        accs = {c["arguments"]["accession"] for c in payload["_meta"]["next_commands"]}
+        assert {"Q96T60", "P41227"} <= accs
+    finally:
+        service_adapters.set_sparql_service(None)
 
 
 @pytest.mark.asyncio

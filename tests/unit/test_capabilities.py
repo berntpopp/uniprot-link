@@ -9,7 +9,7 @@ from uniprot_link.mcp.capabilities import TOOLS, build_capabilities
 def test_capabilities_structure() -> None:
     caps = build_capabilities()
     assert caps["server"] == "uniprot-link"
-    assert caps["tool_count"] == len(TOOLS) == 14
+    assert caps["tool_count"] == len(TOOLS) == 15
     assert caps["named_graph_count"] == 21
     assert "json" in caps["result_formats"]
     assert "not_found" in caps["error_codes"]
@@ -20,7 +20,7 @@ def test_capabilities_advertises_response_modes_and_contracts() -> None:
     from uniprot_link.mcp.capabilities import build_capabilities
 
     cap = build_capabilities()
-    assert cap["server_version"] == "0.7.0"
+    assert cap["server_version"] == "0.8.0"
     assert cap["response_modes"] == ["minimal", "compact", "standard", "full"]
     assert cap["default_response_mode"] == "compact"
     assert "domain" in cap["feature_types"]
@@ -40,7 +40,7 @@ def test_capabilities_documents_result_ordering() -> None:
 
 def test_capabilities_documents_obsolete_and_map_dbs() -> None:
     cap = build_capabilities()
-    assert cap["server_version"] == "0.7.0"
+    assert cap["server_version"] == "0.8.0"
     assert "obsolete" in cap["not_found_contract"].lower()
     assert "PDB" in cap["map_identifier_databases"]
     assert "DrugBank" not in cap["map_identifier_databases"]

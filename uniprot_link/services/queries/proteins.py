@@ -113,10 +113,7 @@ def find_proteins(
     name_tokens = [escape_literal(t) for t in name_contains.split()][:6] if name_contains else []
     if name_tokens:
         conditions = " && ".join(f'CONTAINS(LCASE(?name), LCASE("{t}"))' for t in name_tokens)
-        name_pattern = (
-            "  ?protein up:recommendedName/up:fullName ?name .\n"
-            f"  FILTER({conditions})"
-        )
+        name_pattern = f"  ?protein up:recommendedName/up:fullName ?name .\n  FILTER({conditions})"
     else:
         name_pattern = "  OPTIONAL { ?protein up:recommendedName/up:fullName ?name }"
 

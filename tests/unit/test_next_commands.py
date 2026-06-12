@@ -100,3 +100,19 @@ def test_recovery_excludes_mangled_accession() -> None:
     assert looks_like_gene_symbol("G6PD")
     assert looks_like_gene_symbol("TP53")
     assert not looks_like_gene_symbol("Q96T60XYZ")
+
+
+def test_after_find_proteins_batch_fans_out_to_top_hits() -> None:
+    from uniprot_link.mcp.next_commands import after_find_proteins_batch
+
+    nxt = after_find_proteins_batch({"PNKP": ["Q96T60"], "NAA10": ["P41227"]})
+    accs = [c["arguments"]["accession"] for c in nxt]
+    assert "Q96T60" in accs and "P41227" in accs
+    assert all(c["tool"] == "get_protein" for c in nxt)
+
+
+def test_after_find_proteins_batch_empty_points_to_examples() -> None:
+    from uniprot_link.mcp.next_commands import after_find_proteins_batch
+
+    nxt = after_find_proteins_batch({"ZZZ": []})
+    assert nxt[0]["tool"] == "search_example_queries"

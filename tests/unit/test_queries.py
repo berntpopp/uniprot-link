@@ -154,9 +154,7 @@ class TestFindProteins:
 
     def test_name_contains_multiword_ands_each_token(self) -> None:
         """F6: 'polynucleotide kinase' must match 'polynucleotide phosphatase/kinase'."""
-        query = q.find_proteins(
-            organism_taxon=9606, name_contains="polynucleotide kinase"
-        )
+        query = q.find_proteins(organism_taxon=9606, name_contains="polynucleotide kinase")
         # each whitespace token becomes its own CONTAINS, AND-ed together
         assert query.count("CONTAINS(LCASE(?name)") == 2
         assert "&&" in query

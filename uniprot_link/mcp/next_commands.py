@@ -77,6 +77,19 @@ def after_find_proteins(accessions: list[str]) -> list[dict[str, Any]]:
     ]
 
 
+def after_find_proteins_batch(by_gene: dict[str, list[str]]) -> list[dict[str, Any]]:
+    """After a batch resolve: pull each resolved gene's top entry (cap 3).
+
+    Fans out to get_protein on the first (reviewed-first) accession per gene so a
+    "domains for GENE1 and GENE2" task chains straight into the entries; if
+    nothing resolved, point at the example catalog.
+    """
+    firsts = [accs[0] for accs in by_gene.values() if accs]
+    if not firsts:
+        return [cmd("search_example_queries", text="protein")]
+    return [cmd("get_protein", accession=acc) for acc in firsts[:3]]
+
+
 def after_get_protein(
     accession: str,
     *,

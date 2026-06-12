@@ -65,7 +65,7 @@ async def test_tools_resource_lists_all_with_signatures() -> None:
     mcp = create_uniprot_mcp()
     payload = json.loads(await _read(mcp, "uniprot://tools"))
     names = {t["name"] for t in payload["tools"]}
-    assert len(names) == 14
+    assert len(names) == 15
     fp = next(t for t in payload["tools"] if t["name"] == "find_proteins")
     assert fp["signature"].startswith("find_proteins(gene=, organism_taxon=")
     assert fp["summary"]  # one-line summary present
