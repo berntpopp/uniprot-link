@@ -218,6 +218,30 @@ class TestProteinQueries:
         query = q.protein_cross_references("P05067", ["PDB"])
         assert "database/PDB>" in query
 
+    def test_features_strips_isoform_suffix(self) -> None:
+        """F1: an isoform accession must anchor on the BASE entry (features are entry-level)."""
+        query = q.protein_features("P05067-2", ["domain"])
+        assert "uniprotkb:P05067 up:annotation" in query
+        assert "P05067-2" not in query
+
+    def test_cross_references_strips_isoform_suffix(self) -> None:
+        """F1-twin: xref/map must anchor on the BASE entry for an isoform accession."""
+        query = q.protein_cross_references("P05067-2")
+        assert "uniprotkb:P05067 rdfs:seeAlso" in query
+        assert "P05067-2" not in query
+
+    def test_go_terms_strips_isoform_suffix(self) -> None:
+        """F1-twin: GO terms must anchor on the BASE entry for an isoform accession."""
+        query = q.protein_go_terms("P05067-2")
+        assert "uniprotkb:P05067 up:classifiedWith" in query
+        assert "P05067-2" not in query
+
+    def test_sequence_anchors_on_base_for_isoform(self) -> None:
+        """F2: the sequence query anchors on the base entry so isoforms are returned."""
+        query = q.protein_sequence("P05067-2")
+        assert "uniprotkb:P05067 up:sequence" in query
+        assert "uniprotkb:P05067-2" not in query
+
     def test_protein_diseases_includes_mim(self) -> None:
         query = q.protein_diseases("P38398")
         assert "?mim" in query

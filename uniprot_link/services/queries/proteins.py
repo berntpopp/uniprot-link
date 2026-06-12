@@ -218,8 +218,13 @@ LIMIT 1"""
 
 
 def protein_sequence(accession: str) -> str:
-    """Build a SELECT for an entry's sequence(s) (canonical + isoforms)."""
-    acc = validate_accession(accession)
+    """Build a SELECT for an entry's sequence(s) (canonical + isoforms).
+
+    Anchors on the base entry so an isoform accession (``P05067-2``) still returns
+    the full isoform set; the service then selects the requested isoform's specific
+    sequence (F2 — anchoring on the isoform IRI returned no rows -> not_found).
+    """
+    acc = validate_accession(accession).split("-")[0]
     return f"""{prefix_block()}
 SELECT ?isoform (STRLEN(?value) AS ?length) ?mass ?value
 WHERE {{
@@ -242,8 +247,12 @@ def protein_features(
 
     ``limit`` only changes the trailing LIMIT integer (not the join shape), so it
     does not alter QLever's plan; the service clamps it to [1, 1000].
+
+    Features are entry-level: an isoform accession (``P05067-2``) is normalised to
+    the base entry so the anchor is real (F1 — anchoring on the isoform IRI matched
+    no annotations and silently returned 0 features).
     """
-    acc = validate_accession(accession)
+    acc = validate_accession(accession).split("-")[0]
     if feature_types:
         classes: list[str] = []
         for ft in feature_types:
@@ -360,8 +369,12 @@ ORDER BY ?diseaseLabel"""
 
 
 def protein_cross_references(accession: str, databases: list[str] | None = None) -> str:
-    """Build a SELECT for cross-references grouped by database."""
-    acc = validate_accession(accession)
+    """Build a SELECT for cross-references grouped by database.
+
+    Cross-references are entry-level: an isoform accession is normalised to the
+    base entry (F1-twin — the isoform IRI carries no ``rdfs:seeAlso`` xrefs).
+    """
+    acc = validate_accession(accession).split("-")[0]
     db_filter = ""
     if databases:
         values = " ".join(
@@ -391,8 +404,11 @@ def protein_go_terms(accession: str) -> str:
     returns empty on QLever (verified live on P04637: GROUP BY drops the
     evidence) — a sharp edge. One row per (term, evidence) is emitted instead;
     the row count stays small (P04637: 216 rows / 173 terms).
+
+    GO annotations are entry-level: an isoform accession is normalised to the base
+    entry (F1-twin — the isoform IRI carries no ``up:classifiedWith`` GO terms).
     """
-    acc = validate_accession(accession)
+    acc = validate_accession(accession).split("-")[0]
     return f"""{prefix_block()}
 PREFIX obo: <http://purl.obolibrary.org/obo/>
 SELECT ?go ?label ?aspect ?eco
