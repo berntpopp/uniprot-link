@@ -4,6 +4,66 @@ All notable changes to uniprot-link are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/) and the project uses semantic
 versioning.
 
+## [0.4.0] - 2026-06-12
+
+An assessment-driven uplift closing the 12 residual bugs from the v0.3.0
+re-assessment plus token-efficiency, latency, and consistency gaps. Targets
+>9.5/10 on the LLM-consumer rubric.
+
+### Added
+
+- **Structured output (MCP 2025-06-18).** All 14 tools declare an `output_schema`,
+  so clients receive validated `structuredContent` alongside the back-compat
+  serialized `TextContent` JSON.
+- **GO evidence codes.** `get_protein_go_terms` now returns ECO `evidence` ids and
+  mapped GO `evidence_codes` (IDA/IEA/IMP/...) per term, for citation. (Bug 10)
+- **Disease definitions.** `get_protein_diseases` returns the clinical `definition`
+  (the disease vocabulary's own description) and `mnemonic`, distinct from the
+  entry-specific `involvement` note (was a single boilerplate `description`). (Bug 9)
+- **`request_id`** on every response `_meta` (success and error) for multi-call
+  correlation.
+- Structured error fields: `allowed_values`, `field`, `hint` are surfaced as
+  top-level keys (never truncated in the message). (Bug 2)
+
+### Changed
+
+- **`find_proteins` latency.** Reviewed-first two-phase query with no pre-LIMIT
+  global `ORDER BY` (the hotspot); pages are sorted by mnemonic in Python. Broad
+  keyword default page drops from ~8.7s toward ~3s; selective anchors stay
+  sub-second. (Improvement #3)
+- **`get_protein_sequence` compact** returns a first/last-30-residue
+  `sequence_preview` (not the full string); use `standard`/`full` for the complete
+  sequence. (Bug 6)
+- **Token diet.** Per-call `_meta` drops the static `endpoint`; `next_commands`
+  trimmed to the top 2 and made content-aware (a zero-count tool points home).
+- `get_taxon` by-name now reports `elapsed_ms`/`cached`, includes `rank`, and emits
+  `next_commands` (id detail + protein search). (Bug 5)
+- Every error envelope now carries `next_commands` (default recovery when no
+  explicit fallback). (Bug 3)
+- `search_example_queries` de-duplicates example ids and ranks UniProt-native
+  examples above federated (Rhea) ones. (Bug 12)
+
+### Fixed
+
+- **`feature_types` round-trip.** The registry now includes the range-bearing
+  classes the dump also emits (`natural_variant`, `alternative_sequence`,
+  `sequence_conflict`); every returned `type` re-filters successfully. Unmapped
+  classes surface as `_unmapped:<Class>` rather than a friendly key the filter
+  would reject. (Bug 1)
+- Accession validation uses the official UniProtKB grammar, so malformed input
+  (e.g. `999999`) fails locally as `invalid_input` instead of round-tripping for a
+  404. (Bug 7)
+- `get_protein` not-found recovery no longer replays a non-gene accession as
+  `find_proteins(gene=...)`. (Bug 8)
+- `find_proteins` anchor hint names the real tool `run_sparql_query` (was
+  `sparql_query`). (Bug 4)
+- `run_sparql_query` empty-body 400s return a cause-oriented hint. (Bug 11)
+
+### Internal
+
+- `services/queries.py` split into a package (`validation`, `proteins`,
+  `taxonomy`, `examples`) to stay under the 600-line module cap.
+
 ## [0.3.0] - 2026-06-12
 
 ### Added
