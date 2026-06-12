@@ -39,9 +39,11 @@ class ArgValidationMiddleware(Middleware):
 
     async def _schema(self, context: MiddlewareContext[Any], name: str) -> dict[str, Any]:
         if name not in self._schema_cache:
-            server = context.fastmcp_context.fastmcp
-            tool = await server.get_tool(name)
-            self._schema_cache[name] = dict(tool.parameters or {})
+            fctx = context.fastmcp_context
+            if fctx is None:
+                raise RuntimeError("no fastmcp context")
+            tool = await fctx.fastmcp.get_tool(name)
+            self._schema_cache[name] = dict(getattr(tool, "parameters", None) or {})
         return self._schema_cache[name]
 
     async def on_call_tool(
