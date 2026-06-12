@@ -15,8 +15,8 @@ from uniprot_link.exceptions import InvalidInputError, NotFoundError, ObsoleteEn
 from uniprot_link.services import queries as Q
 from uniprot_link.services import shaping as S
 from uniprot_link.services.constants import (
-    COMMON_XREF_DATABASES,
     FEATURE_TYPES,
+    MAP_IDENTIFIER_DATABASES,
     UNIPROT_RELEASE,
     lookup_common_taxon,
 )
@@ -454,13 +454,14 @@ class SparqlService:
         databases: list[str] | None = None,
         response_mode: str = "compact",
     ) -> dict[str, Any]:
-        """Map a UniProt accession to a curated set of external id databases.
+        """Map a UniProt accession to its primary external identifiers.
 
-        Unlike get_cross_references (every xref database), map_identifiers focuses
-        on primary id-mapping targets by default (COMMON_XREF_DATABASES) so the
-        payload is small and mapping-oriented; pass ``databases`` to override.
+        Unlike get_cross_references (every xref database, incl. drug/disease
+        associations), map_identifiers defaults to the genomic/structural/family
+        identifier core (MAP_IDENTIFIER_DATABASES) so the payload is small and
+        mapping-oriented; pass ``databases`` to override.
         """
-        effective = list(databases or COMMON_XREF_DATABASES)
+        effective = list(databases or MAP_IDENTIFIER_DATABASES)
         result = await self.get_cross_references(accession, effective, response_mode)
         result["requested_databases"] = effective
         result["mapped_databases"] = list(result["by_database"].keys())

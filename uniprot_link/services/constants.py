@@ -194,6 +194,23 @@ COMMON_XREF_DATABASES = [
     "DrugBank",
 ]
 
+# Focused primary id-mapping targets (genomic / structural / protein-family
+# identifiers). map_identifiers defaults to this set so it is genuinely distinct
+# from the exhaustive get_protein_cross_references (which keeps the
+# drug/disease-association DBs such as DrugBank, ChEMBL, OpenTargets, DisGeNET).
+MAP_IDENTIFIER_DATABASES = [
+    "PDB",
+    "AlphaFoldDB",
+    "Ensembl",
+    "RefSeq",
+    "GeneID",
+    "HGNC",
+    "KEGG",
+    "OrthoDB",
+    "Pfam",
+    "InterPro",
+]
+
 # Feature annotation classes commonly requested via get_protein_features.
 FEATURE_TYPES: dict[str, str] = {
     "domain": "Domain_Extent_Annotation",

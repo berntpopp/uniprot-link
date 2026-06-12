@@ -496,9 +496,9 @@ async def test_run_sparql_query_error_offers_examples_fallback() -> None:
 
 
 @pytest.mark.asyncio
-async def test_map_identifiers_defaults_to_curated_dbs(service_factory: Any) -> None:
+async def test_map_identifiers_defaults_to_primary_id_set(service_factory: Any) -> None:
     from tests.conftest import make_select_json
-    from uniprot_link.services.constants import COMMON_XREF_DATABASES
+    from uniprot_link.services.constants import MAP_IDENTIFIER_DATABASES
 
     body = make_select_json(
         ["db", "database", "xref"],
@@ -512,8 +512,9 @@ async def test_map_identifiers_defaults_to_curated_dbs(service_factory: Any) -> 
     )
     service = service_factory([("rdfs:seeAlso", body), ("up:obsolete ?obsolete", _ACTIVE_STATUS)])
     res = await service.map_identifiers("P38398")
-    assert res["requested_databases"] == COMMON_XREF_DATABASES
+    assert res["requested_databases"] == MAP_IDENTIFIER_DATABASES
     assert "by_database" in res and "mapped_databases" in res
+    assert "DrugBank" not in MAP_IDENTIFIER_DATABASES  # drug/disease DBs stay in cross-refs
 
 
 @pytest.mark.asyncio

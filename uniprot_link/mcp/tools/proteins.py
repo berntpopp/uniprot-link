@@ -371,12 +371,14 @@ def _register_annotations(mcp: FastMCP) -> None:
         annotations=READ_ONLY_OPEN_WORLD,
         tags={"protein", "xref", "mapping"},
         description=(
-            "Map a UniProtKB accession to external database identifiers (PDB, "
-            "Ensembl, RefSeq, HGNC, GeneID, KEGG, Reactome, ...). Optionally restrict "
-            "to specific databases. Returns ids grouped by database plus the list of "
-            "databases that had a match. response_mode (default compact) returns "
-            "short ids; full restores raw IRIs. "
-            "Defaults to primary id-mapping databases (PDB, Ensembl, RefSeq, HGNC, ...); for the exhaustive xref list use get_protein_cross_references."
+            "Map a UniProtKB accession to its PRIMARY external identifiers: the "
+            "genomic/structural/family core (PDB, AlphaFoldDB, Ensembl, RefSeq, "
+            "GeneID, HGNC, KEGG, OrthoDB, Pfam, InterPro) by default. Optionally "
+            "restrict to specific databases. Returns ids grouped by database plus "
+            "the databases that matched and per-database counts. response_mode "
+            "(default compact) returns short ids; full restores raw IRIs. For the "
+            "exhaustive cross-reference set (incl. drug/disease databases like "
+            "DrugBank/ChEMBL/OpenTargets) use get_protein_cross_references instead."
         ),
     )
     async def map_identifiers(
