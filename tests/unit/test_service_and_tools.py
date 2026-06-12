@@ -215,6 +215,67 @@ async def test_get_features_zero_match_echoes_accepted_keys(service_factory: Any
 
 
 @pytest.mark.asyncio
+async def test_features_isoform_returns_base_features_with_note(service_factory: Any) -> None:
+    """F1: an isoform accession returns the entry's features + an isoform note, never silent-empty."""
+    status = make_select_json(
+        ["obsolete", "isoform_exists"], [{"obsolete": False, "isoform_exists": True}]
+    )
+    feats = make_select_json(
+        ["type", "begin", "end", "comment"],
+        [
+            {
+                "type": "http://purl.uniprot.org/core/Domain_Extent_Annotation",
+                "begin": 1,
+                "end": 9,
+                "comment": "d",
+            }
+        ],
+    )
+    svc = service_factory([("up:obsolete ?obsolete", status), ("up:range", feats)])
+    res = await svc.get_features("P05067-2", ["domain"])
+    assert res["accession"] == "P05067"
+    assert res["count"] == 1
+    assert res["requested_accession"] == "P05067-2"
+    assert "isoform_note" in res
+
+
+@pytest.mark.asyncio
+async def test_features_bogus_isoform_is_not_found(service_factory: Any) -> None:
+    """F1: a typo'd isoform index is rejected (never canonical data under a wrong label)."""
+    status = make_select_json(
+        ["obsolete", "isoform_exists"], [{"obsolete": False, "isoform_exists": False}]
+    )
+    svc = service_factory(
+        [("up:obsolete ?obsolete", status), ("up:range", make_select_json([], []))]
+    )
+    with pytest.raises(NotFoundError):
+        await svc.get_features("P05067-99", ["domain"])
+
+
+@pytest.mark.asyncio
+async def test_entry_tools_isoform_note_is_family_wide(service_factory: Any) -> None:
+    """F1: diseases/go/xref also echo a valid isoform request consistently."""
+    status = make_select_json(
+        ["obsolete", "isoform_exists"], [{"obsolete": False, "isoform_exists": True}]
+    )
+    disease_body = make_select_json(
+        ["disease", "diseaseLabel", "comment"],
+        [
+            {
+                "disease": "http://purl.uniprot.org/diseases/100",
+                "diseaseLabel": "Example disease",
+                "comment": "involvement",
+            }
+        ],
+    )
+    svc = service_factory([("up:obsolete ?obsolete", status), ("Disease_Annotation", disease_body)])
+    res = await svc.get_diseases("P05067-2")
+    assert res["accession"] == "P05067"
+    assert res["requested_accession"] == "P05067-2"
+    assert "isoform_note" in res
+
+
+@pytest.mark.asyncio
 async def test_typed_tools_report_elapsed_ms_and_cached(service_factory: Any) -> None:
     routes = [
         ("up:obsolete ?obsolete", _ACTIVE_STATUS),

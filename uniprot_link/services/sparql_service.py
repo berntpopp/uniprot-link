@@ -23,6 +23,7 @@ from uniprot_link.services.service_base import (
     _FEATURE_FETCH_CAP,
     _sort_by_mnemonic,
     _window_sequence,
+    attach_isoform_context,
 )
 from uniprot_link.services.service_taxonomy import TaxonomyServiceMixin
 
@@ -300,12 +301,14 @@ class SparqlService(TaxonomyServiceMixin):
             **qmeta,
         }
 
-    async def require_entry(self, accession: str) -> None:
-        """Gate annotation lookups: raise on absent or obsolete entries (cached).
+    async def require_entry(self, accession: str) -> S.EntryStatus:
+        """Gate annotation lookups: raise on absent/obsolete/typo'd-isoform; return status.
 
         Obsolete entries retain ``a up:Protein`` so a bare existence check passes
-        them through; entry_status separates active / obsolete / absent and lets
-        the whole tool family emit one consistent obsolete signal (F-OBS).
+        them through; entry_status separates active / obsolete / absent and (for an
+        accession carrying a ``-N`` suffix) whether that isoform is real -- so the
+        whole tool family rejects a bogus isoform consistently (F1) and emits one
+        obsolete signal (F-OBS).
         """
         status = S.shape_entry_status(await self._select(Q.entry_status(accession)), accession)
         if not status.exists:
@@ -317,6 +320,13 @@ class SparqlService(TaxonomyServiceMixin):
             raise ObsoleteEntryError(
                 Q.validate_accession(accession).split("-")[0], status.replaced_by
             )
+        if status.isoform_exists is False:
+            base = Q.validate_accession(accession).split("-")[0]
+            raise NotFoundError(
+                f"No isoform '{accession}' exists for entry {base}. "
+                "Call get_protein_sequence to list the entry's isoforms."
+            )
+        return status
 
     async def get_features(
         self,
@@ -390,7 +400,7 @@ class SparqlService(TaxonomyServiceMixin):
                     "arguments": {"accession": acc, "feature_types": ["domain", "region"]},
                 },
             }
-        return payload
+        return attach_isoform_context(payload, accession, acc)
 
     async def get_variants(
         self, accession: str, limit: int = 200, disease_associated_only: bool = False
@@ -422,7 +432,7 @@ class SparqlService(TaxonomyServiceMixin):
                 "recovery": "raise `limit`, or set disease_associated_only=true to focus on "
                 "disease-linked variants.",
             }
-        return payload
+        return attach_isoform_context(payload, accession, acc)
 
     async def get_diseases(self, accession: str) -> dict[str, Any]:
         """Return disease annotations."""
@@ -432,7 +442,11 @@ class SparqlService(TaxonomyServiceMixin):
         )
         diseases = S.shape_diseases(data_json)
         acc = Q.validate_accession(accession).split("-")[0]
-        return {"accession": acc, "count": len(diseases), "diseases": diseases, **qmeta}
+        return attach_isoform_context(
+            {"accession": acc, "count": len(diseases), "diseases": diseases, **qmeta},
+            accession,
+            acc,
+        )
 
     async def get_cross_references(
         self,
@@ -474,7 +488,7 @@ class SparqlService(TaxonomyServiceMixin):
                 if did_you_mean:
                     hint["did_you_mean"] = did_you_mean
                 payload["database_hint"] = hint
-        return payload
+        return attach_isoform_context(payload, accession, acc)
 
     async def get_go_terms(
         self, accession: str, aspect: str | None = None, limit: int = 0
@@ -487,7 +501,9 @@ class SparqlService(TaxonomyServiceMixin):
         grouped = S.shape_go_terms(data_json)
         projected = S.project_go_terms(grouped, aspect=aspect, limit=max(0, int(limit)))
         acc = Q.validate_accession(accession).split("-")[0]
-        return {"accession": acc, **projected, **qmeta}
+        return attach_isoform_context(
+            {"accession": acc, **projected, **qmeta}, accession, acc
+        )
 
     async def map_identifiers(
         self,

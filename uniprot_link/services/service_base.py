@@ -42,6 +42,27 @@ def _sort_by_mnemonic(proteins: list[dict[str, Any]]) -> list[dict[str, Any]]:
     )
 
 
+def attach_isoform_context(
+    payload: dict[str, Any], requested: str, base_acc: str
+) -> dict[str, Any]:
+    """Annotate an entry-level payload when the caller passed a valid isoform suffix.
+
+    Entry annotations (features/variants/diseases/go/xref/map) are reported at the
+    canonical-entry level; when the request carried a real ``-N`` isoform suffix we
+    echo it under ``requested_accession`` and add an ``isoform_note``, matching
+    ``get_protein``'s model (F1). The caller validates the isoform exists first
+    (via ``require_entry``), so this only fires for genuine isoforms. A pure case
+    difference (``p05067`` -> ``P05067``) normalises silently and is not echoed.
+    """
+    if requested.strip().upper() != base_acc:
+        payload["requested_accession"] = requested
+        payload["isoform_note"] = (
+            f"Annotations are reported at the canonical-entry level for {base_acc}; "
+            f"the requested isoform {requested} maps to this entry."
+        )
+    return payload
+
+
 def _window_sequence(seq: dict[str, Any]) -> dict[str, Any]:
     """Replace a full sequence string with a first/last-N preview (compact mode).
 
