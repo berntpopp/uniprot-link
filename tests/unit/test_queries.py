@@ -101,6 +101,15 @@ class TestFindProteins:
         with pytest.raises(InvalidInputError):
             q.find_proteins(reviewed=True)
 
+    def test_anchor_error_names_real_tool(self) -> None:
+        with pytest.raises(InvalidInputError) as exc:
+            q.find_proteins()
+        assert "run_sparql_query" in exc.value.message
+        # every "sparql_query" mention is part of "run_sparql_query" (no bare typo)
+        assert exc.value.message.count("sparql_query") == exc.value.message.count(
+            "run_sparql_query"
+        )
+
     def test_gene_anchor_builds(self) -> None:
         query = q.find_proteins(gene="BRCA1", organism_taxon=9606)
         assert "up:encodedBy" in query

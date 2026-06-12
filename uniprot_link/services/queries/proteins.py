@@ -86,7 +86,7 @@ def find_proteins(
         raise InvalidInputError(
             "find_proteins needs at least one of: gene, mnemonic, ec_number, keyword "
             "(or organism_taxon together with name_contains). For broad text search use "
-            "sparql_query or search_example_queries.",
+            "run_sparql_query or search_example_queries.",
             field="filters",
         )
 
