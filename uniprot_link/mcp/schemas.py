@@ -70,7 +70,9 @@ PROTEIN_SCHEMA = _envelope(
 
 SEQUENCE_SCHEMA = _envelope(accession=_STR, canonical=_OBJ, isoform_count=_INT, isoforms=_ARR)
 
-FEATURES_SCHEMA = _envelope(accession=_STR, count=_INT, features=_ARR, filter_hint=_OBJ)
+FEATURES_SCHEMA = _envelope(
+    accession=_STR, count=_INT, features=_ARR, filter_hint=_OBJ, truncated=_OBJ
+)
 
 VARIANTS_SCHEMA = _envelope(accession=_STR, count=_INT, variants=_ARR, truncated=_OBJ)
 

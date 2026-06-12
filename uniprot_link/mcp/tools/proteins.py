@@ -216,9 +216,12 @@ def _register_sequence_and_features(mcp: FastMCP) -> None:
             list[str] | None,
             Field(description="Feature-type keys to keep (omit for all)."),
         ] = None,
+        limit: Annotated[
+            int, Field(description="Max features to return (default 200).", ge=1, le=1000)
+        ] = 200,
     ) -> dict[str, Any]:
         async def call() -> dict[str, Any]:
-            payload = await get_sparql_service().get_features(accession, feature_types)
+            payload = await get_sparql_service().get_features(accession, feature_types, limit)
             nxt = after_entry_subresource(
                 payload["accession"], "get_protein_features", count=payload.get("count")
             )

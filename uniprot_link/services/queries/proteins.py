@@ -228,13 +228,18 @@ WHERE {{
 ORDER BY ?isoform"""
 
 
-def protein_features(accession: str, feature_types: list[str] | None = None) -> str:
+def protein_features(
+    accession: str, feature_types: list[str] | None = None, limit: int = 1000
+) -> str:
     """Build a SELECT for sequence features with FALDO coordinates.
 
     A ``feature_types`` filter binds ``?type`` via ``VALUES`` *before* matching
     ``?a a ?type`` — a bound join. The earlier ``?a a ?type . FILTER(?type IN …)``
     form materialised every annotation's rdf:type (including superclasses) and
     was ~5x slower on QLever (e.g. 11s vs 2s for a single domain filter).
+
+    ``limit`` only changes the trailing LIMIT integer (not the join shape), so it
+    does not alter QLever's plan; the service clamps it to [1, 1000].
     """
     acc = validate_accession(accession)
     if feature_types:
@@ -267,7 +272,7 @@ WHERE {{
   OPTIONAL {{ ?a rdfs:comment ?comment }}{type_guard}
 }}
 ORDER BY ?begin
-LIMIT 1000"""
+LIMIT {limit}"""
 
 
 def protein_variants(

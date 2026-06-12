@@ -329,6 +329,27 @@ async def test_cross_references_short_by_default_full_on_request(service_factory
 
 
 @pytest.mark.asyncio
+async def test_features_limit_truncates(service_factory: Any) -> None:
+    feats = make_select_json(
+        ["type", "begin", "end", "comment"],
+        [
+            {
+                "type": "http://purl.uniprot.org/core/Domain_Extent_Annotation",
+                "begin": i,
+                "end": i + 1,
+                "comment": "d",
+            }
+            for i in range(5)
+        ],
+    )
+    routes = [("up:obsolete ?obsolete", _ACTIVE_STATUS), ("up:range", feats)]
+    svc = service_factory(routes)
+    res = await svc.get_features("P05067", limit=3)
+    assert res["count"] == 3
+    assert res["truncated"]["total"] >= 3
+
+
+@pytest.mark.asyncio
 async def test_go_terms_aspect_filter_limit_and_counts(service_factory: Any) -> None:
     rows_ = [
         {

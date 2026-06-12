@@ -336,14 +336,19 @@ class SparqlService:
             )
 
     async def get_features(
-        self, accession: str, feature_types: list[str] | None = None
+        self,
+        accession: str,
+        feature_types: list[str] | None = None,
+        limit: int = 200,
     ) -> dict[str, Any]:
-        """Return sequence features with coordinates."""
-        query = Q.protein_features(accession, feature_types)
+        """Return sequence features with coordinates (token-lean via limit)."""
+        limit = Q.clamp_limit(limit, default=200, maximum=1000)
+        query = Q.protein_features(accession, feature_types, limit=limit)
         _, (data_json, qmeta) = await asyncio.gather(
             self.require_entry(accession), self._select_timed(query)
         )
-        features = S.shape_features(data_json)
+        all_features = S.shape_features(data_json)
+        features = all_features[:limit]
         acc = Q.validate_accession(accession).split("-")[0]
         payload: dict[str, Any] = {
             "accession": acc,
@@ -351,6 +356,12 @@ class SparqlService:
             "features": features,
             **qmeta,
         }
+        if len(all_features) >= limit:
+            payload["truncated"] = {
+                "reason": f"limit {limit} reached",
+                "total": len(all_features),
+                "recovery": "raise `limit` or pass feature_types to narrow.",
+            }
         if feature_types and not features:
             payload["filter_hint"] = {
                 "message": "No features matched the requested types for this entry.",
