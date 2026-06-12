@@ -305,20 +305,33 @@ LIMIT 2000"""
 
 
 def protein_go_terms(accession: str) -> str:
-    """Build a SELECT for Gene Ontology annotations grouped by aspect root."""
+    """Build a SELECT for Gene Ontology annotations with ECO evidence.
+
+    Evidence is reified: a statement (subject=entry, predicate=up:classifiedWith,
+    object=?go) carries ``up:attribution``/``up:evidence`` to an ECO IRI. The
+    evidence join is OPTIONAL so terms without a statement still appear.
+
+    NOTE: aggregation is done in Python (``shape_go_terms``), NOT via SPARQL
+    GROUP_CONCAT. A ``GROUP_CONCAT(DISTINCT ?eco)`` over this reified OPTIONAL
+    returns empty on QLever (verified live on P04637: GROUP BY drops the
+    evidence) — a sharp edge. One row per (term, evidence) is emitted instead;
+    the row count stays small (P04637: 216 rows / 173 terms).
+    """
     acc = validate_accession(accession)
     return f"""{prefix_block()}
 PREFIX obo: <http://purl.obolibrary.org/obo/>
-SELECT ?go ?label ?aspect
+SELECT ?go ?label ?aspect ?eco
 WHERE {{
   uniprotkb:{acc} up:classifiedWith ?go .
   FILTER(STRSTARTS(STR(?go), "http://purl.obolibrary.org/obo/GO_"))
   OPTIONAL {{ ?go rdfs:label ?label }}
   OPTIONAL {{ ?go rdfs:subClassOf ?aspect .
              FILTER(?aspect IN (obo:GO_0008150, obo:GO_0003674, obo:GO_0005575)) }}
+  OPTIONAL {{ ?st rdf:subject uniprotkb:{acc} ; rdf:predicate up:classifiedWith ;
+                 rdf:object ?go ; up:attribution ?attr . ?attr up:evidence ?eco }}
 }}
 ORDER BY ?aspect ?label
-LIMIT 1000"""
+LIMIT 2000"""
 
 
 def map_identifiers(accession: str, databases: list[str] | None = None) -> str:

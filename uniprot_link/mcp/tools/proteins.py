@@ -311,7 +311,8 @@ def _register_annotations(mcp: FastMCP) -> None:
         description=(
             "Return Gene Ontology annotations for an entry, grouped by aspect "
             "(biological_process / molecular_function / cellular_component) where "
-            "available, each with GO id and label."
+            "available, each with GO id, label, and (when annotated) ECO `evidence` "
+            "ids plus mapped GO `evidence_codes` (IDA/IEA/IMP/...) for citation."
         ),
     )
     async def get_protein_go_terms(accession: _ACC) -> dict[str, Any]:

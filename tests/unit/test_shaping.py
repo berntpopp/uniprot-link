@@ -392,3 +392,41 @@ def test_shape_diseases_splits_involvement_and_definition() -> None:
     assert out[0]["mnemonic"] == "AOA4"
     assert out[0]["mim"] == "616267"
     assert out[0]["disease"] == "Ataxia-oculomotor apraxia 4"
+
+
+def test_shape_go_terms_includes_and_merges_evidence() -> None:
+    # Two rows for the same GO term with different ECO codes -> merged, deduped.
+    body = make_select_json(
+        ["go", "label", "aspect", "eco"],
+        [
+            {
+                "go": "http://purl.obolibrary.org/obo/GO_0006303",
+                "label": "double-strand break repair via NHEJ",
+                "aspect": "http://purl.obolibrary.org/obo/GO_0008150",
+                "eco": "http://purl.obolibrary.org/obo/ECO_0000314",
+            },
+            {
+                "go": "http://purl.obolibrary.org/obo/GO_0006303",
+                "label": "double-strand break repair via NHEJ",
+                "aspect": "http://purl.obolibrary.org/obo/GO_0008150",
+                "eco": "http://purl.obolibrary.org/obo/ECO_0000501",
+            },
+            {
+                "go": "http://purl.obolibrary.org/obo/GO_0005634",
+                "label": "nucleus",
+                "aspect": "http://purl.obolibrary.org/obo/GO_0005575",
+                "eco": "",
+            },
+        ],
+    )
+    out = S.shape_go_terms(body)
+    bp = out["biological_process"]
+    assert len(bp) == 1  # the two evidence rows merged into one term
+    term = bp[0]
+    assert term["id"] == "GO:0006303"
+    assert set(term["evidence"]) == {"ECO:0000314", "ECO:0000501"}
+    assert "IDA" in term["evidence_codes"] and "IEA" in term["evidence_codes"]
+    # a term with no evidence omits the evidence keys
+    cc = out["cellular_component"][0]
+    assert cc["id"] == "GO:0005634"
+    assert "evidence" not in cc

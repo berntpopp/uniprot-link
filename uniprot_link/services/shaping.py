@@ -4,7 +4,12 @@ from __future__ import annotations
 
 from typing import Any
 
-from uniprot_link.services.constants import FEATURE_CLASS_TO_KEY, GO_ASPECT_ROOTS, PREFIXES
+from uniprot_link.services.constants import (
+    ECO_TO_GO_CODE,
+    FEATURE_CLASS_TO_KEY,
+    GO_ASPECT_ROOTS,
+    PREFIXES,
+)
 
 _UNIPROT_ACC_PREFIXES = (
     "http://purl.uniprot.org/uniprot/",
@@ -239,15 +244,38 @@ def shape_cross_references(
 
 def shape_go_terms(result_json: dict[str, Any] | None) -> dict[str, list[dict[str, Any]]]:
     """Group GO annotations into biological_process / molecular_function /
-    cellular_component via their top-level root class."""
+    cellular_component via their top-level root class.
+
+    Evidence arrives one row per (term, ECO) — it is aggregated here rather than
+    via SPARQL GROUP_CONCAT (a QLever sharp edge over the reified OPTIONAL). Each
+    term gains ``evidence`` (ECO ids) and ``evidence_codes`` (mapped GO codes)
+    when any evidence is present.
+    """
     grouped: dict[str, list[dict[str, Any]]] = {}
+    seen: dict[str, dict[str, Any]] = {}  # go id -> term dict (merge across rows)
     for row in rows(result_json):
         go = row.get("go", "")
+        go_id = local_name(go).replace("GO_", "GO:")
         root = local_name(row["aspect"]) if row.get("aspect") else ""
         bucket = GO_ASPECT_ROOTS.get(root, "unknown")
-        grouped.setdefault(bucket, []).append(
-            {"id": local_name(go).replace("GO_", "GO:"), "label": row.get("label")}
-        )
+        term = seen.get(go_id)
+        if term is None:
+            term = {"id": go_id, "label": row.get("label"), "_eco": []}
+            seen[go_id] = term
+            grouped.setdefault(bucket, []).append(term)
+        eco = row.get("eco")
+        if eco:
+            eco_id = local_name(eco)  # e.g. ECO_0000314
+            if eco_id not in term["_eco"]:
+                term["_eco"].append(eco_id)
+    # Finalise: turn the accumulator into public evidence fields.
+    for term in seen.values():
+        eco_ids: list[str] = term.pop("_eco")
+        if eco_ids:
+            term["evidence"] = [e.replace("ECO_", "ECO:") for e in eco_ids]
+            codes = [ECO_TO_GO_CODE[e] for e in eco_ids if e in ECO_TO_GO_CODE]
+            if codes:
+                term["evidence_codes"] = sorted(set(codes))
     return grouped
 
 

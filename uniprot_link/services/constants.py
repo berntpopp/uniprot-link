@@ -243,3 +243,25 @@ GO_ASPECT_ROOTS: dict[str, str] = {
     "GO_0003674": "molecular_function",
     "GO_0005575": "cellular_component",
 }
+
+# Common ECO evidence-ontology codes -> GO evidence code. UniProt GO annotations
+# carry an ECO IRI (e.g. ECO_0000314); these map the frequent ones to the
+# familiar three-letter GO codes. Unmapped ECO ids pass through as the raw id.
+ECO_TO_GO_CODE: dict[str, str] = {
+    "ECO_0000314": "IDA",
+    "ECO_0000316": "IGI",
+    "ECO_0000353": "IPI",
+    "ECO_0000315": "IMP",
+    "ECO_0000270": "IEP",
+    "ECO_0000250": "ISS",
+    "ECO_0000266": "ISO",
+    "ECO_0000247": "ISA",
+    "ECO_0000255": "ISM",
+    "ECO_0000318": "IBA",
+    "ECO_0000501": "IEA",
+    "ECO_0007669": "IEA",
+    "ECO_0000304": "TAS",
+    "ECO_0000303": "NAS",
+    "ECO_0000305": "IC",
+    "ECO_0000307": "ND",
+}
