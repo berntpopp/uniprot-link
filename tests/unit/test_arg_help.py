@@ -60,6 +60,23 @@ def test_normalize_ignores_alias_when_canonical_not_a_param() -> None:
     assert applied == []
 
 
+def test_query_alias_rewrites_to_text_on_search_tool() -> None:
+    """F6: search_example_queries accepts query=/q= for its `text` param."""
+    args, applied = normalize_alias_args(["text", "limit"], {"query": "disease"})
+    assert args == {"text": "disease"}
+    assert ("query", "text") in applied
+    args2, applied2 = normalize_alias_args(["text", "limit"], {"q": "disease"})
+    assert args2 == {"text": "disease"}
+    assert ("q", "text") in applied2
+
+
+def test_query_stays_query_on_run_sparql_tool() -> None:
+    """F6: where `query` is itself the canonical param, the alias is a no-op."""
+    args, applied = normalize_alias_args(["query", "result_format"], {"query": "SELECT ?s {}"})
+    assert args == {"query": "SELECT ?s {}"}  # canonical param untouched
+    assert applied == []
+
+
 def test_did_you_mean_prefers_alias_map() -> None:
     assert did_you_mean("organism", ["gene", "organism_taxon"]) == "organism_taxon"
 

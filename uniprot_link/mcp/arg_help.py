@@ -40,6 +40,11 @@ ARG_ALIASES: dict[str, str] = {
     "kw": "keyword",
     "query_string": "query",
     "sparql": "query",
+    # search_example_queries free-text (F6: a natural wrong guess). Resolves to
+    # `text` only where `text` is a real param; on run_sparql_query `query` is
+    # itself the canonical param, so normalize_alias_args leaves it untouched.
+    "query": "text",
+    "q": "text",
 }
 
 
