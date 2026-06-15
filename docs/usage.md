@@ -1,28 +1,22 @@
 # Usage
 
-## Connect Claude Desktop (stdio)
-
-Add to `claude_desktop_config.json`:
-
-```json
-{
-  "mcpServers": {
-    "uniprot-link": {
-      "command": "uv",
-      "args": ["--project", "/path/to/uniprot-link", "run", "python", "mcp_server.py"],
-      "env": { "UNIPROT_LINK_SPARQL__CONTACT_EMAIL": "you@example.org" }
-    }
-  }
-}
-```
-
-Restart Claude. The server exposes 15 tools and a `uniprot://capabilities` resource.
-
-## HTTP transport
+## Run the server (Streamable HTTP)
 
 ```bash
 make dev    # unified: REST on / and MCP (streamable-http) on /mcp, port 8000
+# or, directly:
+uniprot-link serve --transport unified --host 127.0.0.1 --port 8000
 curl http://127.0.0.1:8000/health
+```
+
+The server exposes 15 tools and a `uniprot://capabilities` resource at `/mcp`.
+
+## Connect an MCP client
+
+Point any Streamable-HTTP MCP client at the running `/mcp` endpoint:
+
+```bash
+claude mcp add --transport http uniprot-link --scope user http://127.0.0.1:8000/mcp
 ```
 
 ## Typical workflows

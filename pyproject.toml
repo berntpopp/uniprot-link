@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "uniprot-link"
-version = "1.0.0"
+version = "2.0.0"
 description = "MCP/API server that grounds protein research in the UniProt SPARQL endpoint"
 readme = "README.md"
 license = { text = "MIT" }
@@ -58,12 +58,10 @@ Repository = "https://github.com/berntpopp/uniprot-link"
 "Bug Tracker" = "https://github.com/berntpopp/uniprot-link/issues"
 
 [project.scripts]
-uniprot-link = "server:main"
-uniprot-link-mcp = "mcp_server:main"
+uniprot-link = "uniprot_link.cli:app"
 
 [tool.hatch.build.targets.wheel]
 packages = ["uniprot_link"]
-include = ["server.py", "mcp_server.py"]
 
 [tool.ruff]
 line-length = 100
@@ -87,7 +85,6 @@ line-ending = "lf"
 
 [tool.ruff.lint.per-file-ignores]
 "tests/**/*" = ["S101", "S104", "S110", "T20", "B011", "SIM105", "SIM108"]
-"mcp_server.py" = ["T20"]
 "scripts/**/*" = ["T20"]
 "research/**/*" = ["T20", "S"]
 

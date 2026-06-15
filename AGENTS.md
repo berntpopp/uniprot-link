@@ -72,9 +72,9 @@ Useful focused commands: `make install`, `make format`, `make lint`,
 
 ## File Size Discipline
 
-Hard cap: **600 lines per Python module** in `uniprot_link/`, `server.py`, and
-`mcp_server.py`. Enforced by `make lint-loc` (wired into `make ci-local`). Tests
-are exempt. Prefer cohesive splits by responsibility.
+Hard cap: **600 lines per Python module** in `uniprot_link/`. Enforced by
+`make lint-loc` (wired into `make ci-local`). Tests are exempt. Prefer cohesive
+splits by responsibility.
 
 ## UniProt Domain Notes
 

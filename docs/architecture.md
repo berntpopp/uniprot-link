@@ -6,7 +6,7 @@ parametrized SPARQL query, executes it, and shapes the result.
 
 ```
 MCP client (Claude, …)
-        │  JSON-RPC (stdio) or streamable-HTTP (/mcp)
+        │  streamable-HTTP (/mcp)
         ▼
 FastMCP facade  (uniprot_link/mcp/facade.py)
         │  @mcp.tool functions -> run_mcp_tool envelope
@@ -22,7 +22,7 @@ https://sparql.uniprot.org/sparql   (QLever, SPARQL 1.1, 21 named graphs)
 
 | Layer | Module | Responsibility |
 |---|---|---|
-| Transport | `server_manager.py`, `server.py`, `mcp_server.py` | unified / http / stdio boot |
+| CLI / Transport | `cli.py`, `server_manager.py` | `uniprot-link serve` → unified / http boot |
 | Host | `app.py` | FastAPI `/health` + `/` (thin) |
 | Facade | `mcp/facade.py` | build FastMCP, register tools + resources |
 | Tools | `mcp/tools/*` | typed tool signatures, `_meta.next_commands` |

@@ -106,9 +106,9 @@ class ServerSettings(BaseSettings):
     port: int = Field(default=8000, ge=1024, le=65535, description="Server port.")
     reload: bool = Field(default=False, description="Enable auto-reload in development.")
 
-    transport: Literal["unified", "http", "stdio"] = Field(
+    transport: Literal["unified", "http"] = Field(
         default="unified",
-        description="Server transport mode.",
+        description="Server transport mode (Streamable HTTP only).",
     )
     mcp_path: str = Field(default="/mcp", description="MCP endpoint path.")
 

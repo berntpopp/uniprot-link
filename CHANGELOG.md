@@ -4,6 +4,41 @@ All notable changes to uniprot-link are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/) and the project uses semantic
 versioning.
 
+## [2.0.0] - 2026-06-15
+
+Adopts the **GeneFoundry Logging & CLI Standard v1**
+([#2](https://github.com/berntpopp/uniprot-link/issues/2)). This is a front-end
+(CLI) change: the **MCP tool surface, services, and `/health`/`/mcp` endpoints are
+unchanged**, so the `genefoundry-router` gateway is unaffected. Pre-alpha — shipped
+as a breaking change with no shims/aliases.
+
+### Changed (BREAKING)
+
+- **CLI migrated from `argparse` to `typer`** (`uniprot_link/cli.py`): a single
+  `typer.Typer(no_args_is_help=True)` app with `rich` output and explicit
+  commands `serve` / `config` / `health` / `version`. There is **no bare-serve** —
+  the server now boots via `uniprot-link serve …`.
+- **Single console script** `uniprot-link = "uniprot_link.cli:app"`. The previous
+  `uniprot-link = "server:main"` and `uniprot-link-mcp = "mcp_server:main"` entry
+  points are removed, along with the root `server.py` and `mcp_server.py`.
+- **stdio transport removed** (Streamable HTTP only): dropped from the
+  `transport` config Literal, `UnifiedServerManager.start_stdio_server`, the
+  Docker image, and the docs. `/mcp` and `/health` are unchanged.
+
+### Confirmed
+
+- `uniprot_link/logging_config.py` confirmed on the fleet **structlog** canon
+  (byte-identical to the `mgi-link` reference): `filter_by_level →
+  add_logger_name → add_log_level → TimeStamper(iso) → StackInfoRenderer →
+  static fields`; JSON in prod / `ConsoleRenderer` in dev via `LOG_FORMAT`.
+
+### Migration
+
+- Replace `python server.py --transport unified …` (or the `uniprot-link` /
+  `uniprot-link-mcp` scripts) with **`uniprot-link serve --transport unified …`**.
+- The `stdio` transport is gone; connect MCP clients over Streamable HTTP at
+  `/mcp` (e.g. `claude mcp add --transport http uniprot-link <url>/mcp`).
+
 ## [1.0.0] - 2026-06-15
 
 Adopts the **GeneFoundry Tool-Naming & Normalization Standard v1**

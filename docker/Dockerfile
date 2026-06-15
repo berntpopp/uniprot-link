@@ -51,7 +51,11 @@ COPY --from=builder /opt/venv /opt/venv
 WORKDIR /home/app/web
 
 COPY --chown=app:app ./uniprot_link ./uniprot_link
-COPY --chown=app:app ./server.py ./mcp_server.py ./pyproject.toml ./README.md ./
+COPY --chown=app:app ./pyproject.toml ./README.md ./
+
+# Install the project itself (no deps -- already provided by the builder venv)
+# so the `uniprot-link` console script is on PATH.
+RUN pip install --no-deps .
 
 USER app
 
@@ -61,4 +65,4 @@ HEALTHCHECK --interval=30s --timeout=3s --start-period=20s --retries=3 \
     CMD curl -fsS http://127.0.0.1:8000/health || exit 1
 
 # Unified transport: FastAPI on / and MCP on /mcp via a single port.
-CMD ["python", "server.py", "--transport", "unified", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["uniprot-link", "serve", "--transport", "unified", "--host", "0.0.0.0", "--port", "8000"]
