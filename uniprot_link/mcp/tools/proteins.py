@@ -70,17 +70,17 @@ def _register_find_and_summary(mcp: FastMCP) -> None:
             "(matched per word, in any order, case-insensitive). "
             "Reviewed (Swiss-Prot) hits are ranked first. UniProt SPARQL has no "
             "general full-text index, so for broad text use search_example_queries "
-            "or run_sparql_query. Pair with get_protein for full detail. Results "
+            "or search_sparql_query. Pair with get_protein for full detail. Results "
             "are ordered reviewed-first, then by mnemonic, then accession (stable "
             "across pages). Cold search can take several seconds; an identical "
             "repeat is cached (~0 ms). If you already know the accession, call "
             "get_protein directly -- it is far faster than a cold search. "
-            "Signature: find_proteins(gene=, organism_taxon=, reviewed=, keyword=, "
+            "Signature: find_proteins(gene_symbol=, organism_taxon=, reviewed=, keyword=, "
             "ec_number=, mnemonic=, name_contains=, limit=, offset=)."
         ),
     )
     async def find_proteins(
-        gene: Annotated[str | None, Field(description="Gene symbol, e.g. BRCA1.")] = None,
+        gene_symbol: Annotated[str | None, Field(description="Gene symbol, e.g. BRCA1.")] = None,
         organism_taxon: Annotated[
             int | None, Field(description="NCBI taxon id, e.g. 9606 for human.", ge=1)
         ] = None,
@@ -111,7 +111,7 @@ def _register_find_and_summary(mcp: FastMCP) -> None:
         async def call() -> dict[str, Any]:
             service = get_sparql_service()
             payload = await service.find_proteins(
-                gene=gene,
+                gene=gene_symbol,
                 organism_taxon=organism_taxon,
                 reviewed=reviewed,
                 keyword=keyword,
@@ -129,7 +129,8 @@ def _register_find_and_summary(mcp: FastMCP) -> None:
             "find_proteins",
             call,
             context=McpErrorContext(
-                "find_proteins", fallback=cmd("search_example_queries", text=gene or "protein")
+                "find_proteins",
+                fallback=cmd("search_example_queries", text=gene_symbol or "protein"),
             ),
         )
 
@@ -150,12 +151,12 @@ def _register_find_and_summary(mcp: FastMCP) -> None:
             "scope by organism_taxon and reviewed. next_commands fan out to "
             "get_protein on each resolved gene's top hit. For a single gene use "
             "find_proteins. "
-            "Signature: find_proteins_batch(genes, organism_taxon=, reviewed=, "
+            "Signature: find_proteins_batch(gene_symbols, organism_taxon=, reviewed=, "
             "limit_per_gene=)."
         ),
     )
     async def find_proteins_batch(
-        genes: Annotated[
+        gene_symbols: Annotated[
             list[str],
             Field(
                 description="Gene symbols to resolve, e.g. ['PNKP','NAA10'].",
@@ -175,7 +176,7 @@ def _register_find_and_summary(mcp: FastMCP) -> None:
     ) -> dict[str, Any]:
         async def call() -> dict[str, Any]:
             payload = await get_sparql_service().find_proteins_batch(
-                genes, organism_taxon, reviewed, limit_per_gene
+                gene_symbols, organism_taxon, reviewed, limit_per_gene
             )
             payload["_meta"] = {"next_commands": after_find_proteins_batch(payload["by_gene"])}
             return payload
@@ -185,7 +186,9 @@ def _register_find_and_summary(mcp: FastMCP) -> None:
             call,
             context=McpErrorContext(
                 "find_proteins_batch",
-                fallback=cmd("find_proteins", gene=genes[0] if genes else "protein"),
+                fallback=cmd(
+                    "find_proteins", gene_symbol=gene_symbols[0] if gene_symbols else "protein"
+                ),
             ),
         )
 
@@ -415,7 +418,7 @@ def _register_annotations(mcp: FastMCP) -> None:
             "unmatched_databases with a did-you-mean, so a typo never reads as "
             "'no data'. response_mode (default compact) returns short ids; full "
             "restores raw IRIs. Returns every cross-reference database; use "
-            "map_identifiers for a focused primary-id mapping. "
+            "resolve_identifiers for a focused primary-id mapping. "
             "Signature: get_protein_cross_references(accession, databases=, response_mode=)."
         ),
     )
@@ -483,13 +486,13 @@ def _register_annotations(mcp: FastMCP) -> None:
         )
 
     @mcp.tool(
-        name="map_identifiers",
+        name="resolve_identifiers",
         output_schema=MAP_IDENTIFIERS_SCHEMA,
-        title="Map Identifiers",
+        title="Resolve Identifiers",
         annotations=READ_ONLY_OPEN_WORLD,
         tags={"protein", "xref", "mapping"},
         description=(
-            "Map a UniProtKB accession to its PRIMARY external identifiers: the "
+            "Resolve a UniProtKB accession to its PRIMARY external identifiers: the "
             "genomic/structural/family core (PDB, AlphaFoldDB, Ensembl, RefSeq, "
             "GeneID, HGNC, KEGG, OrthoDB, Pfam, InterPro) by default. Optionally "
             "restrict to specific databases. Returns ids grouped by database plus "
@@ -497,10 +500,10 @@ def _register_annotations(mcp: FastMCP) -> None:
             "(default compact) returns short ids; full restores raw IRIs. For the "
             "exhaustive cross-reference set (incl. drug/disease databases like "
             "DrugBank/ChEMBL/OpenTargets) use get_protein_cross_references instead. "
-            "Signature: map_identifiers(accession, databases=, response_mode=)."
+            "Signature: resolve_identifiers(accession, databases=, response_mode=)."
         ),
     )
-    async def map_identifiers(
+    async def resolve_identifiers(
         accession: _ACC,
         databases: Annotated[
             list[str] | None,
@@ -513,10 +516,12 @@ def _register_annotations(mcp: FastMCP) -> None:
                 accession, databases, response_mode
             )
             payload["_meta"] = {
-                "next_commands": after_entry_subresource(payload["accession"], "map_identifiers")
+                "next_commands": after_entry_subresource(
+                    payload["accession"], "resolve_identifiers"
+                )
             }
             return payload
 
         return await run_mcp_tool(
-            "map_identifiers", call, context=McpErrorContext("map_identifiers")
+            "resolve_identifiers", call, context=McpErrorContext("resolve_identifiers")
         )

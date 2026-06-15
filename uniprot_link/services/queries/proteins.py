@@ -95,9 +95,9 @@ def find_proteins(
     has_pair_anchor = organism_taxon is not None and bool(name_contains)
     if not strong and not has_pair_anchor:
         raise InvalidInputError(
-            "find_proteins needs at least one of: gene, mnemonic, ec_number, keyword "
-            "(or organism_taxon together with name_contains). For broad text search use "
-            "run_sparql_query or search_example_queries.",
+            "find_proteins needs at least one of: gene_symbol, mnemonic, ec_number, "
+            "keyword (or organism_taxon together with name_contains). For broad text "
+            "search use search_sparql_query or search_example_queries.",
             field="filters",
         )
 

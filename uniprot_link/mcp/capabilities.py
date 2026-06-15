@@ -61,7 +61,7 @@ _SUMMARY_KEYS: tuple[str, ...] = (
 
 TOOLS: list[str] = [
     "get_server_capabilities",
-    "run_sparql_query",
+    "search_sparql_query",
     "search_example_queries",
     "get_example_query",
     "find_proteins",
@@ -73,7 +73,7 @@ TOOLS: list[str] = [
     "get_protein_diseases",
     "get_protein_cross_references",
     "get_protein_go_terms",
-    "map_identifiers",
+    "resolve_identifiers",
     "get_taxon",
 ]
 
@@ -129,7 +129,7 @@ def build_capabilities() -> dict[str, Any]:
                         "get_protein_variants",
                         "get_protein_cross_references",
                         "get_protein_go_terms",
-                        "map_identifiers",
+                        "resolve_identifiers",
                         "get_taxon (by id or curated common name)",
                         "get_server_capabilities",
                     ],
@@ -151,7 +151,7 @@ def build_capabilities() -> dict[str, Any]:
                         "find_proteins (cold; mnemonic anchor is fast-pathed)",
                         "find_proteins_batch (cold; N genes resolved concurrently)",
                         "get_taxon (uncached name scan)",
-                        "run_sparql_query (unbounded or federated)",
+                        "search_sparql_query (unbounded or federated)",
                     ],
                 },
             },
@@ -159,7 +159,7 @@ def build_capabilities() -> dict[str, Any]:
         "read_only": True,
         "not_found_contract": (
             "Nonexistent accessions/taxa return error_code 'not_found' on every "
-            "get_protein*/get_taxon tool; run_sparql_query rejects write/UPDATE "
+            "get_protein*/get_taxon tool; search_sparql_query rejects write/UPDATE "
             "queries as 'invalid_input' (read-only). An obsolete/demerged accession "
             "is surfaced consistently: get_protein returns a flagged record "
             "(obsolete:true + replaced_by), while the data sub-tools return a "
@@ -179,7 +179,7 @@ def build_capabilities() -> dict[str, Any]:
             "this page's size; `total` is the true available count where cheaply "
             "computable (features, GO terms, variants, find_proteins); `recovery` "
             "is the concrete next step (raise limit / page via offset / add a "
-            "filter). run_sparql_query omits `total` (an arbitrary query's full "
+            "filter). search_sparql_query omits `total` (an arbitrary query's full "
             "count is not computable without re-running it). Cross-reference "
             "compact mode reports per-database {returned, total} under "
             "truncated_databases."
@@ -191,7 +191,7 @@ def build_capabilities() -> dict[str, Any]:
             ),
             "cross_references": (
                 "Ids and database keys are sorted (stable across calls and identical "
-                "between get_protein_cross_references and map_identifiers). compact "
+                "between get_protein_cross_references and resolve_identifiers). compact "
                 "caps each database at 25 ids with a truncated_databases note and "
                 "always reports per-database counts; minimal returns counts only; "
                 "standard/full return every id."
@@ -199,10 +199,10 @@ def build_capabilities() -> dict[str, Any]:
         },
         "recommended_workflows": [
             "accession -> get_protein -> get_protein_{sequence,features,variants,diseases}",
-            "gene + organism_taxon -> find_proteins -> get_protein",
-            "several genes -> find_proteins_batch(genes=[...]) -> get_protein_features per hit",
+            "gene_symbol + organism_taxon -> find_proteins -> get_protein",
+            "several genes -> find_proteins_batch(gene_symbols=[...]) -> get_protein_features per hit",
             "organism name -> get_taxon -> find_proteins(organism_taxon=...)",
-            "learn SPARQL -> search_example_queries -> get_example_query -> run_sparql_query",
+            "learn SPARQL -> search_example_queries -> get_example_query -> search_sparql_query",
         ],
         "error_codes": [
             "invalid_input",
@@ -216,7 +216,7 @@ def build_capabilities() -> dict[str, Any]:
         "limits": {
             "default_select_limit": 50,
             "default_select_limit_note": (
-                "Applies to run_sparql_query: the LIMIT auto-injected into an "
+                "Applies to search_sparql_query: the LIMIT auto-injected into an "
                 "unbounded SELECT. NOT the find_proteins page size (see "
                 "find_proteins_page_size)."
             ),
@@ -226,7 +226,7 @@ def build_capabilities() -> dict[str, Any]:
             "cross_reference_compact_id_cap": 25,
             "server_query_timeout_minutes": 45,
             "find_proteins_requires_anchor": (
-                "gene, mnemonic, ec_number, keyword, or organism_taxon+name_contains"
+                "gene_symbol, mnemonic, ec_number, keyword, or organism_taxon+name_contains"
             ),
         },
         "notes": UNIPROT_REFERENCE_NOTES,

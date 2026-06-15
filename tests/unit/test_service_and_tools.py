@@ -935,8 +935,8 @@ async def test_annotation_tool_attaches_next_commands(service_factory: Any) -> N
 
 
 @pytest.mark.asyncio
-async def test_run_sparql_query_success_has_next_commands(service_factory: Any) -> None:
-    """F8: run_sparql_query success carries _meta.next_commands like every tool."""
+async def test_search_sparql_query_success_has_next_commands(service_factory: Any) -> None:
+    """F8: search_sparql_query success carries _meta.next_commands like every tool."""
     from uniprot_link.mcp.facade import create_uniprot_mcp
 
     rows = make_select_json(["protein"], [{"protein": "http://purl.uniprot.org/uniprot/P05067"}])
@@ -945,7 +945,7 @@ async def test_run_sparql_query_success_has_next_commands(service_factory: Any) 
     try:
         mcp = create_uniprot_mcp()
         result = await mcp.call_tool(
-            "run_sparql_query", {"query": "SELECT ?protein WHERE { ?protein ?p ?o }"}
+            "search_sparql_query", {"query": "SELECT ?protein WHERE { ?protein ?p ?o }"}
         )
         payload = result.structured_content if hasattr(result, "structured_content") else result
         assert payload["success"] is True
@@ -956,7 +956,7 @@ async def test_run_sparql_query_success_has_next_commands(service_factory: Any) 
 
 
 @pytest.mark.asyncio
-async def test_run_sparql_query_error_offers_examples_fallback() -> None:
+async def test_search_sparql_query_error_offers_examples_fallback() -> None:
     from uniprot_link.exceptions import QuerySyntaxError
     from uniprot_link.mcp.envelope import McpErrorContext, run_mcp_tool
     from uniprot_link.mcp.next_commands import cmd
@@ -965,9 +965,9 @@ async def test_run_sparql_query_error_offers_examples_fallback() -> None:
         raise QuerySyntaxError("Malformed SPARQL query.")
 
     env = await run_mcp_tool(
-        "run_sparql_query",
+        "search_sparql_query",
         boom,
-        context=McpErrorContext("run_sparql_query", fallback=cmd("search_example_queries")),
+        context=McpErrorContext("search_sparql_query", fallback=cmd("search_example_queries")),
     )
     assert env["success"] is False
     assert env["error_code"] == "query_syntax_error"
@@ -1346,7 +1346,7 @@ async def test_find_proteins_batch_facade_fans_out_next_commands(service_factory
         mcp = create_uniprot_mcp()
         result = await mcp.call_tool(
             "find_proteins_batch",
-            {"genes": ["PNKP", "NAA10"], "organism_taxon": 9606, "reviewed": True},
+            {"gene_symbols": ["PNKP", "NAA10"], "organism_taxon": 9606, "reviewed": True},
         )
         payload = result.structured_content if hasattr(result, "structured_content") else result
         assert payload["success"] is True

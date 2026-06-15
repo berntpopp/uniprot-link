@@ -40,10 +40,21 @@ def test_enum_values_for_unknown_param_returns_none() -> None:
 
 
 def test_normalize_applies_alias_when_canonical_valid_and_absent() -> None:
-    valid = ["gene", "organism_taxon", "reviewed"]
-    args, applied = normalize_alias_args(valid, {"taxon": "9606", "gene": "PNKP"})
-    assert args == {"organism_taxon": "9606", "gene": "PNKP"}
+    valid = ["gene_symbol", "organism_taxon", "reviewed"]
+    args, applied = normalize_alias_args(valid, {"taxon": "9606", "gene_symbol": "PNKP"})
+    assert args == {"organism_taxon": "9606", "gene_symbol": "PNKP"}
     assert applied == [("taxon", "organism_taxon")]
+
+
+def test_normalize_flips_legacy_gene_to_gene_symbol() -> None:
+    """Fleet canon: `gene`/`genes` are inbound aliases for `gene_symbol(s)`."""
+    valid = ["gene_symbol", "organism_taxon"]
+    args, applied = normalize_alias_args(valid, {"gene": "BRCA1"})
+    assert args == {"gene_symbol": "BRCA1"}
+    assert ("gene", "gene_symbol") in applied
+    bargs, bapplied = normalize_alias_args(["gene_symbols"], {"genes": ["PNKP", "NAA10"]})
+    assert bargs == {"gene_symbols": ["PNKP", "NAA10"]}
+    assert ("genes", "gene_symbols") in bapplied
 
 
 def test_normalize_does_not_overwrite_explicit_canonical() -> None:
@@ -54,7 +65,7 @@ def test_normalize_does_not_overwrite_explicit_canonical() -> None:
 
 
 def test_normalize_ignores_alias_when_canonical_not_a_param() -> None:
-    valid = ["gene"]  # organism_taxon is not a param of this tool
+    valid = ["gene_symbol"]  # organism_taxon is not a param of this tool
     args, applied = normalize_alias_args(valid, {"taxon": "9606"})
     assert args == {"taxon": "9606"}  # untouched -> will become a clean did-you-mean
     assert applied == []

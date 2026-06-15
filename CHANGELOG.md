@@ -4,6 +4,44 @@ All notable changes to uniprot-link are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/) and the project uses semantic
 versioning.
 
+## [1.0.0] - 2026-06-15
+
+Adopts the **GeneFoundry Tool-Naming & Normalization Standard v1**
+([#1](https://github.com/berntpopp/uniprot-link/issues/1)) ahead of federation
+behind the [`genefoundry-router`](https://github.com/berntpopp/genefoundry-router)
+MCP gateway. The canonical gateway **namespace token for this server is `uniprot`**
+(tools surface as `uniprot_<tool>` once mounted). Leaf tool names stay unprefixed.
+
+### Changed (BREAKING)
+
+- **Tool renames** (no deprecation aliases — drop immediately, per the standard):
+  - `run_sparql_query` → **`search_sparql_query`** (`run` is not a canonical verb;
+    the tool executes a query and returns rows, so `search` is the closest fit).
+  - `map_identifiers` → **`resolve_identifiers`** (`map` is not a canonical verb;
+    the tool resolves an accession to its external identifiers).
+- **Argument canonicalization** to the fleet canon (`gene_symbol`):
+  - `find_proteins(gene=…)` → **`find_proteins(gene_symbol=…)`**.
+  - `find_proteins_batch(genes=…)` → **`find_proteins_batch(gene_symbols=…)`**.
+  - The legacy `gene` / `genes` (and `gene_name` / `symbol`) names are still
+    accepted as **inbound aliases** and transparently normalized + disclosed via
+    `_meta.argument_aliases_applied`.
+
+### Migration
+
+- Replace `run_sparql_query` → `search_sparql_query` and `map_identifiers` →
+  `resolve_identifiers` at all call sites.
+- Prefer `gene_symbol` / `gene_symbols` over `gene` / `genes` (the old names keep
+  working as aliases, but the canonical names are reported in signatures and
+  capabilities).
+
+### Added
+
+- CI guard `tests/unit/test_tool_names.py` asserting every registered tool name
+  matches `^[a-z0-9_]{1,50}$`, starts with a canonical verb
+  (`get`/`search`/`list`/`resolve`/`find`/`compare`/`compute`), and does not
+  self-prefix the `uniprot` namespace token.
+- README documents `serverInfo.name` and the `uniprot` namespace token.
+
 ## [0.9.0] - 2026-06-12
 
 Closes every finding (F1–F9 + the untested obsolete path) of the v0.8.0

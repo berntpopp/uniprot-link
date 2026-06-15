@@ -20,7 +20,7 @@ def test_capabilities_advertises_response_modes_and_contracts() -> None:
     from uniprot_link.mcp.capabilities import build_capabilities
 
     cap = build_capabilities()
-    assert cap["server_version"] == "0.9.0"
+    assert cap["server_version"] == "1.0.0"
     assert cap["response_modes"] == ["minimal", "compact", "standard", "full"]
     assert cap["default_response_mode"] == "compact"
     assert "domain" in cap["feature_types"]
@@ -40,7 +40,7 @@ def test_capabilities_documents_result_ordering() -> None:
 
 def test_capabilities_documents_obsolete_and_map_dbs() -> None:
     cap = build_capabilities()
-    assert cap["server_version"] == "0.9.0"
+    assert cap["server_version"] == "1.0.0"
     assert "obsolete" in cap["not_found_contract"].lower()
     assert "PDB" in cap["map_identifier_databases"]
     assert "DrugBank" not in cap["map_identifier_databases"]
@@ -72,7 +72,7 @@ def test_limits_document_find_proteins_page_size() -> None:
     assert limits["find_proteins_page_size"] == 25
     assert limits["find_proteins_max_limit"] == 200
     assert limits["cross_reference_compact_id_cap"] == 25
-    assert "run_sparql_query" in limits["default_select_limit_note"]
+    assert "search_sparql_query" in limits["default_select_limit_note"]
 
 
 def test_capabilities_has_full_citation() -> None:
