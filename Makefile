@@ -2,7 +2,7 @@
         format format-check lint lint-ci lint-fix lint-loc \
         typecheck test test-fast test-unit test-integration test-cov \
         check ci-local precommit clean \
-        dev mcp-serve \
+        dev \
         docker-build docker-up docker-down docker-logs docker-url info
 
 DOCKER_COMPOSE := $(shell if command -v docker >/dev/null 2>&1 && docker compose version >/dev/null 2>&1; then echo "docker compose"; elif command -v docker-compose >/dev/null 2>&1; then echo "docker-compose"; else echo "docker compose"; fi)
@@ -26,25 +26,25 @@ upgrade: ## Upgrade locked dependencies
 	uv lock --upgrade
 
 format: ## Format Python code
-	uv run ruff format uniprot_link tests server.py mcp_server.py
+	uv run ruff format uniprot_link tests
 
 format-check: ## Check formatting without writing
-	uv run ruff format --check uniprot_link tests server.py mcp_server.py
+	uv run ruff format --check uniprot_link tests
 
 lint: ## Lint Python code
-	uv run ruff check uniprot_link tests server.py mcp_server.py
+	uv run ruff check uniprot_link tests
 
 lint-ci: ## Lint with GitHub-Actions output
-	uv run ruff check uniprot_link tests server.py mcp_server.py --output-format=github
+	uv run ruff check uniprot_link tests --output-format=github
 
 lint-fix: ## Lint and apply safe fixes
-	uv run ruff check uniprot_link tests server.py mcp_server.py --fix
+	uv run ruff check uniprot_link tests --fix
 
 lint-loc: ## Enforce per-file line budget (see AGENTS.md)
 	uv run python scripts/check_file_size.py
 
 typecheck: ## Type check package
-	uv run mypy uniprot_link server.py mcp_server.py
+	uv run mypy uniprot_link
 
 test: ## Run unit tests quickly
 	uv run pytest tests -q -m "not integration"
@@ -71,10 +71,7 @@ clean: ## Remove local caches and reports
 	rm -rf .pytest_cache .ruff_cache .mypy_cache htmlcov .coverage coverage.xml dist build
 
 dev: ## Start unified REST + MCP development server
-	uv run python server.py --transport unified --host 127.0.0.1 --port 8000
-
-mcp-serve: ## Start local stdio MCP server
-	uv run python mcp_server.py
+	uv run uniprot-link serve --transport unified --host 127.0.0.1 --port 8000
 
 docker-build: ## Build Docker image
 	$(COMPOSE) build

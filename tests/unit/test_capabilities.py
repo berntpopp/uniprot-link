@@ -17,10 +17,11 @@ def test_capabilities_structure() -> None:
 
 
 def test_capabilities_advertises_response_modes_and_contracts() -> None:
+    from uniprot_link import __version__
     from uniprot_link.mcp.capabilities import build_capabilities
 
     cap = build_capabilities()
-    assert cap["server_version"] == "1.0.0"
+    assert cap["server_version"] == __version__
     assert cap["response_modes"] == ["minimal", "compact", "standard", "full"]
     assert cap["default_response_mode"] == "compact"
     assert "domain" in cap["feature_types"]
@@ -39,8 +40,10 @@ def test_capabilities_documents_result_ordering() -> None:
 
 
 def test_capabilities_documents_obsolete_and_map_dbs() -> None:
+    from uniprot_link import __version__
+
     cap = build_capabilities()
-    assert cap["server_version"] == "1.0.0"
+    assert cap["server_version"] == __version__
     assert "obsolete" in cap["not_found_contract"].lower()
     assert "PDB" in cap["map_identifier_databases"]
     assert "DrugBank" not in cap["map_identifier_databases"]

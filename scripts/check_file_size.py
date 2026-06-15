@@ -8,8 +8,6 @@ MAX_SOURCE_LINES = 600
 ROOT = Path(__file__).resolve().parents[1]
 CHECK_PATHS = [
     ROOT / "uniprot_link",
-    ROOT / "server.py",
-    ROOT / "mcp_server.py",
 ]
 ALLOWLIST_PATH = ROOT / ".loc-allowlist"
 

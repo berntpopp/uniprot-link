@@ -1,10 +1,13 @@
-"""Unified server manager for HTTP, stdio, and unified (HTTP+MCP) transports."""
+"""Unified server manager for HTTP and unified (HTTP+MCP) transports.
+
+Streamable HTTP only: the MCP surface is served at ``/mcp`` alongside the FastAPI
+host. There is no stdio transport.
+"""
 
 from __future__ import annotations
 
-import os
 from contextlib import AsyncExitStack, asynccontextmanager
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 import uvicorn
 
@@ -65,36 +68,9 @@ class UnifiedServerManager:
         self._uvicorn_server = uvicorn.Server(config)
         await self._uvicorn_server.serve()
 
-    async def start_stdio_server(self) -> None:
-        """Start the FastMCP stdio transport (for Claude Desktop)."""
-        self._configure_stdio_environment()
-        if self.logger:
-            self.logger.info("Starting stdio MCP server")
-        from uniprot_link.mcp.facade import create_uniprot_mcp
-
-        mcp = create_uniprot_mcp()
-        # show_banner=False is critical: stray stdout bytes corrupt JSON-RPC framing.
-        await mcp.run_async(transport="stdio", show_banner=False)
-
     async def shutdown(self) -> None:
         """Gracefully stop any running server."""
         if self._uvicorn_server is not None:
             self._uvicorn_server.should_exit = True
         if self.logger:
             self.logger.info("Shutdown complete")
-
-    @staticmethod
-    def _configure_stdio_environment() -> None:
-        """Suppress non-JSON output that would corrupt stdio MCP framing."""
-        env_defaults: dict[str, Any] = {
-            "PYTHONUNBUFFERED": "1",
-            "UNIPROT_LINK_TRANSPORT": "stdio",
-            "FASTMCP_DISABLE_BANNER": "1",
-            "FASTMCP_QUIET": "1",
-            "NO_COLOR": "1",
-            "FORCE_COLOR": "0",
-            "TERM": "dumb",
-            "PYTHONWARNINGS": "ignore",
-        }
-        for key, value in env_defaults.items():
-            os.environ.setdefault(key, value)

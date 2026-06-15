@@ -23,30 +23,35 @@ pubtator-link, genereviews-link, …) and follows their stack and conventions.
 - **Agentic affordances** — every response carries `_meta.next_commands`
   (ready-to-run `{tool, arguments}` steps), a structured error taxonomy, and a
   `uniprot://capabilities` discovery resource.
-- **Three transports** — unified (REST + MCP/HTTP), HTTP-only, and stdio.
+- **Two transports** — unified (REST + MCP/HTTP) and HTTP-only. Streamable HTTP only.
 
 ## Quick start
 
 ```bash
-make install          # uv sync --group dev
-make dev              # unified server: REST on / and MCP on /mcp (port 8000)
-make mcp-serve        # stdio MCP server (for Claude Desktop)
-make ci-local         # format + lint + loc + typecheck + tests
+make install                       # uv sync --group dev
+make dev                           # unified server: REST on / and MCP on /mcp (port 8000)
+uv run uniprot-link serve --help   # CLI: serve / config / health / version
+make ci-local                      # format + lint + loc + typecheck + tests
 ```
 
-### Connect Claude Desktop
+### CLI
 
-Add to `claude_desktop_config.json`:
+The `uniprot-link` console script is the single entry point (Streamable HTTP only):
 
-```json
-{
-  "mcpServers": {
-    "uniprot-link": {
-      "command": "uv",
-      "args": ["--project", "/path/to/uniprot-link", "run", "python", "mcp_server.py"]
-    }
-  }
-}
+```bash
+uniprot-link serve --transport unified --host 127.0.0.1 --port 8000  # REST + MCP/HTTP
+uniprot-link serve --transport http                                  # REST only
+uniprot-link config --validate                                       # show + validate config
+uniprot-link health --url http://127.0.0.1:8000                      # probe /health
+uniprot-link version                                                 # print version
+```
+
+### Connect an MCP client
+
+Point a Streamable-HTTP MCP client at the `/mcp` endpoint of a running server, e.g.:
+
+```bash
+claude mcp add --transport http uniprot-link --scope user http://127.0.0.1:8000/mcp
 ```
 
 ## Tool catalog
@@ -84,7 +89,7 @@ Environment variables (prefix `UNIPROT_LINK_`, nested with `__`):
 | `UNIPROT_LINK_SPARQL__CONTACT_EMAIL` | `bernt.popp@charite.de` | Contact in the User-Agent (UniProt etiquette) |
 | `UNIPROT_LINK_SPARQL__TIMEOUT` | `30` | Per-request timeout (s) |
 | `UNIPROT_LINK_SPARQL__DEFAULT_LIMIT` | `50` | Auto-LIMIT for unbounded SELECTs |
-| `UNIPROT_LINK_TRANSPORT` | `unified` | `unified` / `http` / `stdio` |
+| `UNIPROT_LINK_TRANSPORT` | `unified` | `unified` / `http` |
 | `UNIPROT_LINK_PORT` | `8000` | Server port |
 
 ## Development

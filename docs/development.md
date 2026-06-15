@@ -15,7 +15,8 @@ make install          # uv sync --group dev (creates .venv, writes uv.lock)
 
 ```bash
 make dev              # unified server (REST + MCP/HTTP) on 127.0.0.1:8000
-make mcp-serve        # stdio MCP server (for Claude Desktop)
+# or, directly via the console script:
+uv run uniprot-link serve --transport unified --host 127.0.0.1 --port 8000
 ```
 
 ## Quality gates
