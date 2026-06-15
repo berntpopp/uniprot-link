@@ -11,11 +11,11 @@ pubtator-link, genereviews-link, …) and follows their stack and conventions.
 
 ## Features
 
-- **14 MCP tools** across discovery, raw SPARQL, the curated example catalog,
+- **15 MCP tools** across discovery, raw SPARQL, the curated example catalog,
   proteins (UniProtKB), and taxonomy.
 - **Typed protein tools** — `get_protein`, sequence, features (with FALDO
   coordinates), natural variants, diseases, GO terms, cross-references, id mapping.
-- **`run_sparql_query`** — execute any SPARQL 1.1 query (SELECT/ASK/CONSTRUCT/
+- **`search_sparql_query`** — execute any SPARQL 1.1 query (SELECT/ASK/CONSTRUCT/
   DESCRIBE, with `SERVICE` federation); auto-LIMIT on unbounded SELECTs; JSON/XML/
   CSV/TSV/Turtle/RDF-XML/N-Triples output.
 - **Example catalog** — `search_example_queries` / `get_example_query` expose
@@ -54,10 +54,10 @@ Add to `claude_desktop_config.json`:
 | Tool | Purpose |
 |---|---|
 | `get_server_capabilities` | Tools, 21 named graphs, prefixes, formats, workflows, limits |
-| `run_sparql_query` | Execute any SPARQL 1.1 query (the power tool / federation) |
+| `search_sparql_query` | Execute any SPARQL 1.1 query (the power tool / federation) |
 | `search_example_queries` | Search 126 curated example queries |
 | `get_example_query` | Full text + metadata of one example |
-| `find_proteins` | Search UniProtKB by gene / organism / keyword / EC / mnemonic |
+| `find_proteins` | Search UniProtKB by `gene_symbol` / organism / keyword / EC / mnemonic |
 | `get_protein` | Core entry summary by accession |
 | `get_protein_sequence` | Canonical + isoform sequences |
 | `get_protein_features` | Sequence features with FALDO coordinates |
@@ -65,8 +65,15 @@ Add to `claude_desktop_config.json`:
 | `get_protein_diseases` | Disease annotations |
 | `get_protein_cross_references` | Cross-references grouped by database |
 | `get_protein_go_terms` | GO annotations by aspect |
-| `map_identifiers` | Map an accession to external DB ids |
+| `resolve_identifiers` | Resolve an accession to external DB ids |
 | `get_taxon` | Resolve a taxon by id or name |
+
+> Tool names are **unprefixed** (the GeneFoundry Tool-Naming Standard v1): the
+> server reports `serverInfo.name = "uniprot-link"` and its canonical gateway
+> **namespace token is `uniprot`**. When federated behind the
+> [`genefoundry-router`](https://github.com/berntpopp/genefoundry-router) gateway,
+> tools surface as `uniprot_<tool>` (e.g. `uniprot_find_proteins`); standalone MCP
+> clients already namespace them as `mcp__uniprot-link__<tool>`.
 
 ## Configuration
 

@@ -24,10 +24,11 @@ ARG_ALIASES: dict[str, str] = {
     "organism_id": "organism_taxon",
     "ncbi_taxon": "organism_taxon",
     "species": "organism_taxon",
-    # gene
-    "gene_symbol": "gene",
-    "gene_name": "gene",
-    "symbol": "gene",
+    # gene (fleet canon is gene_symbol; legacy `gene`/`genes` kept as inbound aliases)
+    "gene": "gene_symbol",
+    "gene_name": "gene_symbol",
+    "symbol": "gene_symbol",
+    "genes": "gene_symbols",
     # accession
     "acc": "accession",
     "uniprot": "accession",
@@ -41,7 +42,7 @@ ARG_ALIASES: dict[str, str] = {
     "query_string": "query",
     "sparql": "query",
     # search_example_queries free-text (F6: a natural wrong guess). Resolves to
-    # `text` only where `text` is a real param; on run_sparql_query `query` is
+    # `text` only where `text` is a real param; on search_sparql_query `query` is
     # itself the canonical param, so normalize_alias_args leaves it untouched.
     "query": "text",
     "q": "text",

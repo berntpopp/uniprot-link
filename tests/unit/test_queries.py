@@ -119,10 +119,10 @@ class TestFindProteins:
     def test_anchor_error_names_real_tool(self) -> None:
         with pytest.raises(InvalidInputError) as exc:
             q.find_proteins()
-        assert "run_sparql_query" in exc.value.message
-        # every "sparql_query" mention is part of "run_sparql_query" (no bare typo)
+        assert "search_sparql_query" in exc.value.message
+        # every "sparql_query" mention is part of "search_sparql_query" (no bare typo)
         assert exc.value.message.count("sparql_query") == exc.value.message.count(
-            "run_sparql_query"
+            "search_sparql_query"
         )
 
     def test_gene_anchor_builds(self) -> None:

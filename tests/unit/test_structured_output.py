@@ -15,10 +15,10 @@ _TYPED_TOOLS = {
     "get_protein_diseases",
     "get_protein_cross_references",
     "get_protein_go_terms",
-    "map_identifiers",
+    "resolve_identifiers",
     "find_proteins",
     "get_taxon",
-    "run_sparql_query",
+    "search_sparql_query",
     "search_example_queries",
     "get_example_query",
 }

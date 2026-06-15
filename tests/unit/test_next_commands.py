@@ -1,29 +1,29 @@
 from __future__ import annotations
 
-from uniprot_link.mcp.next_commands import after_entry_subresource, after_run_sparql
+from uniprot_link.mcp.next_commands import after_entry_subresource, after_search_sparql
 
 
-def test_after_run_sparql_offers_get_protein_on_accession_iri() -> None:
+def test_after_search_sparql_offers_get_protein_on_accession_iri() -> None:
     payload = {
         "query_type": "SELECT",
         "rows": [{"protein": "http://purl.uniprot.org/uniprot/P05067"}],
     }
-    nxt = after_run_sparql(payload)
+    nxt = after_search_sparql(payload)
     assert nxt[0] == {"tool": "get_protein", "arguments": {"accession": "P05067"}}
 
 
-def test_after_run_sparql_recognizes_bare_accession() -> None:
-    nxt = after_run_sparql({"query_type": "SELECT", "rows": [{"acc": "P38398"}]})
+def test_after_search_sparql_recognizes_bare_accession() -> None:
+    nxt = after_search_sparql({"query_type": "SELECT", "rows": [{"acc": "P38398"}]})
     assert nxt[0] == {"tool": "get_protein", "arguments": {"accession": "P38398"}}
 
 
-def test_after_run_sparql_falls_back_to_examples() -> None:
-    nxt = after_run_sparql({"query_type": "SELECT", "rows": [{"x": "42"}]})
+def test_after_search_sparql_falls_back_to_examples() -> None:
+    nxt = after_search_sparql({"query_type": "SELECT", "rows": [{"x": "42"}]})
     assert nxt[0]["tool"] == "search_example_queries"
 
 
-def test_after_run_sparql_ask_falls_back_to_examples() -> None:
-    nxt = after_run_sparql({"query_type": "ASK", "boolean": True})
+def test_after_search_sparql_ask_falls_back_to_examples() -> None:
+    nxt = after_search_sparql({"query_type": "ASK", "boolean": True})
     assert nxt and nxt[0]["tool"] == "search_example_queries"
 
 
@@ -77,9 +77,9 @@ def test_recovery_does_not_reuse_nongene_accession() -> None:
     from uniprot_link.mcp.next_commands import protein_not_found_recovery
 
     c = protein_not_found_recovery("999999")
-    assert all(x["arguments"].get("gene") != "999999" for x in c)
+    assert all(x["arguments"].get("gene_symbol") != "999999" for x in c)
     c2 = protein_not_found_recovery("BRCA1")
-    assert any(x["arguments"].get("gene") == "BRCA1" for x in c2)
+    assert any(x["arguments"].get("gene_symbol") == "BRCA1" for x in c2)
 
 
 def test_recovery_excludes_mangled_accession() -> None:
@@ -96,7 +96,7 @@ def test_recovery_excludes_mangled_accession() -> None:
     assert not looks_like_gene_symbol("P05067")
     # Genuine genes are still offered -- including ones with a digit at pos 2.
     gene = protein_not_found_recovery("BRCA1")
-    assert gene[0] == {"tool": "find_proteins", "arguments": {"gene": "BRCA1"}}
+    assert gene[0] == {"tool": "find_proteins", "arguments": {"gene_symbol": "BRCA1"}}
     assert looks_like_gene_symbol("G6PD")
     assert looks_like_gene_symbol("TP53")
     assert not looks_like_gene_symbol("Q96T60XYZ")

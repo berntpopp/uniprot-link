@@ -386,7 +386,7 @@ async def test_pnkp_resolves_in_one_call_with_taxon_alias() -> None:
 
     mcp = create_uniprot_mcp()
     result = await mcp.call_tool(
-        "find_proteins", {"gene": "PNKP", "taxon": "9606", "reviewed": True}
+        "find_proteins", {"gene_symbol": "PNKP", "taxon": "9606", "reviewed": True}
     )
     sc = result.structured_content
     env = sc if isinstance(sc, dict) else json.loads(result.content[0].text)

@@ -46,7 +46,7 @@ async def test_capabilities_exposes_argument_value_sets() -> None:
         "cellular_component",
     ]
     assert avs["get_server_capabilities"]["detail"] == ["summary", "full"]
-    assert avs["run_sparql_query"]["result_format"][0] == "json"
+    assert avs["search_sparql_query"]["result_format"][0] == "json"
     assert avs["get_protein"]["response_mode"] == ["minimal", "compact", "standard", "full"]
 
 
@@ -67,7 +67,7 @@ async def test_tools_resource_lists_all_with_signatures() -> None:
     names = {t["name"] for t in payload["tools"]}
     assert len(names) == 15
     fp = next(t for t in payload["tools"] if t["name"] == "find_proteins")
-    assert fp["signature"].startswith("find_proteins(gene=, organism_taxon=")
+    assert fp["signature"].startswith("find_proteins(gene_symbol=, organism_taxon=")
     assert fp["summary"]  # one-line summary present
 
 

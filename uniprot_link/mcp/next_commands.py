@@ -16,7 +16,7 @@ _PROTEIN_TOOLS = {
     "get_protein_diseases",
     "get_protein_cross_references",
     "get_protein_go_terms",
-    "map_identifiers",
+    "resolve_identifiers",
 }
 # A gene symbol shape: starts with a letter, short, alnum/.-_ only (e.g. BRCA1).
 _GENE_SHAPE = re.compile(r"^[A-Za-z][A-Za-z0-9._-]{0,11}$")
@@ -32,7 +32,7 @@ def looks_like_gene_symbol(value: str) -> bool:
 
     Distinguishes a gene typed into the accession slot (``BRCA1``, ``G6PD``) from
     a mangled/near-miss accession (``Q96T60XYZ``, ``P05067``) so error recovery
-    only suggests find_proteins(gene=...) when it would actually help.
+    only suggests find_proteins(gene_symbol=...) when it would actually help.
     """
     v = (value or "").strip()
     if not v or not _GENE_SHAPE.match(v):
@@ -44,11 +44,11 @@ def protein_not_found_recovery(value: str) -> list[dict[str, Any]]:
     """Recovery for a failed get_protein lookup.
 
     A genuine gene symbol in the accession slot (``BRCA1``) is redirected to
-    find_proteins(gene=...). A mangled/near-miss accession (``Q96T60XYZ``) or a
-    digit blob (``999999``) is NOT replayed as a gene -- it points at discovery.
+    find_proteins(gene_symbol=...). A mangled/near-miss accession (``Q96T60XYZ``)
+    or a digit blob (``999999``) is NOT replayed as a gene -- it points at discovery.
     """
     if looks_like_gene_symbol(value):
-        return [cmd("find_proteins", gene=value.strip()), cmd("get_server_capabilities")]
+        return [cmd("find_proteins", gene_symbol=value.strip()), cmd("get_server_capabilities")]
     return [cmd("get_server_capabilities"), cmd("search_example_queries", text="protein")]
 
 
@@ -148,7 +148,7 @@ def after_get_example(query: str | None) -> list[dict[str, Any]]:
     """After fetching an example: offer to run it."""
     if not query:
         return []
-    return [cmd("run_sparql_query", query=query)]
+    return [cmd("search_sparql_query", query=query)]
 
 
 def _accession_in_value(value: Any) -> str | None:
@@ -162,7 +162,7 @@ def _accession_in_value(value: Any) -> str | None:
         return None
 
 
-def after_run_sparql(payload: dict[str, Any]) -> list[dict[str, Any]]:
+def after_search_sparql(payload: dict[str, Any]) -> list[dict[str, Any]]:
     """Next steps after a raw query (F8: the chaining contract is universal).
 
     If a SELECT row exposes a UniProtKB accession (bare or as an entry IRI), offer

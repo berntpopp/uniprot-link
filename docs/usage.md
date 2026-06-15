@@ -16,7 +16,7 @@ Add to `claude_desktop_config.json`:
 }
 ```
 
-Restart Claude. The server exposes 14 tools and a `uniprot://capabilities` resource.
+Restart Claude. The server exposes 15 tools and a `uniprot://capabilities` resource.
 
 ## HTTP transport
 
@@ -35,21 +35,21 @@ curl http://127.0.0.1:8000/health
 
 **Resolve a gene to an accession**
 
-1. `find_proteins` `{ "gene": "BRCA1", "organism_taxon": 9606, "reviewed": true }`
+1. `find_proteins` `{ "gene_symbol": "BRCA1", "organism_taxon": 9606, "reviewed": true }`
 2. `get_protein` with the returned accession (Swiss-Prot ranked first).
 
 **Resolve an organism first**
 
 1. `get_taxon` `{ "taxon": "Homo sapiens" }` → taxon id 9606
-2. `find_proteins` `{ "gene": "TP53", "organism_taxon": 9606 }`
+2. `find_proteins` `{ "gene_symbol": "TP53", "organism_taxon": 9606 }`
 
 **Write your own SPARQL**
 
 1. `search_example_queries` `{ "text": "disease" }`
 2. `get_example_query` `{ "example_id": "<iri from step 1>" }`
-3. `run_sparql_query` `{ "query": "<the example, edited>" }`
+3. `search_sparql_query` `{ "query": "<the example, edited>" }`
 
-## run_sparql_query notes
+## search_sparql_query notes
 
 - `result_format`: `json` (SELECT/ASK), or `csv`/`tsv`/`xml`, or `turtle`/`rdfxml`/
   `ntriples` for CONSTRUCT/DESCRIBE.

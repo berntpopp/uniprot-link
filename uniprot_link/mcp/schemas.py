@@ -149,7 +149,7 @@ EXAMPLE_DETAIL_SCHEMA = _envelope(
     example_id=_STR, description=_STR, query=_STR, query_type=_STR, keywords=_ARR
 )
 
-# run_sparql_query is dynamic (columns vary): keep it generic.
+# search_sparql_query is dynamic (columns vary): keep it generic.
 SPARQL_RESULT_SCHEMA = _envelope(
     query_type=_STR,
     columns=_ARR,

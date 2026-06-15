@@ -8,7 +8,7 @@ from pydantic import Field
 
 from uniprot_link.mcp.annotations import READ_ONLY_OPEN_WORLD
 from uniprot_link.mcp.envelope import McpErrorContext, run_mcp_tool
-from uniprot_link.mcp.next_commands import after_get_example, after_run_sparql, cmd
+from uniprot_link.mcp.next_commands import after_get_example, after_search_sparql, cmd
 from uniprot_link.mcp.schemas import (
     EXAMPLE_DETAIL_SCHEMA,
     EXAMPLE_LIST_SCHEMA,
@@ -24,9 +24,9 @@ def register_query_tools(mcp: FastMCP) -> None:
     """Register the raw-query and example-catalog tools."""
 
     @mcp.tool(
-        name="run_sparql_query",
+        name="search_sparql_query",
         output_schema=SPARQL_RESULT_SCHEMA,
-        title="Run SPARQL Query",
+        title="Search via SPARQL Query",
         annotations=READ_ONLY_OPEN_WORLD,
         tags={"sparql", "power"},
         description=(
@@ -39,10 +39,10 @@ def register_query_tools(mcp: FastMCP) -> None:
             "seed queries from search_example_queries. Use uniprot://prefixes for the "
             "standard PREFIX block. Unbounded or federated queries can take 10-60 s; "
             "bound lookups (anchored on an accession/gene/taxon) return in <2 s. "
-            "Signature: run_sparql_query(query, result_format=, limit=, timeout_seconds=)."
+            "Signature: search_sparql_query(query, result_format=, limit=, timeout_seconds=)."
         ),
     )
-    async def run_sparql_query(
+    async def search_sparql_query(
         query: Annotated[
             str,
             Field(
@@ -72,13 +72,13 @@ def register_query_tools(mcp: FastMCP) -> None:
                 limit=limit,
                 timeout=float(timeout_seconds) if timeout_seconds else None,
             )
-            payload["_meta"] = {"next_commands": after_run_sparql(payload)}
+            payload["_meta"] = {"next_commands": after_search_sparql(payload)}
             return payload
 
         return await run_mcp_tool(
-            "run_sparql_query",
+            "search_sparql_query",
             call,
-            context=McpErrorContext("run_sparql_query", fallback=cmd("search_example_queries")),
+            context=McpErrorContext("search_sparql_query", fallback=cmd("search_example_queries")),
         )
 
     @mcp.tool(
@@ -92,7 +92,7 @@ def register_query_tools(mcp: FastMCP) -> None:
             "free text over their descriptions and keyword tags (e.g. 'disease', "
             "'3D structure', 'cross-reference', 'taxonomy'). Returns example ids, "
             "descriptions, tags, and query types. Fetch the full query text with "
-            "get_example_query, then run it via run_sparql_query. The best way to "
+            "get_example_query, then run it via search_sparql_query. The best way to "
             "learn how to query UniProt. "
             "Signature: search_example_queries(text=, limit=)."
         ),
@@ -126,7 +126,7 @@ def register_query_tools(mcp: FastMCP) -> None:
             "Fetch one curated example's full SPARQL text, description, keyword tags, "
             "and any federated endpoints it joins. Pass an example_id (full IRI) from "
             "search_example_queries. `_meta.next_commands` offers to run it directly "
-            "via run_sparql_query. "
+            "via search_sparql_query. "
             "Signature: get_example_query(example_id)."
         ),
     )

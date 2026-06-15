@@ -91,7 +91,8 @@ async def test_invalid_result_format_returns_valid_values() -> None:
     mcp = create_uniprot_mcp()
     env = _structured(
         await mcp.call_tool(
-            "run_sparql_query", {"query": "SELECT * WHERE {?s ?p ?o}", "result_format": "banana"}
+            "search_sparql_query",
+            {"query": "SELECT * WHERE {?s ?p ?o}", "result_format": "banana"},
         )
     )
     assert env["field"] == "result_format"
@@ -110,7 +111,7 @@ async def test_unknown_argument_name_still_lists_names() -> None:
 
 @pytest.mark.asyncio
 async def test_alias_normalized_and_disclosed() -> None:
-    """taxon -> organism_taxon lands on the right (typed) param and is disclosed."""
+    """taxon -> organism_taxon and legacy gene -> gene_symbol land + are disclosed."""
     import uniprot_link.mcp.service_adapters as service_adapters
 
     seen: dict[str, Any] = {}
@@ -126,7 +127,10 @@ async def test_alias_normalized_and_disclosed() -> None:
         result = await mcp.call_tool("find_proteins", {"gene": "PNKP", "taxon": "9606"})
         env = _structured(result)
         assert env["success"] is True
-        assert env["_meta"]["argument_aliases_applied"] == [["taxon", "organism_taxon"]]
+        applied = {tuple(pair) for pair in env["_meta"]["argument_aliases_applied"]}
+        assert ("taxon", "organism_taxon") in applied
+        assert ("gene", "gene_symbol") in applied  # fleet-canon flip
         assert seen["organism_taxon"] == 9606  # alias landed + coerced str->int
+        assert seen["gene"] == "PNKP"  # gene_symbol param -> service `gene` kwarg
     finally:
         service_adapters.set_sparql_service(None)
