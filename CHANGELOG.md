@@ -4,6 +4,16 @@ All notable changes to uniprot-link are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/) and the project uses semantic
 versioning.
 
+## [2.0.1] - 2026-06-29
+
+### Security
+
+- Adopt GeneFoundry Container & Deployment Hardening Standard v1: digest-pinned base
+  image, new `.dockerignore`, hardened `prod` compose overlay (read-only rootfs,
+  `cap_drop: ALL`, `no-new-privileges`, `init`, resource limits, expose-only), CORS no
+  longer combines wildcard origins with credentials, and a CI container scan (Trivy) +
+  SBOM workflow.
+
 ## [2.0.0] - 2026-06-15
 
 Adopts the **GeneFoundry Logging & CLI Standard v1**
