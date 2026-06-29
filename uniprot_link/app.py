@@ -54,7 +54,12 @@ def create_app() -> FastAPI:
     @app.get("/health")
     async def health() -> dict[str, Any]:
         """Liveness probe (reports build provenance for deploy checks)."""
-        return {"status": "ok", "service": "uniprot-link", **build_info()}
+        return {
+            "status": "ok",
+            "service": "uniprot-link",
+            "transport": "streamable-http-stateless",
+            **build_info(),
+        }
 
     @app.get("/")
     async def root() -> dict[str, Any]:
