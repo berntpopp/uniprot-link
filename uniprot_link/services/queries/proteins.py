@@ -154,8 +154,8 @@ def entry_status(accession: str) -> str:
 
     0 rows -> absent. A row with ``up:obsolete true`` -> obsolete (with any
     ``up:replacedBy`` accessions). Otherwise active. When the accession carries a
-    ``-N`` isoform suffix, an ``EXISTS`` probe reports whether that isoform is
-    real (so get_protein can reject a typo'd index, F-ISO). Obsolete entries keep
+    ``-N`` isoform suffix, a BOUND-over-OPTIONAL probe reports whether that isoform
+    is real (so get_protein can reject a typo'd index, F-ISO). Obsolete entries keep
     ``a up:Protein`` (verified live on Z9Z9Z9 / A0A009K1D9), so the bare existence
     ASK could not distinguish them -- this query can.
     """
@@ -165,8 +165,12 @@ def entry_status(accession: str) -> str:
     iso_bind = ""
     if "-" in acc:
         iso_select = " ?isoform_exists"
+        # BOUND-over-OPTIONAL sub-SELECT (not EXISTS): the endpoint rejects EXISTS
+        # in expression position with HTTP 400. Projects an xsd:boolean true/false.
         iso_bind = (
-            f"\n  BIND(EXISTS {{ uniprotkb:{base} up:sequence isoform:{acc} }} AS ?isoform_exists)"
+            f"\n  {{ SELECT (BOUND(?_iso) AS ?isoform_exists) WHERE {{"
+            f" OPTIONAL {{ uniprotkb:{base} up:sequence isoform:{acc} . BIND(1 AS ?_iso) }}"
+            f" }} LIMIT 1 }}"
         )
     return f"""{prefix_block()}
 SELECT ?obsolete ?replacedBy{iso_select} WHERE {{
@@ -191,11 +195,15 @@ SELECT ?mnemonic ?reviewed ?fullName ?shortName ?existence ?genes
        ?has_variants ?has_diseases ?has_structure
 WHERE {{
   uniprotkb:{base} a up:Protein .
-  # Cheap bound EXISTS presence flags (verified ~206 ms live) that drive
-  # content-aware next_commands and tell the caller what the entry carries.
-  BIND(EXISTS {{ uniprotkb:{base} up:annotation ?_v . ?_v a up:Natural_Variant_Annotation }} AS ?has_variants)
-  BIND(EXISTS {{ uniprotkb:{base} up:annotation ?_d . ?_d a up:Disease_Annotation }} AS ?has_diseases)
-  BIND(EXISTS {{ uniprotkb:{base} rdfs:seeAlso ?_x . ?_x up:database database:PDB }} AS ?has_structure)
+  # Presence flags via BOUND-over-OPTIONAL scalar sub-SELECTs (verified ~190 ms
+  # live). The endpoint rejects EXISTS in expression position (BIND/FILTER) with
+  # HTTP 400, so each flag is a single-row sub-SELECT projecting an xsd:boolean.
+  {{ SELECT (BOUND(?_v) AS ?has_variants) WHERE {{
+       OPTIONAL {{ uniprotkb:{base} up:annotation ?_v . ?_v a up:Natural_Variant_Annotation }} }} LIMIT 1 }}
+  {{ SELECT (BOUND(?_d) AS ?has_diseases) WHERE {{
+       OPTIONAL {{ uniprotkb:{base} up:annotation ?_d . ?_d a up:Disease_Annotation }} }} LIMIT 1 }}
+  {{ SELECT (BOUND(?_x) AS ?has_structure) WHERE {{
+       OPTIONAL {{ uniprotkb:{base} rdfs:seeAlso ?_x . ?_x up:database database:PDB }} }} LIMIT 1 }}
   OPTIONAL {{ uniprotkb:{base} up:mnemonic ?mnemonic }}
   OPTIONAL {{ uniprotkb:{base} up:reviewed ?reviewed }}
   OPTIONAL {{ uniprotkb:{base} up:recommendedName ?rn .

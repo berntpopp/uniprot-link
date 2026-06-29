@@ -1,0 +1,62 @@
+# Production docker-compose override (Container & Deployment Hardening Standard v1).
+# Layered on the base file:
+#   docker compose -f docker/docker-compose.yml -f docker/docker-compose.prod.yml up -d
+#
+# uniprot-link is stateless (live UniProt SPARQL passthrough) — no data volume.
+# Front the container with a reverse proxy (TLS at the edge); see
+# docker-compose.npm.yml for the Nginx Proxy Manager expose-only overlay.
+
+services:
+  uniprot-link:
+    environment:
+      UNIPROT_LINK_TRANSPORT: unified
+      UNIPROT_LINK_LOG_LEVEL: INFO
+      UNIPROT_LINK_LOG_FORMAT: json
+
+    # No published host ports in production; reach the container via the proxy only.
+    # !reset (not []) is required: Compose MERGES list fields across -f overlays,
+    # so a plain `ports: []` would NOT drop the base file's host mapping.
+    ports: !reset []
+
+    # Read-only root filesystem; the only writable path is an ephemeral tmpfs
+    # (stateless service — nothing persists across restarts).
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=64m,mode=1777
+
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+
+    pids_limit: 256
+    init: true
+
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: "0.5"
+          pids: 256
+        reservations:
+          memory: 128M
+          cpus: "0.25"
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 3
+        window: 120s
+
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8000/health"]
+      interval: 20s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "5"
+        labels: "service=uniprot-link,environment=production"
