@@ -16,7 +16,7 @@ services:
     # Discover the assigned port with: make docker-url
     ports:
       - target: 8000
-        published: "${UNIPROT_LINK_HOST_PORT:-0}"
+        published: "${UNIPROT_LINK_HOST_PORT:-8013}"
         protocol: tcp
     environment:
       UNIPROT_LINK_TRANSPORT: unified
