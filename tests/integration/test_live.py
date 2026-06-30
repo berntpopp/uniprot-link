@@ -77,6 +77,16 @@ async def test_multiword_example_search_returns_hits(service: SparqlService) -> 
     assert res["count"] > 0
 
 
+async def test_example_search_text_filter_is_applied_live(service: SparqlService) -> None:
+    """The text path must round-trip on QLever (no EXISTS HTTP 400) AND actually
+    filter: a real token returns hits, a nonsense token returns none. A surviving
+    FILTER EXISTS would raise here instead of returning a result set."""
+    hits = await service.search_examples("disease", limit=25)
+    assert hits["count"] > 0
+    none = await service.search_examples("zzqqxxnotaword", limit=25)
+    assert none["count"] == 0
+
+
 async def test_obsolete_entry_is_flagged_live(service: SparqlService) -> None:
     """F-OBS: an obsolete accession is flagged, never presented as a live entry."""
     from uniprot_link.exceptions import ObsoleteEntryError
