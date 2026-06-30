@@ -258,10 +258,31 @@ class TestExampleQueries:
         assert "sparql-examples" in query
         assert "disease" in query.lower()
 
-    def test_search_examples_multiword_builds_or_filter(self) -> None:
+    def test_search_examples_text_path_avoids_filter_exists(self) -> None:
+        """QLever rejects EXISTS in expression position (HTTP 400); the text path
+        must filter via HAVING over GROUP_CONCAT, never FILTER EXISTS."""
+        query = q.search_example_queries("disease cancer")
+        assert "EXISTS" not in query
+        assert "HAVING(" in query
+        # Each token is matched against BOTH the comment- and keyword-concat.
+        assert 'LCASE("disease")' in query
+        assert 'LCASE("cancer")' in query
+
+    def test_search_examples_multiword_builds_having_over_concat(self) -> None:
+        """F: multiword text builds one CONTAINS per token per field inside a
+        HAVING over GROUP_CONCAT (never a FILTER EXISTS -> QLever HTTP 400)."""
         query = q.search_example_queries("protein domain architecture")
-        # one CONTAINS clause per token, OR-combined
-        assert query.count("CONTAINS(LCASE(?comment)") >= 3 or query.count("||") >= 2
+        assert "EXISTS" not in query
+        assert "HAVING(" in query
+        # 3 tokens x 2 fields (comment-concat + keyword-concat) = 6 CONTAINS.
+        assert query.count("CONTAINS(LCASE(GROUP_CONCAT(") == 6
+
+    def test_search_examples_no_text_omits_having(self) -> None:
+        """The no-text path is unchanged: no HAVING, no EXISTS, plain GROUP BY."""
+        query = q.search_example_queries(None)
+        assert "HAVING" not in query
+        assert "EXISTS" not in query
+        assert "GROUP BY ?ex" in query
 
 
 class TestFindProteinsTwoPhase:
