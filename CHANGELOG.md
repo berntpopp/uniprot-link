@@ -4,6 +4,16 @@ All notable changes to uniprot-link are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/) and the project uses semantic
 versioning.
 
+## [Unreleased]
+
+### Fixed
+
+- Emit `_meta.unsafe_for_clinical_use: true` on every tool response (success and
+  error, all response_modes) per the fleet-wide Response-Envelope Standard v1
+  disclaimer decision (2026-07-03). Purely additive: no envelope restructuring,
+  no `_meta` key removed. `get_server_capabilities`'s `provenance_policy` /
+  `per_call_meta` are updated to document the new key.
+
 ## [2.0.1] - 2026-06-29
 
 ### Security
