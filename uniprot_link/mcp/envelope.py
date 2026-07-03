@@ -29,12 +29,15 @@ from uniprot_link.mcp.next_commands import cmd, default_error_next_commands
 
 logger = logging.getLogger(__name__)
 
-# Per-call _meta is kept lean: static provenance (research-use restriction,
-# citation DOI, UniProt release) lives ONLY in get_server_capabilities. Repeating
-# it on every response is non-actionable token overhead (MCP/Anthropic context
-# economy). Per-call _meta carries only dynamic fields: tool, request_id,
-# next_commands.
+# Per-call _meta carries dynamic fields (tool, request_id, next_commands) plus
+# the fleet-standard unsafe_for_clinical_use disclaimer, which per the
+# GeneFoundry Response-Envelope Standard v1 (2026-07-03 fleet decision) must be
+# stamped on EVERY tool response -- success and error, at all response_modes --
+# not declared once via get_server_capabilities. Static provenance (research-use
+# restriction, citation DOI, UniProt release) still lives only in
+# get_server_capabilities to conserve context tokens.
 _RETRYABLE = {"rate_limited", "upstream_unavailable", "query_timeout"}
+_UNSAFE_FOR_CLINICAL_USE = True
 
 
 @dataclass
@@ -103,7 +106,11 @@ def _error_envelope(exc: BaseException, context: McpErrorContext) -> dict[str, A
         "message": message,
         "retryable": error_code in _RETRYABLE,
         "recovery_action": _recovery_action(error_code),
-        "_meta": {"tool": context.tool_name, "request_id": _request_id()},
+        "_meta": {
+            "tool": context.tool_name,
+            "request_id": _request_id(),
+            "unsafe_for_clinical_use": _UNSAFE_FOR_CLINICAL_USE,
+        },
     }
     # Structured recovery data (kept OUT of the length-capped message).
     if isinstance(exc, InvalidInputError):
@@ -188,6 +195,7 @@ def build_arg_error_envelope(
             "tool": tool_name,
             "request_id": _request_id(),
             "next_commands": [cmd("get_server_capabilities")],
+            "unsafe_for_clinical_use": _UNSAFE_FOR_CLINICAL_USE,
         },
     }
     if allowed is not None:
@@ -212,6 +220,7 @@ async def run_mcp_tool(
                 **existing_meta,
                 "tool": tool_name,
                 "request_id": _request_id(),
+                "unsafe_for_clinical_use": _UNSAFE_FOR_CLINICAL_USE,
             }
         return result
     except Exception as exc:  # broad catch is the error-boundary contract

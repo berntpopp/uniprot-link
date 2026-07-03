@@ -104,9 +104,19 @@ def build_capabilities() -> dict[str, Any]:
         "provenance_policy": (
             "Static provenance (research-use restriction, citation, UniProt "
             "release) is declared here and applies to ALL tool outputs; it is "
-            "not repeated per-call to conserve context tokens."
+            "not repeated per-call to conserve context tokens. The "
+            "clinical-safety disclaimer itself is the exception: per the fleet "
+            "Response-Envelope Standard v1, every tool response also stamps "
+            "_meta.unsafe_for_clinical_use: true (success and error, all "
+            "response_modes) so it survives even if this capabilities call was "
+            "never made."
         ),
-        "per_call_meta": ["tool", "request_id", "next_commands"],
+        "per_call_meta": [
+            "tool",
+            "request_id",
+            "next_commands",
+            "unsafe_for_clinical_use",
+        ],
         "latency_profile": {
             "note": (
                 "Cold upstream SPARQL latency. An identical repeated call is "

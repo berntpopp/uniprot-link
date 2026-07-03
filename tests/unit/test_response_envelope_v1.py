@@ -15,21 +15,23 @@ Ratified contract under test:
   "_meta": {...}}`` -- NEVER a bare exception, NEVER a nested ``error: {}``
   object.
 
-Ground-truth drift vs the fleet-wide contract text (asserted here, not
+Fleet decision (2026-07-03): ``_meta.unsafe_for_clinical_use`` must appear on
+EVERY tool response -- success AND error, at all response_modes -- not once
+via ``get_server_capabilities``. uniprot-link now stamps that key on every
+per-call ``_meta`` dict (see ``uniprot_link/mcp/envelope.py``); the static
+``research_use_only`` / ``research_use_notice`` fields in
+``get_server_capabilities`` (see
+``uniprot_link/mcp/capabilities.py::build_capabilities``) remain the source
+of the full disclaimer text and citation/release provenance, which are still
+declared once to conserve tokens -- see ``provenance_policy`` /
+``per_call_meta`` in ``mcp/capabilities.py``. This is covered by the
+pre-existing ``test_per_call_meta_is_lean`` / ``test_success_meta_is_lean``
+tests in ``test_service_and_tools.py``, updated alongside this file rather
+than duplicated here.
+
+Other ground-truth drift vs the fleet-wide contract text (asserted here, not
 papered over):
 
-- This server's success ``_meta`` does NOT carry ``unsafe_for_clinical_use``.
-  Static provenance (research-use restriction, citation, release) is a
-  documented, intentional design choice: it lives ONLY in the
-  ``get_server_capabilities`` discovery surface (see
-  ``uniprot_link/mcp/capabilities.py::build_capabilities`` ->
-  ``research_use_only`` / ``provenance_policy``), and per-call ``_meta`` is
-  deliberately kept lean (see ``uniprot_link/mcp/envelope.py`` module
-  docstring and the ``_RETRYABLE``/`` per_call_meta`` comments). This is
-  covered by the pre-existing ``test_per_call_meta_is_lean`` /
-  ``test_success_meta_is_lean`` tests in ``test_service_and_tools.py``; this
-  file re-asserts the negative as part of the single-source-of-truth
-  contract lock rather than duplicating those tests' full bodies.
 - Success payloads are NOT wrapped in a ``"results": [...]`` or
   ``"result": {...}`` envelope key. ``run_mcp_tool`` merges the tool's
   returned dict keys directly into the top-level envelope alongside
@@ -76,10 +78,10 @@ async def test_success_envelope_is_flat_banner_no_wrapper_key() -> None:
 
 @pytest.mark.asyncio
 async def test_success_meta_guarantees_and_documented_drift() -> None:
-    """Success _meta carries only its documented dynamic keys.
+    """Success _meta carries its documented dynamic keys.
 
-    Ground truth: no ``unsafe_for_clinical_use`` in per-call _meta (that
-    provenance lives only in get_server_capabilities, by design).
+    Fleet Response-Envelope Standard v1 (2026-07-03): every success envelope
+    stamps the clinical-safety disclaimer per-call.
     """
 
     async def call() -> dict[str, Any]:
@@ -90,8 +92,8 @@ async def test_success_meta_guarantees_and_documented_drift() -> None:
 
     assert meta["tool"] == "get_protein"
     assert isinstance(meta["request_id"], str) and meta["request_id"]
-    assert set(meta) <= {"tool", "request_id", "next_commands"}
-    assert "unsafe_for_clinical_use" not in meta
+    assert set(meta) <= {"tool", "request_id", "next_commands", "unsafe_for_clinical_use"}
+    assert meta["unsafe_for_clinical_use"] is True
 
 
 @pytest.mark.asyncio
@@ -115,6 +117,9 @@ async def test_error_envelope_is_flat_dict_never_raised() -> None:
     assert out["_meta"]["tool"] == "get_protein"
     assert isinstance(out["_meta"]["request_id"], str) and out["_meta"]["request_id"]
     assert "next_commands" in out["_meta"]
+    # Fleet Response-Envelope Standard v1 (2026-07-03): error envelopes stamp
+    # the clinical-safety disclaimer per-call too, not just on success.
+    assert out["_meta"]["unsafe_for_clinical_use"] is True
 
 
 @pytest.mark.asyncio
@@ -131,6 +136,7 @@ async def test_error_envelope_retryable_classification() -> None:
     assert out["retryable"] is True
     assert out["recovery_action"] == "retry_backoff"
     assert "error" not in out
+    assert out["_meta"]["unsafe_for_clinical_use"] is True
 
 
 @pytest.mark.asyncio
@@ -147,6 +153,7 @@ async def test_error_envelope_unclassified_exception_becomes_internal_error() ->
     assert out["retryable"] is False
     assert out["recovery_action"] == "switch_tool"
     assert "error" not in out
+    assert out["_meta"]["unsafe_for_clinical_use"] is True
 
 
 @pytest.mark.asyncio
@@ -164,6 +171,7 @@ async def test_error_envelope_mcp_tool_error_carries_custom_code() -> None:
     assert out["retryable"] is False
     assert out["recovery_action"] == "reformulate_input"
     assert "error" not in out
+    assert out["_meta"]["unsafe_for_clinical_use"] is True
 
 
 @pytest.mark.asyncio
@@ -185,6 +193,7 @@ async def test_error_envelope_invalid_input_surfaces_field_and_hint() -> None:
     assert out["field"] == "accession"
     assert out["hint"] == "e.g. P05067"
     assert "error" not in out
+    assert out["_meta"]["unsafe_for_clinical_use"] is True
 
 
 def test_build_arg_error_envelope_is_flat_dict() -> None:
@@ -208,3 +217,4 @@ def test_build_arg_error_envelope_is_flat_dict() -> None:
     assert out["_meta"]["tool"] == "get_protein"
     assert isinstance(out["_meta"]["request_id"], str) and out["_meta"]["request_id"]
     assert "next_commands" in out["_meta"]
+    assert out["_meta"]["unsafe_for_clinical_use"] is True

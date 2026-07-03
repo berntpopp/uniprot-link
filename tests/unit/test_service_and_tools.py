@@ -818,7 +818,8 @@ async def test_envelope_success_injects_meta() -> None:
 
 @pytest.mark.asyncio
 async def test_per_call_meta_is_lean() -> None:
-    """Per-call _meta carries only dynamic fields; static provenance is demoted."""
+    """Per-call _meta carries only dynamic fields (+ the clinical-use disclaimer);
+    static provenance (citation/release/endpoint) is demoted to capabilities."""
     from uniprot_link.mcp.capabilities import build_capabilities
 
     async def call() -> dict[str, Any]:
@@ -826,8 +827,8 @@ async def test_per_call_meta_is_lean() -> None:
 
     out = await run_mcp_tool("demo", call, context=McpErrorContext("demo"))
     meta = out["_meta"]
-    assert set(meta) <= {"tool", "request_id", "next_commands"}
-    assert "unsafe_for_clinical_use" not in meta
+    assert set(meta) <= {"tool", "request_id", "next_commands", "unsafe_for_clinical_use"}
+    assert meta["unsafe_for_clinical_use"] is True
     assert "uniprot_release" not in meta
     assert "citation" not in meta
     assert "endpoint" not in meta
@@ -836,7 +837,12 @@ async def test_per_call_meta_is_lean() -> None:
     assert cap["research_use_only"] is True
     assert cap["uniprot_release"]
     assert "Nucleic Acids Res" in cap["recommended_citation"]
-    assert cap["per_call_meta"] == ["tool", "request_id", "next_commands"]
+    assert cap["per_call_meta"] == [
+        "tool",
+        "request_id",
+        "next_commands",
+        "unsafe_for_clinical_use",
+    ]
     assert "provenance_policy" in cap
 
 
@@ -1116,7 +1122,7 @@ async def test_success_meta_is_lean() -> None:
     out = await run_mcp_tool("get_protein", ok, context=McpErrorContext("get_protein"))
     assert "endpoint" not in out["_meta"]
     assert "uniprot_release" not in out["_meta"]
-    assert "unsafe_for_clinical_use" not in out["_meta"]
+    assert out["_meta"]["unsafe_for_clinical_use"] is True
     assert out["_meta"]["tool"] == "get_protein"
     assert "request_id" in out["_meta"]
 
