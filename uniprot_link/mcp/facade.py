@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from fastmcp import FastMCP
 
+from uniprot_link import __version__
 from uniprot_link.mcp.capabilities import register_capability_resources
 from uniprot_link.mcp.middleware import ArgValidationMiddleware
 from uniprot_link.mcp.resources import UNIPROT_SERVER_INSTRUCTIONS
@@ -19,6 +20,7 @@ def create_uniprot_mcp() -> FastMCP:
     """Build a FastMCP instance with all uniprot-link tools and resources."""
     mcp = FastMCP(
         name="uniprot-link",
+        version=__version__,
         instructions=UNIPROT_SERVER_INSTRUCTIONS,
         mask_error_details=True,
     )

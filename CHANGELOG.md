@@ -14,6 +14,23 @@ versioning.
   no `_meta` key removed. `get_server_capabilities`'s `provenance_policy` /
   `per_call_meta` are updated to document the new key.
 
+## [2.0.2] - 2026-07-03
+
+### Fixed
+
+- **Single-source the package version.** `uniprot_link.__version__` now derives
+  from installed package metadata (`importlib.metadata.version`) instead of a
+  hardcoded literal, so `pyproject.toml [project].version` is the one source of
+  truth for `__version__`, `/health`, and MCP `serverInfo`.
+
+### Changed
+
+- **MCP `serverInfo.version` now advertises the package version.** The
+  `FastMCP(...)` constructor in `uniprot_link/mcp/facade.py` was missing
+  `version=`, so `initialize` responses reported the FastMCP framework version
+  instead of the `uniprot-link` release. Clients now see the correct package
+  version in `serverInfo.version` (matching `/health`).
+
 ## [2.0.1] - 2026-06-29
 
 ### Security
