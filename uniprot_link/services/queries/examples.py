@@ -8,20 +8,30 @@ from uniprot_link.services.queries.validation import escape_literal
 
 
 def search_example_queries(text: str | None = None, limit: int = 25) -> str:
-    """Build a SELECT over the curated example catalog (optional text filter)."""
-    text_filter = ""
+    """Build a SELECT over the curated example catalog (optional text filter).
+
+    The optional text filter matches each whitespace token against the example's
+    comment text OR its keywords. Both are multi-valued per example, so the match
+    is applied AFTER grouping, via a ``HAVING`` over the ``GROUP_CONCAT`` of
+    comments and keywords. EXISTS is deliberately avoided: the QLever endpoint
+    (``constants.py``) rejects EXISTS in expression position (BIND/FILTER) with
+    HTTP 400 -- the same constraint proteins.py works around with a
+    BOUND-over-OPTIONAL sub-SELECT (see proteins.py:198). Ref:
+    https://github.com/ad-freiburg/qlever/wiki/Current-deviations-from-the-SPARQL-1.1-standard
+    """
+    having = ""
     if text:
         tokens = [escape_literal(t) for t in text.strip().split() if t][:6]
         if tokens:
             clauses = " || ".join(
-                f'CONTAINS(LCASE(?comment), LCASE("{t}")) || '
-                f'EXISTS {{ ?ex schema:keywords ?k2 . FILTER(CONTAINS(LCASE(?k2), LCASE("{t}"))) }}'
+                f'CONTAINS(LCASE(GROUP_CONCAT(?comment; separator=" ")), LCASE("{t}")) || '
+                f'CONTAINS(LCASE(GROUP_CONCAT(?kw; separator=" ")), LCASE("{t}"))'
                 for t in tokens
             )
-            text_filter = f"    FILTER({clauses})\n"
+            having = f"HAVING({clauses})\n"
     # GROUP BY ?ex only (Bug 12): an example can carry >1 rdfs:comment AND >1
     # matching rdf:type, which previously produced duplicate rows. ?comment and
-    # ?type are collapsed with SAMPLE under distinct aliases (?desc/?qtype — the
+    # ?type are collapsed with SAMPLE under distinct aliases (?desc/?qtype -- the
     # SPARQL alias must not reuse an in-scope variable). UniProt-native vs
     # federated ranking is decided in shaping from the example IRI host.
     return f"""{prefix_block()}
@@ -34,10 +44,10 @@ WHERE {{
     OPTIONAL {{ ?ex a ?type .
                FILTER(?type IN (sh:SPARQLSelectExecutable, sh:SPARQLAskExecutable,
                                 sh:SPARQLConstructExecutable)) }}
-{text_filter}  }}
+  }}
 }}
 GROUP BY ?ex
-ORDER BY ?ex
+{having}ORDER BY ?ex
 LIMIT {limit}"""
 
 
