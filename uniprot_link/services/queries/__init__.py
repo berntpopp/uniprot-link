@@ -34,6 +34,8 @@ from uniprot_link.services.queries.validation import (
     escape_literal,
     inject_limit,
     validate_accession,
+    validate_database_name,
+    validate_example_iri,
     validate_taxon,
 )
 
@@ -59,5 +61,7 @@ __all__ = [
     "taxon_ancestors",
     "taxon_core",
     "validate_accession",
+    "validate_database_name",
+    "validate_example_iri",
     "validate_taxon",
 ]

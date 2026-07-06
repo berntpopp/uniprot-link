@@ -8,6 +8,7 @@ string literals.
 from __future__ import annotations
 
 import re
+from urllib.parse import urlsplit
 
 from uniprot_link.exceptions import InvalidInputError
 
@@ -26,10 +27,24 @@ _COMMENT_RE = re.compile(r"#[^\n]*")
 _PREFIX_RE = re.compile(r"^\s*(?:PREFIX\s+[^:]*:\s*<[^>]*>|BASE\s*<[^>]*>)\s*", re.IGNORECASE)
 _READ_OPS = {"SELECT", "ASK", "CONSTRUCT", "DESCRIBE"}
 _WRITE_OPS = {"INSERT", "DELETE", "LOAD", "CLEAR", "CREATE", "DROP", "ADD", "MOVE", "COPY", "WITH"}
+# A UniProt cross-reference database key (e.g. PDB, HGNC, AlphaFoldDB): starts
+# alnum, then alnum/._- up to 64 chars total. Anything else -- notably an IRIREF
+# terminator (``>``, ``{``, whitespace) or a path/scheme separator (``/``, ``:``,
+# ``@``, ``%``) -- is rejected before the value reaches an ``<...>`` IRI.
+_DATABASE_NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$")
+# Characters that must never appear inside an IRIREF ``<...>``: SPARQL forbids the
+# ASCII controls/space plus ``<>"{}|^`\`` in that production, so any of them lets
+# a spliced value break out of the IRI and inject graph patterns.
+_IRI_FORBIDDEN_RE = re.compile(r'[\x00-\x20<>"{}|^`\\]')
 
 
 def escape_literal(value: str) -> str:
-    """Escape a string for safe use inside a SPARQL double-quoted literal."""
+    """Escape a string for safe use inside a SPARQL double-quoted literal.
+
+    NOTE: literal-only. This does NOT make a value safe to splice into an
+    ``<...>`` IRIREF -- use :func:`validate_database_name` /
+    :func:`validate_example_iri` for IRI contexts (M1).
+    """
     return (
         value.replace("\\", "\\\\")
         .replace('"', '\\"')
@@ -37,6 +52,44 @@ def escape_literal(value: str) -> str:
         .replace("\r", "\\r")
         .replace("\t", "\\t")
     )
+
+
+def validate_database_name(name: str) -> str:
+    """Validate a cross-reference database name for safe splicing into an IRI.
+
+    The xref filter splices the name into
+    ``<http://purl.uniprot.org/database/{name}>``. ``escape_literal`` only guards
+    *string-literal* contexts, so a name carrying IRIREF terminators could break
+    out and inject graph patterns (finding M1). Restrict to the shape real
+    UniProt database keys take (``PDB``, ``HGNC``, ``AlphaFoldDB`` ...).
+    """
+    db = name.strip()
+    if not _DATABASE_NAME_RE.match(db):
+        raise InvalidInputError(
+            f"'{name}' is not a valid cross-reference database name "
+            "(letters/digits then '.', '_' or '-'; e.g. PDB, HGNC, Ensembl).",
+            field="databases",
+        )
+    return db
+
+
+def validate_example_iri(value: str) -> str:
+    """Validate a curated-example IRI for safe splicing into an ``<...>`` IRIREF.
+
+    ``get_example_query`` splices ``example_id`` directly into ``<{iri}>``. A
+    scheme-prefix check alone is insufficient (finding M1): require an http(s)
+    scheme and non-empty host, and reject any character SPARQL forbids inside an
+    IRIREF so a value cannot terminate the ``<...>`` and inject graph patterns.
+    """
+    iri = value.strip()
+    parts = urlsplit(iri)
+    if parts.scheme not in ("http", "https") or not parts.netloc or _IRI_FORBIDDEN_RE.search(iri):
+        raise InvalidInputError(
+            "example_id must be a full http(s) IRI as returned by "
+            "search_example_queries (no spaces or SPARQL metacharacters).",
+            field="example_id",
+        )
+    return iri
 
 
 def validate_accession(accession: str) -> str:

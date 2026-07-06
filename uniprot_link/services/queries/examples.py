@@ -2,9 +2,8 @@
 
 from __future__ import annotations
 
-from uniprot_link.exceptions import InvalidInputError
 from uniprot_link.services.constants import SPARQL_EXAMPLES_GRAPH, prefix_block
-from uniprot_link.services.queries.validation import escape_literal
+from uniprot_link.services.queries.validation import escape_literal, validate_example_iri
 
 
 def search_example_queries(text: str | None = None, limit: int = 25) -> str:
@@ -53,12 +52,9 @@ LIMIT {limit}"""
 
 def get_example_query(example_iri: str) -> str:
     """Build a SELECT for a single example's full query text and metadata."""
-    if not example_iri.startswith(("http://", "https://")):
-        raise InvalidInputError(
-            "example_id must be a full IRI as returned by search_example_queries.",
-            field="example_id",
-        )
-    iri = f"<{example_iri}>"
+    # M1: validate IRI components (scheme/host + no IRIREF terminators) before
+    # splicing into ``<...>`` -- a scheme prefix check alone allowed break-out.
+    iri = f"<{validate_example_iri(example_iri)}>"
     return f"""{prefix_block()}
 PREFIX ex_ont: <https://purl.expasy.org/sparql-examples/ontology#>
 SELECT ?comment ?query ?type

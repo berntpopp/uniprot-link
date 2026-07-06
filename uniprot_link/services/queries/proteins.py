@@ -13,6 +13,7 @@ from uniprot_link.services.constants import FEATURE_TYPES, prefix_block
 from uniprot_link.services.queries.validation import (
     escape_literal,
     validate_accession,
+    validate_database_name,
     validate_taxon,
 )
 
@@ -386,7 +387,7 @@ def protein_cross_references(accession: str, databases: list[str] | None = None)
     db_filter = ""
     if databases:
         values = " ".join(
-            f"<http://purl.uniprot.org/database/{escape_literal(d.strip())}>" for d in databases
+            f"<http://purl.uniprot.org/database/{validate_database_name(d)}>" for d in databases
         )
         db_filter = f"  VALUES ?db {{ {values} }}\n"
     return f"""{prefix_block()}
