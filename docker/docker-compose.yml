@@ -11,12 +11,18 @@ services:
       context: ..
       dockerfile: docker/Dockerfile
     image: uniprot-link:latest
-    # Host port defaults to 0 = Docker assigns a random free ephemeral port
-    # (no conflicts with other services). Pin it by setting UNIPROT_LINK_HOST_PORT.
-    # Discover the assigned port with: make docker-url
+    # Dev/local only — loopback-bound (host_ip: 127.0.0.1) so copying this file
+    # to a server never publishes the unauthenticated backend on the public IP
+    # (Docker otherwise binds 0.0.0.0 and bypasses the host firewall). This is the
+    # Compose long-syntax equivalent of the short-form "127.0.0.1:HOST:CONTAINER".
+    # Production fronts the container with a reverse proxy via the prod/npm
+    # overlays (ports: !reset []). Backends are unauthenticated by design.
+    # Pin the host port by setting UNIPROT_LINK_HOST_PORT; discover it with:
+    # make docker-url
     ports:
       - target: 8000
         published: "${UNIPROT_LINK_HOST_PORT:-8013}"
+        host_ip: 127.0.0.1
         protocol: tcp
     environment:
       UNIPROT_LINK_TRANSPORT: unified
