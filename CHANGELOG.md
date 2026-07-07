@@ -14,6 +14,36 @@ versioning.
   no `_meta` key removed. `get_server_capabilities`'s `provenance_policy` /
   `per_call_meta` are updated to document the new key.
 
+## [2.0.3] - 2026-07-07
+
+### Security
+
+- **Close a SPARQL IRIREF-injection vector (finding M1).** `escape_literal`
+  guards double-quoted string-literal contexts but not `<...>` IRIREF contexts,
+  so user input spliced into an IRI — the cross-reference database name
+  (`protein_cross_references`) and the curated-example IRI (`get_example_query`)
+  — could carry IRI terminators (`>`, whitespace, `{}` …) and break out of the
+  `<...>` to inject graph patterns. Both call sites now validate with IRI-aware
+  validators (`validate_database_name`, `validate_example_iri`) before the
+  splice: a database key is restricted to its real shape and an example IRI must
+  be an http(s) IRI with a non-empty host and no SPARQL metacharacters. The
+  IRI validator also wraps `urllib.parse.urlsplit`, which itself raises
+  `ValueError` on a malformed host such as `http://[`, so every malformed IRI is
+  rejected cleanly as `InvalidInputError` instead of surfacing as an unhandled
+  error.
+
+### Fixed
+
+- **Loopback-bind the base `docker-compose.yml` host port.** The base compose
+  uses Compose long-syntax `ports` (`target`/`published`/`protocol`), which
+  publishes the unauthenticated backend on `0.0.0.0`; the short-form
+  `127.0.0.1:` prefix trick does not apply. Add `host_ip: 127.0.0.1` so copying
+  this file to a server never exposes the backend on the public IP (Docker
+  otherwise binds `0.0.0.0` and bypasses the host firewall). Production is
+  unaffected — the prod/npm overlays reset `ports` (expose-only, fronted by a
+  reverse proxy). A `yaml.safe_load` guard test asserts every published port is
+  loopback-bound.
+
 ## [2.0.2] - 2026-07-03
 
 ### Fixed
