@@ -62,11 +62,20 @@ class TestValidateExampleIri:
             "https://sparql.uniprot.org/a\x01b",  # control char
             "ftp://sparql.uniprot.org/26",  # non-http scheme
             "javascript:alert(1)",  # non-http scheme, empty netloc
+            "http://[",  # malformed IPv6 host: urlsplit() itself raises ValueError
         ],
     )
     def test_rejects_iri_terminators_and_bad_scheme(self, bad: str) -> None:
         with pytest.raises(InvalidInputError):
             validate_example_iri(bad)
+
+    def test_malformed_host_raises_invalid_input_not_valueerror(self) -> None:
+        # ``urlsplit("http://[")`` raises ``ValueError: Invalid IPv6 URL`` before
+        # the scheme/host/forbidden-char checks run; that must be caught and
+        # re-raised as the intended ``InvalidInputError(field="example_id")`` so a
+        # malformed IRI never surfaces as an unhandled ValueError.
+        with pytest.raises(InvalidInputError):
+            validate_example_iri("http://[")
 
 
 class TestBuildersRejectMaliciousInput:

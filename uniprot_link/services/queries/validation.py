@@ -82,8 +82,19 @@ def validate_example_iri(value: str) -> str:
     IRIREF so a value cannot terminate the ``<...>`` and inject graph patterns.
     """
     iri = value.strip()
-    parts = urlsplit(iri)
-    if parts.scheme not in ("http", "https") or not parts.netloc or _IRI_FORBIDDEN_RE.search(iri):
+    try:
+        parts = urlsplit(iri)
+    except ValueError:
+        # urlsplit itself raises ValueError on malformed input (e.g. an invalid
+        # IPv6 literal like ``http://[``); surface it as the intended
+        # InvalidInputError rather than letting it escape as an unhandled error.
+        parts = None
+    if (
+        parts is None
+        or parts.scheme not in ("http", "https")
+        or not parts.netloc
+        or _IRI_FORBIDDEN_RE.search(iri)
+    ):
         raise InvalidInputError(
             "example_id must be a full http(s) IRI as returned by "
             "search_example_queries (no spaces or SPARQL metacharacters).",
