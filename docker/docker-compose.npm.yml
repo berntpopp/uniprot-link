@@ -25,13 +25,16 @@ services:
       - UNIPROT_LINK_HOST=0.0.0.0
       - UNIPROT_LINK_PORT=8000
       - UNIPROT_LINK_MCP_PATH=/mcp
+      - 'UNIPROT_LINK_ALLOWED_HOSTS=["localhost","127.0.0.1","::1","uniprot-link.genefoundry.org"]'
+      - 'UNIPROT_LINK_ALLOWED_ORIGINS=["https://uniprot-link.genefoundry.org"]'
+      - 'UNIPROT_LINK_CORS_ORIGINS=["https://uniprot-link.genefoundry.org"]'
       - UNIPROT_LINK_LOG_LEVEL=${LOG_LEVEL_API:-INFO}
       - UNIPROT_LINK_LOG_FORMAT=json
       # UniProt etiquette: a real contact mailbox goes in the SPARQL User-Agent.
       - UNIPROT_LINK_SPARQL__CONTACT_EMAIL=${UNIPROT_LINK_SPARQL__CONTACT_EMAIL:-bernt.popp@charite.de}
     # Image CMD already runs `uniprot-link serve --transport unified ...`.
     healthcheck:
-      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8000/health"]
+      test: ["CMD", "curl", "-fsS", "-H", "Host: localhost", "http://127.0.0.1:8000/health"]
       interval: 30s
       timeout: 5s
       retries: 5

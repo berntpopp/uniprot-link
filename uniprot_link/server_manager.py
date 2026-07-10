@@ -9,15 +9,13 @@ from __future__ import annotations
 from contextlib import AsyncExitStack, asynccontextmanager
 from typing import TYPE_CHECKING
 
+# FastMCP >=3.4.3 enables a global localhost-only default that rejects the public
+# proxy Host before application allowlists can apply. Disable that implicit guard;
+# create_unified_app installs explicit outer and native guards with the same exact
+# configured lists. The hasattr keeps imports safe on older transitional installs.
+import fastmcp
 import uvicorn
 
-# fastmcp >=3.4.3 defaults http_host_origin_protection on, which returns 421
-# Misdirected Request for any proxied /mcp request whose Host is not localhost
-# (e.g. traffic from the genefoundry-router). NPM already validates the Host
-# via server_name + TLS SNI, so disable the redundant app-layer guard. This is
-# a no-op on fastmcp <3.4.3 (the setting does not exist yet), so it is safe to
-# land before the version bump that would otherwise break federation.
-import fastmcp
 if hasattr(fastmcp.settings, "http_host_origin_protection"):
     fastmcp.settings.http_host_origin_protection = False
 
@@ -26,6 +24,45 @@ if TYPE_CHECKING:
 
     from fastapi import FastAPI
     from structlog.typing import FilteringBoundLogger
+
+
+def create_unified_app() -> FastAPI:
+    """Create the shared FastAPI host with outer and native strict guards."""
+    from fastmcp.server.http import HostOriginGuardMiddleware
+
+    from uniprot_link.app import create_app
+    from uniprot_link.config import settings
+    from uniprot_link.mcp.facade import create_uniprot_mcp
+
+    fastapi_app = create_app()
+    fastapi_app.add_middleware(
+        HostOriginGuardMiddleware,
+        allowed_hosts=settings.allowed_hosts,
+        allowed_origins=settings.allowed_origins,
+        mode="strict",
+    )
+    mcp = create_uniprot_mcp()
+    mcp_asgi = mcp.http_app(
+        path=settings.mcp_path,
+        stateless_http=True,
+        json_response=True,
+        host_origin_protection=True,
+        allowed_hosts=settings.allowed_hosts,
+        allowed_origins=settings.allowed_origins,
+    )
+
+    original_lifespan = fastapi_app.router.lifespan_context
+
+    @asynccontextmanager
+    async def combined_lifespan(app: FastAPI) -> AsyncIterator[None]:
+        async with AsyncExitStack() as stack:
+            await stack.enter_async_context(original_lifespan(app))
+            await stack.enter_async_context(mcp_asgi.router.lifespan_context(app))
+            yield
+
+    fastapi_app.router.lifespan_context = combined_lifespan
+    fastapi_app.mount("/", mcp_asgi)
+    return fastapi_app
 
 
 class UnifiedServerManager:
@@ -41,24 +78,7 @@ class UnifiedServerManager:
         if self.logger:
             self.logger.info("Starting unified server", host=host, port=port, mcp_path="/mcp")
 
-        from uniprot_link.app import app as fastapi_app
-        from uniprot_link.config import settings
-        from uniprot_link.mcp.facade import create_uniprot_mcp
-
-        mcp = create_uniprot_mcp()
-        mcp_asgi = mcp.http_app(path=settings.mcp_path, stateless_http=True, json_response=True)
-
-        original_lifespan = fastapi_app.router.lifespan_context
-
-        @asynccontextmanager
-        async def combined_lifespan(app: FastAPI) -> AsyncIterator[None]:
-            async with AsyncExitStack() as stack:
-                await stack.enter_async_context(original_lifespan(app))
-                await stack.enter_async_context(mcp_asgi.router.lifespan_context(app))
-                yield
-
-        fastapi_app.router.lifespan_context = combined_lifespan
-        fastapi_app.mount("/", mcp_asgi)
+        fastapi_app = create_unified_app()
 
         config = uvicorn.Config(
             app=fastapi_app, host=host, port=port, log_config=None, lifespan="on"
