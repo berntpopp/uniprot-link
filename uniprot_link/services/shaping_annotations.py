@@ -61,9 +61,10 @@ def shape_features(result_json: dict[str, Any] | None, accession: str) -> list[d
             key = mapped if mapped is not None else f"_unmapped:{cls.replace('_Annotation', '')}"
         description: dict[str, Any] | None = None
         raw_comment = row.get("comment")
-        if raw_comment:
+        # isinstance(str), not truthiness: fence even an empty "" comment.
+        if isinstance(raw_comment, str):
             description = fence_untrusted_text(
-                str(raw_comment),
+                raw_comment,
                 source=_UNTRUSTED_SOURCE,
                 record_id=f"{accession}#feature:{i}",
             ).model_dump(mode="json")
@@ -134,9 +135,12 @@ def shape_variants(result_json: dict[str, Any] | None, accession: str) -> list[d
     fenced_objects: list[UntrustedText] = []
     for i, variant in enumerate(out):
         raw_description = variant.get("description")
-        if raw_description:
+        # Guard on isinstance(str), not truthiness: a present-but-empty upstream
+        # comment ("") is still external text and MUST be the typed object with
+        # its raw digest, never a bare "". Absent (None) stays null per the schema.
+        if isinstance(raw_description, str):
             fenced = fence_untrusted_text(
-                str(raw_description),
+                raw_description,
                 source=_UNTRUSTED_SOURCE,
                 record_id=f"{accession}#variant:{i}",
             )
@@ -198,12 +202,13 @@ def shape_diseases(result_json: dict[str, Any] | None, accession: str) -> list[d
 def _fence_comment(raw: Any, record_id: str, sink: list[UntrustedText]) -> dict[str, Any] | None:
     """Fence one optional rdfs:comment literal, appending it to ``sink``.
 
-    Returns the JSON-mode fenced object, or ``None`` when the field is absent/empty
-    (so the caller's empty-value filter drops it rather than emitting an empty
-    fenced wrapper).
+    Guards on ``isinstance(str)``, not truthiness: a present-but-empty upstream
+    comment ("") is still external text and is returned as the typed object with
+    its raw digest. Only an absent field (``None``) returns ``None`` (null/absent
+    per the schema).
     """
-    if not raw:
+    if not isinstance(raw, str):
         return None
-    fenced = fence_untrusted_text(str(raw), source=_UNTRUSTED_SOURCE, record_id=record_id)
+    fenced = fence_untrusted_text(raw, source=_UNTRUSTED_SOURCE, record_id=record_id)
     sink.append(fenced)
     return fenced.model_dump(mode="json")

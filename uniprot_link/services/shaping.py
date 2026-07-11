@@ -193,10 +193,10 @@ def shape_protein_summary(
     fenced_objects: list[UntrustedText] = []
     function_field: dict[str, Any] | None = None
     raw_function = r.get("function")
-    if raw_function:
-        fenced = fence_untrusted_text(
-            str(raw_function), source=_UNTRUSTED_SOURCE, record_id=accession
-        )
+    # isinstance(str), not truthiness: fence even an empty "" function literal so
+    # it is the typed object, never a bare "". Absent (None) stays omitted.
+    if isinstance(raw_function, str):
+        fenced = fence_untrusted_text(raw_function, source=_UNTRUSTED_SOURCE, record_id=accession)
         fenced_objects.append(fenced)
         function_field = fenced.model_dump(mode="json")
     summary: dict[str, Any] = {
@@ -430,10 +430,9 @@ def shape_example_list(result_json: dict[str, Any] | None) -> list[dict[str, Any
         federated = not str(ex).startswith("https://sparql.uniprot.org/")
         description: dict[str, Any] | None = None
         raw_desc = row.get("desc")
-        if raw_desc:
-            fenced = fence_untrusted_text(
-                str(raw_desc), source=_UNTRUSTED_SOURCE, record_id=str(ex)
-            )
+        # isinstance(str), not truthiness: fence even an empty "" description.
+        if isinstance(raw_desc, str):
+            fenced = fence_untrusted_text(raw_desc, source=_UNTRUSTED_SOURCE, record_id=str(ex))
             fenced_objects.append(fenced)
             description = fenced.model_dump(mode="json")
         entry: dict[str, Any] = {
@@ -470,10 +469,9 @@ def shape_example_detail(
     fenced_objects: list[UntrustedText] = []
     description: dict[str, Any] | None = None
     raw_comment = r.get("comment")
-    if raw_comment:
-        fenced = fence_untrusted_text(
-            str(raw_comment), source=_UNTRUSTED_SOURCE, record_id=example_iri
-        )
+    # isinstance(str), not truthiness: fence even an empty "" comment.
+    if isinstance(raw_comment, str):
+        fenced = fence_untrusted_text(raw_comment, source=_UNTRUSTED_SOURCE, record_id=example_iri)
         fenced_objects.append(fenced)
         description = fenced.model_dump(mode="json")
     detail = {

@@ -35,9 +35,12 @@ versioning.
   so the typed literal is visible to schema-aware clients, not only at the top
   level. The example `query` text (executable SPARQL, not prose) and controlled
   labels/names (protein names, disease/GO labels) are intentionally left as
-  plain strings. Consumers that read any fenced field as a plain string must
-  update to read `.text` from the typed object. Defense in depth; research use
-  only, not clinical decision support.
+  plain strings. A present-but-empty upstream literal (`""`) is fenced too — it
+  becomes the typed object with `text: ""` and its digest, never a bare `""`
+  that would contradict the schema; only an absent field stays `null`. Consumers
+  that read any fenced field as a plain string must update to read `.text` from
+  the typed object. Defense in depth; research use only, not clinical decision
+  support.
 
 - Exceeding a Response-Envelope v1.1 untrusted-text ceiling now surfaces as an
   explicit typed `error_code: "limit_exceeded"` envelope (recovery
