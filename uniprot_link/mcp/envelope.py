@@ -132,6 +132,9 @@ def _error_envelope(exc: BaseException, context: McpErrorContext) -> dict[str, A
         if exc.hint is not None:
             envelope["hint"] = exc.hint
     # An obsolete/demerged entry: flag it and chain to the live replacement(s).
+    # ``exc.replaced_by`` is guaranteed strictly-valid: ObsoleteEntryError validates
+    # (and omits) upstream accessions at construction, so no invalid/hostile value can
+    # reach the replaced_by field or the recovery ``next_commands`` accession argument.
     if isinstance(exc, ObsoleteEntryError):
         envelope["obsolete"] = True
         envelope["replaced_by"] = exc.replaced_by
@@ -177,6 +180,11 @@ def build_arg_error_envelope(
     - other value error (``value_message`` given, no enum) -> no fabricated value
       list; the pydantic reason is folded into the message.
     """
+    # ``loc`` is the caller-supplied argument NAME (unknown/invalid arg) -- it is
+    # attacker-influenceable and is surfaced BOTH inside ``message`` and verbatim in
+    # the ``field`` key. Sanitize it once, up front, so no forbidden control/
+    # zero-width/bidi/NUL code point reaches either representation.
+    loc = sanitize_message(loc)
     allowed: list[Any] | None = valid_params
     if error_type in {"missing_argument", "missing"}:
         head = f"Missing required argument `{loc}` for {tool_name}."

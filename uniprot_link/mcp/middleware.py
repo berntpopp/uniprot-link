@@ -32,6 +32,7 @@ from uniprot_link.mcp.arg_help import (
     tool_signature,
 )
 from uniprot_link.mcp.envelope import build_arg_error_envelope
+from uniprot_link.mcp.untrusted_content import sanitize_message
 
 _MISSING_TYPES = {"missing", "missing_argument"}
 
@@ -123,7 +124,12 @@ class ArgValidationMiddleware(Middleware):
             enum_values=enum_values,
             value_message=value_message,
         )
-        logger.warning("mcp_arg_error tool=%s loc=%s type=%s", name, loc, error_type)
+        # ``loc`` is the caller-supplied argument name -- sanitize it before it
+        # reaches the app log so a hostile name cannot write control/zero-width/
+        # bidi/NUL code points into the log line.
+        logger.warning(
+            "mcp_arg_error tool=%s loc=%s type=%s", name, sanitize_message(loc), error_type
+        )
         return ToolResult(
             structured_content=envelope,
             content=[TextContent(type="text", text=json.dumps(envelope))],

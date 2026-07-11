@@ -115,6 +115,19 @@ def validate_accession(accession: str) -> str:
     return acc
 
 
+def is_valid_accession(value: str) -> bool:
+    """True only if ``value`` is a strictly-valid UniProtKB accession.
+
+    Unlike :func:`looks_like_accession` (which also accepts near-miss shapes for
+    error recovery), this enforces the official accession grammar EXACTLY via
+    ``fullmatch`` (so a trailing newline or any control/zero-width/bidi character
+    fails). Used to keep unvalidated upstream ``up:replacedBy`` values from being
+    surfaced as data or spliced into a recovery ``next_commands`` argument -- such
+    values are OMITTED, never sanitized into an executable argument.
+    """
+    return bool(_ACCESSION_RE.fullmatch(value))
+
+
 def looks_like_accession(value: str) -> bool:
     """True if ``value`` is a real OR near-miss UniProtKB accession (not a gene).
 

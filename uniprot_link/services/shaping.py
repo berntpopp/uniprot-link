@@ -19,6 +19,7 @@ from uniprot_link.services.constants import (
     PREFIXES,
     WATER_MASS,
 )
+from uniprot_link.services.queries.validation import is_valid_accession
 
 _UNTRUSTED_SOURCE = "uniprot"
 
@@ -138,7 +139,19 @@ def shape_entry_status(result_json: dict[str, Any] | None, requested: str) -> En
     if not data:
         return EntryStatus(exists=False, obsolete=False, replaced_by=[], isoform_exists=None)
     obsolete = any(r.get("obsolete") is True for r in data)
-    replaced = sorted({accession_from_uri(r["replacedBy"]) for r in data if r.get("replacedBy")})
+    # up:replacedBy is unvalidated endpoint data. Keep ONLY strictly-valid UniProt
+    # accessions: an invalid/hostile value is OMITTED, never surfaced as data or
+    # spliced into a recovery next_commands argument (it would otherwise reach the
+    # obsolete record + ObsoleteEntryError.replaced_by verbatim). Validate/omit is
+    # required here -- sanitizing an executable recovery argument is not enough.
+    replaced = sorted(
+        {
+            acc
+            for r in data
+            if r.get("replacedBy")
+            and is_valid_accession(acc := accession_from_uri(r["replacedBy"]))
+        }
+    )
     iso: bool | None = None
     if "-" in requested:
         iso = any(r.get("isoform_exists") is True for r in data)

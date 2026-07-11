@@ -97,9 +97,17 @@ class ObsoleteEntryError(NotFoundError):
         replaced_by: list[str] | None = None,
         message: str | None = None,
     ) -> None:
-        """Store the obsolete accession and any replacement accessions."""
+        """Store the obsolete accession and any (strictly-valid) replacement accessions."""
+        # Local import avoids an exceptions<->queries import cycle.
+        from uniprot_link.services.queries.validation import is_valid_accession
+
         self.accession = accession
-        self.replaced_by = replaced_by or []
+        # up:replacedBy is unvalidated endpoint data. Keep ONLY strictly-valid UniProt
+        # accessions so an invalid/hostile value can never reach the caller-visible
+        # message NOR a downstream recovery `next_commands` argument. Validate + OMIT
+        # (not sanitize): a recovery argument must be a real accession, not scrubbed
+        # attacker text.
+        self.replaced_by = [acc for acc in (replaced_by or []) if is_valid_accession(acc)]
         if message is None:
             if self.replaced_by:
                 message = (
