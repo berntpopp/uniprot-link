@@ -14,6 +14,13 @@ versioning.
   no `_meta` key removed. `get_server_capabilities`'s `provenance_policy` /
   `per_call_meta` are updated to document the new key.
 
+## [2.0.4] - 2026-07-11
+
+### Security
+
+- Re-enabled FastMCP 3.4.4 strict Host/Origin protection with configurable
+  allowlists.
+
 ## [2.0.3] - 2026-07-07
 
 ### Security
