@@ -6,6 +6,16 @@ versioning.
 
 ## [Unreleased]
 
+## [3.0.1] - 2026-07-11
+
+### Security
+
+- **Defense in depth (error-path text):** caller-visible error messages are
+  sanitized of control/zero-width/bidi/NUL code points, the arg-validation field
+  name is sanitized, obsolete-entry replacement accessions are validated (invalid
+  values omitted so upstream text can't become a recovery argument), and the
+  QLever 400 body is no longer echoed. Research use only.
+
 ## [3.0.0] - 2026-07-11
 
 ### Changed
