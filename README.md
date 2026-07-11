@@ -91,6 +91,12 @@ Environment variables (prefix `UNIPROT_LINK_`, nested with `__`):
 | `UNIPROT_LINK_SPARQL__DEFAULT_LIMIT` | `50` | Auto-LIMIT for unbounded SELECTs |
 | `UNIPROT_LINK_TRANSPORT` | `unified` | `unified` / `http` |
 | `UNIPROT_LINK_PORT` | `8000` | Server port |
+| `UNIPROT_LINK_ALLOWED_HOSTS` | loopback hosts | Exact accepted Host values; add the public proxy hostname. Wildcards are rejected. |
+| `UNIPROT_LINK_ALLOWED_ORIGINS` | `[]` | Accepted browser Origins; requests without Origin remain allowed. |
+
+Request Origin validation is separate from CORS response headers. A browser-facing
+deployment must configure the same exact public HTTPS origin in both
+`UNIPROT_LINK_ALLOWED_ORIGINS` and `UNIPROT_LINK_CORS_ORIGINS`.
 
 ## Development
 
