@@ -111,3 +111,46 @@ def test_get_protein_variants_description_is_fenced_typed_object() -> None:
     _assert_fenced(fenced, record_id=f"{ACCESSION}#variant:0")
     assert "tool" not in out[0]
     assert "fallback_tool" not in out[0]
+
+
+def test_large_variant_list_over_128_descriptions_does_not_raise() -> None:
+    """A large protein (TTN/TP53/BRCA1) legitimately carries well over the v1.1
+    default 128-object ceiling of description-bearing annotations. The uncapped
+    embedded-list shapers lift max_objects to 10000 so a real query never raises
+    UntrustedTextLimitError; the byte ceilings remain the DoS backstop.
+    """
+    rows_over_ceiling = [
+        {
+            "begin": i,
+            "end": i,
+            "substitution": "K",
+            "wildType": "R",
+            # short, real-shaped description so the 8 MiB total is nowhere near hit
+            "comment": f"In a disorder; variant {i}.",
+        }
+        for i in range(200)
+    ]
+    body = make_select_json(
+        ["begin", "end", "substitution", "wildType", "comment"], rows_over_ceiling
+    )
+    # Must not raise UntrustedTextLimitError despite >128 fenced descriptions.
+    out = S.shape_variants(body, ACCESSION)
+    assert len(out) == 200
+    assert all(v["description"]["kind"] == "untrusted_text" for v in out)
+
+
+def test_large_feature_list_over_128_descriptions_does_not_raise() -> None:
+    """Same generous-ceiling guarantee for get_protein_features' embedded list."""
+    rows_over_ceiling = [
+        {
+            "type": "http://purl.uniprot.org/core/Domain_Extent_Annotation",
+            "begin": i,
+            "end": i + 1,
+            "comment": f"Domain {i}.",
+        }
+        for i in range(200)
+    ]
+    body = make_select_json(["type", "begin", "end", "comment"], rows_over_ceiling)
+    out = S.shape_features(body, ACCESSION)
+    assert len(out) == 200
+    assert all(f["description"]["kind"] == "untrusted_text" for f in out)

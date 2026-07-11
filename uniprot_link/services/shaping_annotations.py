@@ -27,6 +27,14 @@ from uniprot_link.services.shaping import local_name, rows
 
 _UNTRUSTED_SOURCE = "uniprot"
 
+# These three shapers return uncapped embedded lists: a large protein (TTN, TP53,
+# BRCA1) legitimately carries well over the v1.1 default 128-object ceiling of
+# description-bearing feature/variant/disease annotations. Enforcing the default
+# max_objects here would raise UntrustedTextLimitError on a real query, so we lift
+# the count ceiling to a generous 10000; the per-object 2 MiB and 8 MiB total byte
+# limits remain the real DoS backstop (10000 real descriptions hit 8 MiB first).
+_MAX_UNTRUSTED_OBJECTS = 10_000
+
 
 def shape_features(result_json: dict[str, Any] | None, accession: str) -> list[dict[str, Any]]:
     """Shape feature rows; emit only filterable `type` keys (Bug 1).
@@ -65,7 +73,7 @@ def shape_features(result_json: dict[str, Any] | None, accession: str) -> list[d
             }
         )
     if fenced_objects:
-        enforce_untrusted_text_limits(fenced_objects)
+        enforce_untrusted_text_limits(fenced_objects, max_objects=_MAX_UNTRUSTED_OBJECTS)
     return out
 
 
@@ -116,7 +124,7 @@ def shape_variants(result_json: dict[str, Any] | None, accession: str) -> list[d
             fenced_objects.append(fenced)
             variant["description"] = fenced.model_dump(mode="json")
     if fenced_objects:
-        enforce_untrusted_text_limits(fenced_objects)
+        enforce_untrusted_text_limits(fenced_objects, max_objects=_MAX_UNTRUSTED_OBJECTS)
     return out
 
 
@@ -170,5 +178,5 @@ def shape_diseases(result_json: dict[str, Any] | None, accession: str) -> list[d
         }
         out.append({k: v for k, v in disease.items() if v not in (None, "")})
     if fenced_objects:
-        enforce_untrusted_text_limits(fenced_objects)
+        enforce_untrusted_text_limits(fenced_objects, max_objects=_MAX_UNTRUSTED_OBJECTS)
     return out
