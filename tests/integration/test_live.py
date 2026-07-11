@@ -313,7 +313,8 @@ async def test_taxon_by_name_has_timing_and_rank_live(service: SparqlService) ->
 async def test_diseases_have_distinct_definitions_live(service: SparqlService) -> None:
     # Bug 9: definition is the clinical text, distinct per disease.
     res = await service.get_diseases("Q96T60")
-    defs = {d["disease"]: d.get("definition") for d in res["diseases"]}
+    # definition is now a fenced untrusted_text object; compare on its .text.
+    defs = {d["disease"]: (d.get("definition") or {}).get("text") for d in res["diseases"]}
     assert all(defs.values())  # every disease has a definition
     assert len(set(defs.values())) == len(defs)  # and they differ
 

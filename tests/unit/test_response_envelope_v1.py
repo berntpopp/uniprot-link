@@ -157,6 +157,29 @@ async def test_error_envelope_unclassified_exception_becomes_internal_error() ->
 
 
 @pytest.mark.asyncio
+async def test_error_envelope_untrusted_text_limit_is_typed_not_internal() -> None:
+    """v1.1: exceeding an untrusted-text ceiling is an explicit typed limit error,
+    never a masked generic internal_error (UntrustedTextLimitError subclasses
+    ValueError, so it must be classified before the generic fallthrough)."""
+    from uniprot_link.mcp.untrusted_content import UntrustedTextLimitError
+
+    async def call() -> dict[str, Any]:
+        raise UntrustedTextLimitError("untrusted object count 200 exceeds ceiling 128")
+
+    out = await run_mcp_tool(
+        "get_protein_diseases", call, context=McpErrorContext("get_protein_diseases")
+    )
+
+    assert out["success"] is False
+    assert out["error_code"] == "limit_exceeded"
+    assert out["error_code"] != "internal_error"
+    assert out["retryable"] is False
+    assert out["recovery_action"] == "reformulate_input"
+    assert "200" in out["message"]  # the explicit ceiling message is surfaced
+    assert out["_meta"]["unsafe_for_clinical_use"] is True
+
+
+@pytest.mark.asyncio
 async def test_error_envelope_mcp_tool_error_carries_custom_code() -> None:
     """McpToolError lets a tool body raise a specific code/message pair."""
 

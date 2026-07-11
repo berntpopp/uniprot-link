@@ -26,6 +26,7 @@ from uniprot_link.exceptions import (
     ServiceUnavailableError,
 )
 from uniprot_link.mcp.next_commands import cmd, default_error_next_commands
+from uniprot_link.mcp.untrusted_content import UntrustedTextLimitError
 
 logger = logging.getLogger(__name__)
 
@@ -71,6 +72,11 @@ def _classify(exc: BaseException) -> tuple[str, str]:
     """Return ``(error_code, client_safe_message)`` for an exception."""
     if isinstance(exc, McpToolError):
         return exc.error_code, exc.message
+    # Response-Envelope v1.1: exceeding an untrusted-text ceiling is an explicit
+    # typed limit error, never a masked generic internal_error. Checked before the
+    # generic ValueError fallthrough (UntrustedTextLimitError subclasses ValueError).
+    if isinstance(exc, UntrustedTextLimitError):
+        return "limit_exceeded", _safe_message(exc)
     if isinstance(exc, NotFoundError):
         return "not_found", _safe_message(exc)
     if isinstance(exc, InvalidInputError):
@@ -93,7 +99,7 @@ def _classify(exc: BaseException) -> tuple[str, str]:
 def _recovery_action(error_code: str) -> str:
     if error_code in _RETRYABLE:
         return "retry_backoff"
-    if error_code in {"invalid_input", "not_found", "query_syntax_error"}:
+    if error_code in {"invalid_input", "not_found", "query_syntax_error", "limit_exceeded"}:
         return "reformulate_input"
     return "switch_tool"
 

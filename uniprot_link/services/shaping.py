@@ -400,15 +400,26 @@ def project_go_terms(
     return out
 
 
+# The curated SPARQL-example catalog is capped at 126 entries (see the tool's
+# ``limit`` maximum); each entry carries one ``rdfs:comment`` description, so the
+# object-count ceiling for the fenced list is that same 126.
+_EXAMPLE_CATALOG_MAX = 126
+
+
 def shape_example_list(result_json: dict[str, Any] | None) -> list[dict[str, Any]]:
     """Shape example-catalog search rows: dedupe by id, rank native above federated.
 
     An example with >1 matching rdf:type previously produced duplicate rows
     (Bug 12). Here the first row per ``example_id`` wins, and UniProt-native
     examples are stably ranked before federated (Rhea/empty-keyword) ones.
+
+    ``description`` is the example's ``rdfs:comment`` -- upstream free text served
+    verbatim, so it is fenced into a typed ``untrusted_text`` object (never a bare
+    string); ``record_id`` is the example IRI.
     """
     out: list[dict[str, Any]] = []
     seen: set[str] = set()
+    fenced_objects: list[UntrustedText] = []
     for row in rows(result_json):
         ex = row.get("ex")
         if not ex or ex in seen:
@@ -417,9 +428,17 @@ def shape_example_list(result_json: dict[str, Any] | None) -> list[dict[str, Any
         # Federated = not hosted on the UniProt example graph (e.g. Rhea); these
         # often carry empty keywords and are ranked below native examples.
         federated = not str(ex).startswith("https://sparql.uniprot.org/")
+        description: dict[str, Any] | None = None
+        raw_desc = row.get("desc")
+        if raw_desc:
+            fenced = fence_untrusted_text(
+                str(raw_desc), source=_UNTRUSTED_SOURCE, record_id=str(ex)
+            )
+            fenced_objects.append(fenced)
+            description = fenced.model_dump(mode="json")
         entry: dict[str, Any] = {
             "example_id": ex,
-            "description": row.get("desc"),
+            "description": description,
             "query_type": local_name(row["qtype"]).replace("SPARQL", "").replace("Executable", "")
             if row.get("qtype")
             else None,
@@ -429,17 +448,36 @@ def shape_example_list(result_json: dict[str, Any] | None) -> list[dict[str, Any
             entry["federated"] = True
         out.append(entry)
     out.sort(key=lambda e: bool(e.get("federated")))  # stable: native first
+    if fenced_objects:
+        enforce_untrusted_text_limits(fenced_objects, max_objects=_EXAMPLE_CATALOG_MAX)
     return out
 
 
-def shape_example_detail(result_json: dict[str, Any] | None) -> dict[str, Any] | None:
-    """Shape a single example's full query text and metadata."""
+def shape_example_detail(
+    result_json: dict[str, Any] | None, example_iri: str
+) -> dict[str, Any] | None:
+    """Shape a single example's full query text and metadata.
+
+    ``description`` is the example's ``rdfs:comment`` -- fenced into a typed
+    ``untrusted_text`` object (``record_id`` = the example IRI). ``query`` is the
+    executable SPARQL text (from ``sh:select``/``sh:ask``/``sh:construct``), not a
+    comment, and is intentionally left as a raw string so it stays runnable.
+    """
     data = rows(result_json)
     if not data:
         return None
     r = data[0]
-    return {
-        "description": r.get("comment"),
+    fenced_objects: list[UntrustedText] = []
+    description: dict[str, Any] | None = None
+    raw_comment = r.get("comment")
+    if raw_comment:
+        fenced = fence_untrusted_text(
+            str(raw_comment), source=_UNTRUSTED_SOURCE, record_id=example_iri
+        )
+        fenced_objects.append(fenced)
+        description = fenced.model_dump(mode="json")
+    detail = {
+        "description": description,
         "query": r.get("query"),
         "query_type": local_name(r["type"]).replace("SPARQL", "").replace("Executable", "")
         if r.get("type")
@@ -449,6 +487,9 @@ def shape_example_detail(result_json: dict[str, Any] | None) -> dict[str, Any] |
             f.strip() for f in str(r.get("federatesWith", "")).split(",") if f.strip()
         ],
     }
+    if fenced_objects:
+        enforce_untrusted_text_limits(fenced_objects)
+    return detail
 
 
 RESPONSE_MODES = ("minimal", "compact", "standard", "full")

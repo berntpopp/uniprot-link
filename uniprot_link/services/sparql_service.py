@@ -450,7 +450,9 @@ class SparqlService(FindProteinsServiceMixin, TaxonomyServiceMixin):
 
     async def get_example(self, example_iri: str) -> dict[str, Any]:
         """Fetch one curated example's full query text and metadata."""
-        detail = S.shape_example_detail(await self._select(Q.get_example_query(example_iri)))
+        detail = S.shape_example_detail(
+            await self._select(Q.get_example_query(example_iri)), example_iri
+        )
         if detail is None:
             raise NotFoundError(
                 f"No example found for '{example_iri}'. "

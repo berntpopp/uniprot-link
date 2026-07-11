@@ -10,21 +10,36 @@ versioning.
 
 ### Changed
 
-- **BREAKING: fence UniProtKB free-text as the Response-Envelope Standard v1.1
-  `untrusted_text` object.** Every externally sourced `rdfs:comment` literal is
-  now emitted as a typed object (`kind`/`text`/`provenance`/`raw_sha256`)
-  instead of a bare string, so a downstream host can never confuse retrieved
-  curator prose with instructions:
+- **BREAKING: fence every UniProtKB `rdfs:comment` free-text surface as the
+  Response-Envelope Standard v1.1 `untrusted_text` object.** Each externally
+  sourced comment literal is now emitted as a typed object
+  (`kind`/`text`/`provenance`/`raw_sha256`) instead of a bare string, so a
+  downstream host can never confuse retrieved curator prose with instructions:
   - `get_protein` `/function`
   - `get_protein_features` `/features/*/description`
-  - `get_protein_diseases` `/diseases/*/involvement`
   - `get_protein_variants` `/variants/*/description`
+  - `get_protein_diseases` `/diseases/*/involvement` **and**
+    `/diseases/*/definition` (the disease vocabulary's own clinical comment)
+  - `search_example_queries` `/examples/*/description` **and**
+    `get_example_query` `/description` (curated SPARQL-example comments)
 
-  `get_protein_diseases`'s `/diseases/*/definition` (the disease vocabulary's
-  own `rdfs:comment`) is unchanged — out of scope per the fleet inventory row.
-  Consumers that read these four fields as plain strings must update to read
-  `.text` from the typed object. Defense in depth; research use only, not
-  clinical decision support.
+  The nested-array output schemas (`features[]`/`variants[]`/`diseases[]`/
+  `examples[]`) declare the `untrusted_text` object (with the `kind` const) in
+  their `items`, so the typed literal is visible to schema-aware clients, not
+  only at the top level. The example `query` text (executable SPARQL, not
+  prose) and controlled labels/names (protein names, disease/GO labels) are
+  intentionally left as plain strings. Consumers that read any fenced field as
+  a plain string must update to read `.text` from the typed object. Defense in
+  depth; research use only, not clinical decision support.
+
+- Exceeding a Response-Envelope v1.1 untrusted-text ceiling now surfaces as an
+  explicit typed `error_code: "limit_exceeded"` envelope (recovery
+  `reformulate_input`), never a masked generic `internal_error`. The
+  object-count ceiling is the tool's real result cap: single-record tools use
+  the default 128; the uncapped embedded lists (`features`/`variants`/
+  `diseases`) use a generous 10000 so a legitimately large protein never
+  errors; `search_example_queries` uses its 126-entry catalog cap. The
+  per-object 2 MiB and 8 MiB-total byte limits remain the DoS backstop.
 
 ### Fixed
 

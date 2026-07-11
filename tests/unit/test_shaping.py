@@ -489,7 +489,10 @@ def test_shape_diseases_splits_involvement_and_definition() -> None:
     assert out[0]["involvement"]["kind"] == "untrusted_text"
     assert out[0]["involvement"]["text"].startswith("The disease is caused")
     assert out[0]["involvement"]["provenance"]["record_id"] == "P05067#disease:0"
-    assert out[0]["definition"].startswith("An autosomal recessive")
+    # definition (the disease vocabulary's own rdfs:comment) is fenced too.
+    assert out[0]["definition"]["kind"] == "untrusted_text"
+    assert out[0]["definition"]["text"].startswith("An autosomal recessive")
+    assert out[0]["definition"]["provenance"]["record_id"] == "P05067#disease:0"
     assert out[0]["mnemonic"] == "AOA4"
     assert out[0]["mim"] == "616267"
     assert out[0]["disease"] == "Ataxia-oculomotor apraxia 4"

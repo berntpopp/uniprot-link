@@ -150,33 +150,41 @@ def shape_diseases(result_json: dict[str, Any] | None, accession: str) -> list[d
     ``definition`` is the disease's clinical definition (disease ``rdfs:comment``);
     ``involvement`` is the entry-specific note (annotation ``rdfs:comment``). The
     old single ``description`` (which carried only the involvement boilerplate) is
-    replaced by this pair (Bug 9). ``involvement`` is fenced into a typed
-    ``untrusted_text`` object. ``definition`` is out of scope for this fence per
-    the inventory row (evidence names only the annotation ``rdfs:comment``, not
-    the disease vocabulary's own comment).
+    replaced by this pair (Bug 9). BOTH are curator-authored ``rdfs:comment``
+    free-text served verbatim by the endpoint, so BOTH are fenced into typed
+    ``untrusted_text`` objects (never a bare string) -- fence every rdfs:comment
+    surface we serve. ``record_id`` identifies the disease record; the JSON key
+    (definition vs involvement) distinguishes the two comment sources.
     """
     out: list[dict[str, Any]] = []
     fenced_objects: list[UntrustedText] = []
     for i, row in enumerate(rows(result_json)):
-        involvement: dict[str, Any] | None = None
-        raw_involvement = row.get("comment")
-        if raw_involvement:
-            fenced = fence_untrusted_text(
-                str(raw_involvement),
-                source=_UNTRUSTED_SOURCE,
-                record_id=f"{accession}#disease:{i}",
-            )
-            fenced_objects.append(fenced)
-            involvement = fenced.model_dump(mode="json")
+        record_id = f"{accession}#disease:{i}"
+        definition = _fence_comment(row.get("definition"), record_id, fenced_objects)
+        involvement = _fence_comment(row.get("comment"), record_id, fenced_objects)
         disease = {
             "disease": row.get("diseaseLabel"),
             "disease_id": local_name(row["disease"]) if row.get("disease") else None,
             "mnemonic": row.get("mnemonic"),
             "mim": local_name(row["mim"]) if row.get("mim") else None,
-            "definition": row.get("definition"),
+            "definition": definition,
             "involvement": involvement,
         }
         out.append({k: v for k, v in disease.items() if v not in (None, "")})
     if fenced_objects:
         enforce_untrusted_text_limits(fenced_objects, max_objects=_MAX_UNTRUSTED_OBJECTS)
     return out
+
+
+def _fence_comment(raw: Any, record_id: str, sink: list[UntrustedText]) -> dict[str, Any] | None:
+    """Fence one optional rdfs:comment literal, appending it to ``sink``.
+
+    Returns the JSON-mode fenced object, or ``None`` when the field is absent/empty
+    (so the caller's empty-value filter drops it rather than emitting an empty
+    fenced wrapper).
+    """
+    if not raw:
+        return None
+    fenced = fence_untrusted_text(str(raw), source=_UNTRUSTED_SOURCE, record_id=record_id)
+    sink.append(fenced)
+    return fenced.model_dump(mode="json")

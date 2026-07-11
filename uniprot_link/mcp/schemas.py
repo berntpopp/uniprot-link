@@ -47,8 +47,10 @@ _OBJ = {"type": "object", "additionalProperties": True}
 
 # Response-Envelope Standard v1.1: externally sourced free text (UniProtKB
 # rdfs:comment literals -- function summaries, feature descriptions, disease
-# involvement notes, variant descriptions) is emitted as this typed object
-# (see uniprot_link.mcp.untrusted_content.UntrustedText), never a bare string.
+# involvement notes + clinical definitions, variant descriptions, curated
+# SPARQL-example descriptions) is emitted as this typed object (see
+# uniprot_link.mcp.untrusted_content.UntrustedText), never a bare string. The
+# `kind` const is the schema-level proof of the typed literal.
 _UNTRUSTED_TEXT_SCHEMA = {
     "type": "object",
     "additionalProperties": True,
@@ -66,6 +68,26 @@ _UNTRUSTED_TEXT_SCHEMA = {
         "raw_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
     },
 }
+
+
+def _fenced_array(**fenced_item_properties: Any) -> dict[str, Any]:
+    """A permissive array whose ITEM schema declares the fenced field(s).
+
+    v1.1 requires the `untrusted_text` object (`kind` const) to be visible in the
+    array `items` schema, not only at the top level -- a bare permissive array
+    hides the literal even when the runtime data is fenced. Items stay
+    `additionalProperties: True` and nothing is `required`, so a projected/omitted
+    field never rejects a legitimate response.
+    """
+    return {
+        "type": "array",
+        "items": {
+            "type": "object",
+            "additionalProperties": True,
+            "properties": {**fenced_item_properties},
+        },
+    }
+
 
 CAPABILITIES_SCHEMA = _envelope(
     server=_STR,
@@ -116,15 +138,24 @@ SEQUENCE_SCHEMA = _envelope(
 FEATURES_SCHEMA = _envelope(
     accession=_STR,
     count=_INT,
-    features=_ARR,
+    features=_fenced_array(description=_UNTRUSTED_TEXT_SCHEMA),
     filter_hint=_OBJ,
     truncated=_OBJ,
     excluded_secondary_structure=_OBJ,
 )
 
-VARIANTS_SCHEMA = _envelope(accession=_STR, count=_INT, variants=_ARR, truncated=_OBJ)
+VARIANTS_SCHEMA = _envelope(
+    accession=_STR,
+    count=_INT,
+    variants=_fenced_array(description=_UNTRUSTED_TEXT_SCHEMA),
+    truncated=_OBJ,
+)
 
-DISEASES_SCHEMA = _envelope(accession=_STR, count=_INT, diseases=_ARR)
+DISEASES_SCHEMA = _envelope(
+    accession=_STR,
+    count=_INT,
+    diseases=_fenced_array(definition=_UNTRUSTED_TEXT_SCHEMA, involvement=_UNTRUSTED_TEXT_SCHEMA),
+)
 
 CROSS_REFERENCES_SCHEMA = _envelope(
     accession=_STR,
@@ -166,10 +197,18 @@ TAXON_SCHEMA = _envelope(
     matches=_ARR,
 )
 
-EXAMPLE_LIST_SCHEMA = _envelope(count=_INT, query_text=_STR, examples=_ARR)
+EXAMPLE_LIST_SCHEMA = _envelope(
+    count=_INT,
+    query_text=_STR,
+    examples=_fenced_array(description=_UNTRUSTED_TEXT_SCHEMA),
+)
 
 EXAMPLE_DETAIL_SCHEMA = _envelope(
-    example_id=_STR, description=_STR, query=_STR, query_type=_STR, keywords=_ARR
+    example_id=_STR,
+    description=_UNTRUSTED_TEXT_SCHEMA,
+    query=_STR,
+    query_type=_STR,
+    keywords=_ARR,
 )
 
 # search_sparql_query is dynamic (columns vary): keep it generic.
