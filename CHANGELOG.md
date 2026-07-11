@@ -6,6 +6,31 @@ versioning.
 
 ## [Unreleased]
 
+## [3.0.2] - 2026-07-11
+
+### Security
+
+- **Guard the FastMCP-core not-found reflection surface (Response-Envelope
+  Standard v1.1 §Error-message sanitation fast-follow).** FastMCP core reflects the
+  caller's OWN requested tool name / resource URI / prompt name -- and any
+  control/zero-width/bidi/NUL code points it carries -- back to the caller and to
+  framework logs (at DEBUG as well as WARNING) BEFORE this project's middleware runs.
+  A new `uniprot_link/mcp/notfound_guard.py` closes it with fixed, input-free
+  constants only (never interpolating the requested name/URI):
+  - Layer 1 `on_call_tool` registry preflight: an unknown tool returns a fixed,
+    name-free `not_found` envelope (both `structured_content` and the TextContent
+    mirror; `_meta.tool` is never the caller-supplied name).
+  - Layer 2 `on_read_resource` boundary: any read failure re-raises a fixed URI-free
+    `ResourceError` (never `str(exc)`).
+  - Layer 3 protocol backstop: wraps the raw CallTool/ReadResource/GetPrompt handlers
+    as the outermost layer -- covers the unknown-tool *return* path and the
+    unknown-**prompt** echo (`Unknown prompt: '<name>'`).
+  - Layer 5 validation-log scrub filter: neutralizes the FastMCP-core / MCP-SDK
+    records that echo the caller name/URI on their own (non-propagating) loggers and
+    handlers at any level.
+  Caller self-reflection surface (lower-risk than upstream injection); no success or
+  error-envelope schema changed. Research use only.
+
 ## [3.0.1] - 2026-07-11
 
 ### Security
