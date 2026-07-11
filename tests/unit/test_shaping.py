@@ -76,7 +76,7 @@ def test_shape_features_round_trips_type_to_filter_key() -> None:
             }
         ],
     )
-    out = S.shape_features(body)
+    out = S.shape_features(body, "P05067")
     assert out[0]["type"] == "domain"  # round-trips to the filter key
     assert out[0]["begin"] == 1642
 
@@ -102,7 +102,7 @@ def test_shape_variants_merges_diseases() -> None:
             {"begin": 4, "end": 4, "substitution": "F", "comment": "Uncertain.", "disease": ""},
         ],
     )
-    out = S.shape_variants(body)
+    out = S.shape_variants(body, "P05067")
     assert out[0]["begin"] == 10  # disease-associated variants sort first
     merged = next(v for v in out if v["begin"] == 10)
     assert set(merged["diseases"]) == {"Breast cancer", "Ovarian cancer"}
@@ -131,7 +131,7 @@ def test_shape_variants_merges_diseases_via_skos_related() -> None:
             },
         ],
     )
-    out = S.shape_variants(body)
+    out = S.shape_variants(body, "P05067")
     assert len(out) == 1
     assert sorted(out[0]["diseases"]) == ["Breast cancer", "Breast-ovarian cancer, familial, 1"]
     assert out[0]["dbsnp"] == "rs80357017"
@@ -319,7 +319,7 @@ def test_shape_variants_adds_wildtype_and_notation():
             },
         ],
     )
-    out = {v["begin"]: v for v in shape_variants(body)}
+    out = {v["begin"]: v for v in shape_variants(body, "P05067")}
     assert out[176]["wild_type"] == "L"
     assert out[176]["variant_type"] == "substitution"
     assert out[176]["notation"] == "L176F"
@@ -344,7 +344,7 @@ def test_shape_protein_summary_carries_presence_flags() -> None:
             }
         ],
     )
-    out = S.shape_protein_summary(body)
+    out = S.shape_protein_summary(body, "P05067")
     assert out is not None
     assert out["has_variants"] is True
     assert out["has_diseases"] is False  # explicit False kept (presence flag)
@@ -445,7 +445,7 @@ def test_shape_features_emits_only_filterable_types() -> None:
             },
         ],
     )
-    out = S.shape_features(body)
+    out = S.shape_features(body, "P05067")
     for f in out:
         assert f["type"] in FEATURE_TYPES, f"{f['type']} not filterable"
     assert {f["type"] for f in out} == {
@@ -467,7 +467,7 @@ def test_shape_features_flags_unmapped_class() -> None:
             }
         ],
     )
-    out = S.shape_features(body)
+    out = S.shape_features(body, "P05067")
     assert out[0]["type"].startswith("_unmapped:")
 
 
@@ -485,8 +485,10 @@ def test_shape_diseases_splits_involvement_and_definition() -> None:
             }
         ],
     )
-    out = S.shape_diseases(body)
-    assert out[0]["involvement"].startswith("The disease is caused")
+    out = S.shape_diseases(body, "P05067")
+    assert out[0]["involvement"]["kind"] == "untrusted_text"
+    assert out[0]["involvement"]["text"].startswith("The disease is caused")
+    assert out[0]["involvement"]["provenance"]["record_id"] == "P05067#disease:0"
     assert out[0]["definition"].startswith("An autosomal recessive")
     assert out[0]["mnemonic"] == "AOA4"
     assert out[0]["mim"] == "616267"

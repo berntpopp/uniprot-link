@@ -45,6 +45,28 @@ _BOOL = {"type": "boolean"}
 _ARR = {"type": "array"}
 _OBJ = {"type": "object", "additionalProperties": True}
 
+# Response-Envelope Standard v1.1: externally sourced free text (UniProtKB
+# rdfs:comment literals -- function summaries, feature descriptions, disease
+# involvement notes, variant descriptions) is emitted as this typed object
+# (see uniprot_link.mcp.untrusted_content.UntrustedText), never a bare string.
+_UNTRUSTED_TEXT_SCHEMA = {
+    "type": "object",
+    "additionalProperties": True,
+    "properties": {
+        "kind": {"const": "untrusted_text"},
+        "text": {"type": "string"},
+        "provenance": {
+            "type": "object",
+            "properties": {
+                "source": {"type": "string"},
+                "record_id": {"type": "string"},
+                "retrieved_at": {"type": "string"},
+            },
+        },
+        "raw_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    },
+}
+
 CAPABILITIES_SCHEMA = _envelope(
     server=_STR,
     server_version=_STR,
@@ -78,6 +100,7 @@ PROTEIN_SCHEMA = _envelope(
     taxon_id=_STR,
     sequence_length=_INT,
     mass_da=_INT,
+    function=_UNTRUSTED_TEXT_SCHEMA,
     obsolete=_BOOL,
     replaced_by=_ARR,
     has_variants=_BOOL,

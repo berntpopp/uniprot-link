@@ -25,7 +25,7 @@ def test_fence_normalizes_and_removes_forbidden_controls() -> None:
 
 
 def test_fence_preserves_tabs_newlines_and_scientific_symbols() -> None:
-    raw = "p.Gly12Asp\tΔG = −1.2 kcal/mol\r\n"
+    raw = "p.Gly12Asp\t\u0394G = \u22121.2 kcal/mol\r\n"
     assert fence_untrusted_text(raw, source="uniprot", record_id="P38398").text == raw
 
 

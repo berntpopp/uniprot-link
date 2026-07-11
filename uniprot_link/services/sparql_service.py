@@ -27,6 +27,16 @@ from uniprot_link.services.service_base import (
 from uniprot_link.services.service_find import FindProteinsServiceMixin
 from uniprot_link.services.service_taxonomy import TaxonomyServiceMixin
 
+# shape_features/shape_variants/shape_diseases live in a sibling module (600-line
+# cap, see shaping.py's bottom re-export) -- imported directly here (not via the
+# S. alias) so mypy strict's implicit_reexport=False does not flag S.shape_features
+# et al. as an unexported attribute (mirrors service_taxonomy.py's direct import).
+from uniprot_link.services.shaping_annotations import (
+    shape_diseases,
+    shape_features,
+    shape_variants,
+)
+
 
 class SparqlService(FindProteinsServiceMixin, TaxonomyServiceMixin):
     """Coordinate query builders, the SPARQL client, and result shaping."""
@@ -116,8 +126,8 @@ class SparqlService(FindProteinsServiceMixin, TaxonomyServiceMixin):
             self._select_timed(Q.protein_summary(accession)),
         )
         status = S.shape_entry_status(status_json, accession)
-        summary = S.shape_protein_summary(summary_json)
         acc = Q.validate_accession(accession).split("-")[0]
+        summary = S.shape_protein_summary(summary_json, acc)
         if not status.exists and summary is None:
             raise NotFoundError(
                 f"No UniProtKB entry found for accession '{accession}'. "
@@ -242,8 +252,8 @@ class SparqlService(FindProteinsServiceMixin, TaxonomyServiceMixin):
         _, (data_json, qmeta) = await asyncio.gather(
             self.require_entry(accession), self._select_timed(query)
         )
-        all_features = S.shape_features(data_json)
         acc = Q.validate_accession(accession).split("-")[0]
+        all_features = shape_features(data_json, acc)
         # P1b: hide secondary-structure (helix/strand/turn) by default -- it
         # dominates an unfiltered dump and is rarely the answer. Excluded only when
         # not explicitly requested (via the flag or a secondary type in the filter).
@@ -313,8 +323,8 @@ class SparqlService(FindProteinsServiceMixin, TaxonomyServiceMixin):
         _, (data_json, qmeta) = await asyncio.gather(
             self.require_entry(accession), self._select_timed(query)
         )
-        variants = S.shape_variants(data_json)
         acc = Q.validate_accession(accession).split("-")[0]
+        variants = shape_variants(data_json, acc)
         payload: dict[str, Any] = {
             "accession": acc,
             "count": len(variants),
@@ -340,8 +350,8 @@ class SparqlService(FindProteinsServiceMixin, TaxonomyServiceMixin):
         _, (data_json, qmeta) = await asyncio.gather(
             self.require_entry(accession), self._select_timed(query)
         )
-        diseases = S.shape_diseases(data_json)
         acc = Q.validate_accession(accession).split("-")[0]
+        diseases = shape_diseases(data_json, acc)
         return attach_isoform_context(
             {"accession": acc, "count": len(diseases), "diseases": diseases, **qmeta},
             accession,
