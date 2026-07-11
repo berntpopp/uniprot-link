@@ -153,6 +153,37 @@ def _error_envelope(exc: BaseException, context: McpErrorContext) -> dict[str, A
     return envelope
 
 
+# Fixed, caller-echo-free message for an unknown/unavailable tool. Built from a
+# CONSTANT only: sanitation strips forbidden code points but PRESERVES injection
+# prose, so a fixed constant is the only safe source for a caller-visible frame
+# (error-sanitation-sweep rule). Never interpolate the requested tool name.
+_UNKNOWN_TOOL_MESSAGE = "The requested tool is not available. Call get_server_capabilities."
+
+
+def build_unknown_tool_envelope() -> dict[str, Any]:
+    """Fixed, name-free ``not_found`` envelope for an unknown/unavailable tool.
+
+    FastMCP core reflects the caller's OWN requested tool name (``Unknown tool:
+    '<name>'``) BEFORE this repo's middleware runs. The not-found guard's Layer-1
+    preflight returns this envelope instead, so the caller-supplied name -- and any
+    control/zero-width/bidi/NUL code points it carries -- never reaches the caller
+    frame. ``_meta.tool`` is ``None`` so the requested name is never echoed back.
+    """
+    return {
+        "success": False,
+        "error_code": "not_found",
+        "message": _UNKNOWN_TOOL_MESSAGE,
+        "retryable": False,
+        "recovery_action": "switch_tool",
+        "_meta": {
+            "tool": None,
+            "request_id": _request_id(),
+            "next_commands": [cmd("get_server_capabilities")],
+            "unsafe_for_clinical_use": _UNSAFE_FOR_CLINICAL_USE,
+        },
+    }
+
+
 def build_arg_error_envelope(
     *,
     tool_name: str,
