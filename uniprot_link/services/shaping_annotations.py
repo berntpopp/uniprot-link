@@ -43,9 +43,14 @@ def shape_features(result_json: dict[str, Any] | None, accession: str) -> list[d
     absent from the registry is emitted as ``_unmapped:<Class>`` so it is
     *visibly* non-filterable rather than presenting a friendly key that the
     filter would then reject.
+
+    ``description`` (curator ``rdfs:comment``) is fenced into a typed
+    ``untrusted_text`` object. Limit enforcement is deferred to the service via
+    :func:`enforce_emitted_feature_limits`, which runs AFTER secondary-structure
+    hiding and the display slice -- so ceilings bind the returned subset, not
+    features that are fetched but never emitted.
     """
     out: list[dict[str, Any]] = []
-    fenced_objects: list[UntrustedText] = []
     for i, row in enumerate(rows(result_json)):
         cls = local_name(row["type"]) if row.get("type") else None
         key: str | None
@@ -57,13 +62,11 @@ def shape_features(result_json: dict[str, Any] | None, accession: str) -> list[d
         description: dict[str, Any] | None = None
         raw_comment = row.get("comment")
         if raw_comment:
-            fenced = fence_untrusted_text(
+            description = fence_untrusted_text(
                 str(raw_comment),
                 source=_UNTRUSTED_SOURCE,
                 record_id=f"{accession}#feature:{i}",
-            )
-            fenced_objects.append(fenced)
-            description = fenced.model_dump(mode="json")
+            ).model_dump(mode="json")
         out.append(
             {
                 "type": key,
@@ -72,9 +75,25 @@ def shape_features(result_json: dict[str, Any] | None, accession: str) -> list[d
                 "description": description,
             }
         )
-    if fenced_objects:
-        enforce_untrusted_text_limits(fenced_objects, max_objects=_MAX_UNTRUSTED_OBJECTS)
     return out
+
+
+def enforce_emitted_feature_limits(features: list[dict[str, Any]]) -> None:
+    """Enforce v1.1 untrusted-text ceilings over the EMITTED features only.
+
+    ``get_protein_features`` fetches up to a cap, hides secondary structure, then
+    slices to the display limit. Enforcing over every fetched/fenced description
+    (as done at shaping time) could raise ``UntrustedTextLimitError`` on
+    annotations that are dropped and never returned. Callers pass the final
+    emitted feature list so the ceilings bind exactly what the response contains.
+    """
+    emitted = [
+        UntrustedText.model_validate(f["description"])
+        for f in features
+        if isinstance(f.get("description"), dict)
+    ]
+    if emitted:
+        enforce_untrusted_text_limits(emitted, max_objects=_MAX_UNTRUSTED_OBJECTS)
 
 
 def shape_variants(result_json: dict[str, Any] | None, accession: str) -> list[dict[str, Any]]:

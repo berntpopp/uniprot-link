@@ -211,15 +211,26 @@ EXAMPLE_DETAIL_SCHEMA = _envelope(
     keywords=_ARR,
 )
 
-# search_sparql_query is dynamic (columns vary): keep it generic.
+# search_sparql_query is dynamic (columns vary). Every string cell of a SELECT
+# result and the raw CSV/RDF `data` blob are arbitrary upstream text, so they are
+# fenced: each row is an object whose values are the untrusted_text object (string
+# literals) or a numeric/boolean scalar; `data` is a single untrusted_text object.
 SPARQL_RESULT_SCHEMA = _envelope(
     query_type=_STR,
     columns=_ARR,
     row_count=_INT,
-    rows=_ARR,
+    rows={
+        "type": "array",
+        "items": {
+            "type": "object",
+            "additionalProperties": {
+                "anyOf": [_UNTRUSTED_TEXT_SCHEMA, {"type": "number"}, {"type": "boolean"}]
+            },
+        },
+    },
     boolean=_BOOL,
     content_type=_STR,
-    data=_STR,
+    data=_UNTRUSTED_TEXT_SCHEMA,
     byte_length=_INT,
     truncated=_OBJ,
 )

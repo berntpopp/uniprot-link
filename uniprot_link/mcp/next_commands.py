@@ -152,7 +152,15 @@ def after_get_example(query: str | None) -> list[dict[str, Any]]:
 
 
 def _accession_in_value(value: Any) -> str | None:
-    """Extract a UniProtKB accession from a cell value (bare or entry/isoform IRI)."""
+    """Extract a UniProtKB accession from a cell value (bare or entry/isoform IRI).
+
+    A SELECT cell is a fenced ``untrusted_text`` object (v1.1); read its ``text``
+    to detect an accession for the deterministic get_protein chain. This treats
+    the prose strictly as data -- the extracted candidate is validated by the
+    strict accession regex, never executed.
+    """
+    if isinstance(value, dict) and value.get("kind") == "untrusted_text":
+        value = value.get("text")
     if not isinstance(value, str):
         return None
     candidate = value.rsplit("/", 1)[-1] if value.startswith("http") else value

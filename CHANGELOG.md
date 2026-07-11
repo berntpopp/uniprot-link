@@ -22,15 +22,22 @@ versioning.
     `/diseases/*/definition` (the disease vocabulary's own clinical comment)
   - `search_example_queries` `/examples/*/description` **and**
     `get_example_query` `/description` (curated SPARQL-example comments)
+  - `search_sparql_query` — this power tool returns ARBITRARY upstream text, so
+    **every string cell** of a SELECT result (`/rows/*/<var>`) and the raw
+    CSV/RDF/XML/turtle **`/data`** blob are now fenced as `untrusted_text`
+    objects (`record_id` = executed-query hash + row/binding position).
+    Numeric/boolean cells and the ASK `boolean` pass through unchanged.
 
   The nested-array output schemas (`features[]`/`variants[]`/`diseases[]`/
   `examples[]`) declare the `untrusted_text` object (with the `kind` const) in
-  their `items`, so the typed literal is visible to schema-aware clients, not
-  only at the top level. The example `query` text (executable SPARQL, not
-  prose) and controlled labels/names (protein names, disease/GO labels) are
-  intentionally left as plain strings. Consumers that read any fenced field as
-  a plain string must update to read `.text` from the typed object. Defense in
-  depth; research use only, not clinical decision support.
+  their `items`; `search_sparql_query`'s `rows` items declare each cell as the
+  fenced object or a numeric/boolean scalar, and `data` as the fenced object —
+  so the typed literal is visible to schema-aware clients, not only at the top
+  level. The example `query` text (executable SPARQL, not prose) and controlled
+  labels/names (protein names, disease/GO labels) are intentionally left as
+  plain strings. Consumers that read any fenced field as a plain string must
+  update to read `.text` from the typed object. Defense in depth; research use
+  only, not clinical decision support.
 
 - Exceeding a Response-Envelope v1.1 untrusted-text ceiling now surfaces as an
   explicit typed `error_code: "limit_exceeded"` envelope (recovery
@@ -38,8 +45,13 @@ versioning.
   object-count ceiling is the tool's real result cap: single-record tools use
   the default 128; the uncapped embedded lists (`features`/`variants`/
   `diseases`) use a generous 10000 so a legitimately large protein never
-  errors; `search_example_queries` uses its 126-entry catalog cap. The
-  per-object 2 MiB and 8 MiB-total byte limits remain the DoS backstop.
+  errors; `search_example_queries` uses its 126-entry catalog cap;
+  `search_sparql_query` pins the count ceiling to the 8 MiB byte-total so a
+  large SELECT is bounded by bytes, not an arbitrary count. `get_protein_features`
+  enforces limits over the **emitted** feature subset (after secondary-structure
+  hiding and the display slice), so a hidden/large annotation that is never
+  returned cannot raise `limit_exceeded`. The per-object 2 MiB and 8 MiB-total
+  byte limits remain the DoS backstop.
 
 ### Fixed
 

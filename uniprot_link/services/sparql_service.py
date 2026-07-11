@@ -7,10 +7,16 @@ tool layer wraps these with ``success``/``_meta``/``next_commands``.
 from __future__ import annotations
 
 import asyncio
+import hashlib
 from typing import Any
 
 from uniprot_link.api.client import RESULT_FORMATS
 from uniprot_link.exceptions import InvalidInputError, NotFoundError, ObsoleteEntryError
+from uniprot_link.mcp.untrusted_content import (
+    UntrustedText,
+    enforce_untrusted_text_limits,
+    fence_untrusted_text,
+)
 from uniprot_link.services import queries as Q
 from uniprot_link.services import shaping as S
 from uniprot_link.services.constants import (
@@ -32,14 +38,55 @@ from uniprot_link.services.service_taxonomy import TaxonomyServiceMixin
 # S. alias) so mypy strict's implicit_reexport=False does not flag S.shape_features
 # et al. as an unexported attribute (mirrors service_taxonomy.py's direct import).
 from uniprot_link.services.shaping_annotations import (
+    enforce_emitted_feature_limits,
     shape_diseases,
     shape_features,
     shape_variants,
 )
 
+_UNTRUSTED_SOURCE = "uniprot"
+
+# search_sparql_query is a power tool: a legitimate SELECT can return up to
+# max_limit (10000) rows, each with several string columns, so the per-object
+# 2 MiB and 8 MiB-total BYTE ceilings are the real DoS backstop. The object-count
+# ceiling is pinned to the 8 MiB total so a normal large SELECT never trips the
+# count check before the byte total does (every fenced object is >= 1 byte).
+_SPARQL_MAX_OBJECTS = 8_388_608
+
 
 class SparqlService(FindProteinsServiceMixin, TaxonomyServiceMixin):
     """Coordinate query builders, the SPARQL client, and result shaping."""
+
+    @staticmethod
+    def _fence_sparql_rows(data: list[dict[str, Any]], query_hash: str) -> list[dict[str, Any]]:
+        """Fence every string cell of an arbitrary SELECT result set.
+
+        search_sparql_query returns ARBITRARY upstream text: a query can SELECT
+        ``rdfs:comment`` or any label into any binding, so each string scalar is
+        external prose and is wrapped as a typed ``untrusted_text`` object
+        (never a bare string). Numeric/boolean scalars are coerced values, not
+        prose, and pass through unchanged. ``record_id`` ties the cell to the
+        executed query hash + its row/binding position.
+        """
+        fenced_objects: list[UntrustedText] = []
+        fenced_rows: list[dict[str, Any]] = []
+        for i, row in enumerate(data):
+            frow: dict[str, Any] = {}
+            for var, val in row.items():
+                if isinstance(val, str):
+                    obj = fence_untrusted_text(
+                        val,
+                        source=_UNTRUSTED_SOURCE,
+                        record_id=f"sparql:{query_hash}#row{i}.{var}",
+                    )
+                    fenced_objects.append(obj)
+                    frow[var] = obj.model_dump(mode="json")
+                else:
+                    frow[var] = val
+            fenced_rows.append(frow)
+        if fenced_objects:
+            enforce_untrusted_text_limits(fenced_objects, max_objects=_SPARQL_MAX_OBJECTS)
+        return fenced_rows
 
     # --- Raw / power query --------------------------------------------------
 
@@ -68,6 +115,7 @@ class SparqlService(FindProteinsServiceMixin, TaxonomyServiceMixin):
             query, default=effective_limit, maximum=self.config.max_limit
         )
         result = await self.client.execute(prepared, result_format=result_format, timeout=timeout)
+        query_hash = hashlib.sha256(prepared.encode("utf-8")).hexdigest()[:16]
 
         # F8: query_type reflects the actual query FORM (SELECT/ASK/CONSTRUCT/
         # DESCRIBE); the serialization (json/csv/turtle/...) is reported separately
@@ -81,6 +129,7 @@ class SparqlService(FindProteinsServiceMixin, TaxonomyServiceMixin):
         }
         if result_format == "json" and result.json is not None:
             if "boolean" in result.json:
+                # ASK returns only a boolean -- no upstream prose to fence.
                 return {"query_type": "ASK", "boolean": result.json["boolean"], **meta}
             data = S.rows(result.json)
             variables = result.json.get("head", {}).get("vars", [])
@@ -88,7 +137,8 @@ class SparqlService(FindProteinsServiceMixin, TaxonomyServiceMixin):
                 "query_type": op if known else "SELECT",
                 "columns": variables,
                 "row_count": len(data),
-                "rows": data,
+                # Every string cell is fenced as an untrusted_text object (v1.1).
+                "rows": self._fence_sparql_rows(data, query_hash),
                 **meta,
             }
             if injected and len(data) >= effective_limit:
@@ -101,10 +151,17 @@ class SparqlService(FindProteinsServiceMixin, TaxonomyServiceMixin):
                     "or pass a larger `limit`.",
                 }
             return payload
+        # Raw RDF/CSV/XML/turtle serialization is arbitrary upstream text -- fence
+        # the whole blob as a single untrusted_text object (byte_length stays the
+        # raw serialized length for the caller).
+        fenced_data = fence_untrusted_text(
+            result.text, source=_UNTRUSTED_SOURCE, record_id=f"sparql:{query_hash}"
+        )
+        enforce_untrusted_text_limits([fenced_data], max_objects=_SPARQL_MAX_OBJECTS)
         return {
             "query_type": op if known else "RDF/raw",
             "content_type": result.content_type,
-            "data": result.text,
+            "data": fenced_data.model_dump(mode="json"),
             "byte_length": len(result.text),
             **meta,
         }
@@ -264,6 +321,11 @@ class SparqlService(FindProteinsServiceMixin, TaxonomyServiceMixin):
             excluded_ss = len(all_features) - len(kept)
             all_features = kept
         features = all_features[:display_limit]
+        # Enforce untrusted-text ceilings over the EMITTED features only: the fetch
+        # cap, secondary-structure hiding, and display slice above all drop features
+        # that are never returned, so enforcing over the full fetched set could raise
+        # limit_exceeded on content the caller never sees.
+        enforce_emitted_feature_limits(features)
         payload: dict[str, Any] = {
             "accession": acc,
             "count": len(features),

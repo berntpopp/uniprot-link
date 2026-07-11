@@ -35,7 +35,7 @@ _ACTIVE_STATUS = make_select_json(["obsolete"], [{"obsolete": False}])
 _EXAMPLE_IRI = "https://sparql.uniprot.org/.well-known/sparql-examples/26"
 
 
-def _assert_fenced(fenced: dict[str, Any], *, record_id: str) -> None:
+def _assert_fenced_core(fenced: dict[str, Any]) -> None:
     # 1. typed object with the schema literal
     assert fenced["kind"] == "untrusted_text"
     # 2. digest is over the exact raw bytes, pre-normalization
@@ -47,8 +47,12 @@ def _assert_fenced(fenced: dict[str, Any], *, record_id: str) -> None:
     assert "‍" not in fenced["text"]
     assert "﻿" not in fenced["text"]
     assert "‮" not in fenced["text"]
-    # 4. provenance identifies the record
+    # 4. provenance carries the source
     assert fenced["provenance"]["source"] == "uniprot"
+
+
+def _assert_fenced(fenced: dict[str, Any], *, record_id: str) -> None:
+    _assert_fenced_core(fenced)
     assert fenced["provenance"]["record_id"] == record_id
 
 
@@ -201,7 +205,86 @@ async def test_get_example_query_description_is_fenced(service_factory: Any) -> 
         assert payload["query"] == "SELECT ?x WHERE {}"
 
 
-def test_large_variant_list_over_128_descriptions_does_not_raise() -> None:
+@pytest.mark.asyncio
+async def test_search_sparql_select_cell_is_fenced(service_factory: Any) -> None:
+    """CRITICAL: search_sparql_query returns arbitrary upstream text -- a SELECT
+    literal (here rdfs:comment) comes back as a fenced untrusted_text cell."""
+    body = make_select_json(["comment"], [{"comment": HOSTILE}])
+    svc = service_factory([("SELECT", body)])
+    out = await svc.run_query("SELECT ?comment WHERE { ?s rdfs:comment ?comment }")
+    cell = out["rows"][0]["comment"]
+    _assert_fenced_core(cell)
+    record_id = cell["provenance"]["record_id"]
+    assert record_id.startswith("sparql:") and record_id.endswith("#row0.comment")
+
+
+@pytest.mark.asyncio
+async def test_search_sparql_raw_data_blob_is_fenced() -> None:
+    """The raw CSV/RDF `data` blob of a non-JSON result is fenced as one object."""
+    from uniprot_link.api.client import SparqlResult
+    from uniprot_link.config import SparqlEndpointConfig
+    from uniprot_link.services.sparql_service import SparqlService
+
+    class _RawTextClient:
+        async def execute(
+            self, query: str, *, result_format: str = "json", timeout: float | None = None
+        ) -> SparqlResult:
+            return SparqlResult(
+                format=result_format,
+                content_type="text/csv",
+                text=HOSTILE,
+                status_code=200,
+                elapsed_ms=1.0,
+                json=None,
+            )
+
+        async def aclose(self) -> None:
+            return None
+
+    config = SparqlEndpointConfig(timeout=5, max_retries=1, retry_delay=0.1)
+    svc = SparqlService(_RawTextClient(), config)  # type: ignore[arg-type]
+    out = await svc.run_query("CONSTRUCT { ?s ?p ?o } WHERE { ?s ?p ?o }", result_format="csv")
+    _assert_fenced_core(out["data"])
+    assert out["data"]["provenance"]["record_id"].startswith("sparql:")
+    assert out["byte_length"] == len(HOSTILE)  # raw serialized length preserved
+
+
+@pytest.mark.asyncio
+async def test_features_limits_ignore_hidden_secondary_structure(service_factory: Any) -> None:
+    """Finding #2: a huge (>2 MiB) description on a HIDDEN secondary-structure
+    feature must not trip the per-object ceiling -- limits bind the EMITTED subset
+    only, so content that is fetched but never returned cannot raise."""
+    huge = "x" * (2_097_152 + 64)  # > the per-object 2 MiB ceiling
+    features_body = make_select_json(
+        ["type", "begin", "end", "comment"],
+        [
+            {
+                "type": "http://purl.uniprot.org/core/Helix_Annotation",
+                "begin": 1,
+                "end": 9,
+                "comment": huge,
+            },
+            {
+                "type": "http://purl.uniprot.org/core/Domain_Extent_Annotation",
+                "begin": 10,
+                "end": 20,
+                "comment": "A real domain.",
+            },
+        ],
+    )
+    svc = service_factory(
+        [("up:obsolete ?obsolete", _ACTIVE_STATUS), ("up:annotation", features_body)]
+    )
+    # include_secondary_structure defaults False -> the huge helix is hidden.
+    out = await svc.get_features("P38398")
+    types = [f["type"] for f in out["features"]]
+    assert "helix" not in types  # the >2 MiB helix is hidden, never emitted
+    assert "domain" in types
+    assert out["features"][0]["description"]["kind"] == "untrusted_text"
+
+
+@pytest.mark.asyncio
+async def test_large_variant_list_over_128_descriptions_does_not_raise() -> None:
     """A large protein (TTN/TP53/BRCA1) legitimately carries well over the v1.1
     default 128-object ceiling of description-bearing annotations. The uncapped
     embedded-list shapers lift max_objects to 10000 so a real query never raises
@@ -225,8 +308,12 @@ def test_large_variant_list_over_128_descriptions_does_not_raise() -> None:
     assert all(v["description"]["kind"] == "untrusted_text" for v in out)
 
 
-def test_large_feature_list_over_128_descriptions_does_not_raise() -> None:
-    """Same generous-ceiling guarantee for get_protein_features' embedded list."""
+@pytest.mark.asyncio
+async def test_large_feature_list_over_128_descriptions_does_not_raise(
+    service_factory: Any,
+) -> None:
+    """The full get_protein_features path emits a 200-feature list (> the default
+    128 ceiling) without raising -- the emitted-subset enforcement uses 10000."""
     rows_over_ceiling = [
         {
             "type": "http://purl.uniprot.org/core/Domain_Extent_Annotation",
@@ -236,7 +323,10 @@ def test_large_feature_list_over_128_descriptions_does_not_raise() -> None:
         }
         for i in range(200)
     ]
-    body = make_select_json(["type", "begin", "end", "comment"], rows_over_ceiling)
-    out = S.shape_features(body, "P38398")
-    assert len(out) == 200
-    assert all(f["description"]["kind"] == "untrusted_text" for f in out)
+    features_body = make_select_json(["type", "begin", "end", "comment"], rows_over_ceiling)
+    svc = service_factory(
+        [("up:obsolete ?obsolete", _ACTIVE_STATUS), ("up:annotation", features_body)]
+    )
+    out = await svc.get_features("P38398", limit=1000)
+    assert out["count"] == 200
+    assert all(f["description"]["kind"] == "untrusted_text" for f in out["features"])
