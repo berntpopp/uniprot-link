@@ -6,6 +6,26 @@ versioning.
 
 ## [Unreleased]
 
+## [3.0.0] - 2026-07-11
+
+### Changed
+
+- **BREAKING: fence UniProtKB free-text as the Response-Envelope Standard v1.1
+  `untrusted_text` object.** Every externally sourced `rdfs:comment` literal is
+  now emitted as a typed object (`kind`/`text`/`provenance`/`raw_sha256`)
+  instead of a bare string, so a downstream host can never confuse retrieved
+  curator prose with instructions:
+  - `get_protein` `/function`
+  - `get_protein_features` `/features/*/description`
+  - `get_protein_diseases` `/diseases/*/involvement`
+  - `get_protein_variants` `/variants/*/description`
+
+  `get_protein_diseases`'s `/diseases/*/definition` (the disease vocabulary's
+  own `rdfs:comment`) is unchanged — out of scope per the fleet inventory row.
+  Consumers that read these four fields as plain strings must update to read
+  `.text` from the typed object. Defense in depth; research use only, not
+  clinical decision support.
+
 ### Fixed
 
 - Emit `_meta.unsafe_for_clinical_use: true` on every tool response (success and
