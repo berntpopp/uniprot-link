@@ -26,7 +26,7 @@ from uniprot_link.exceptions import (
     ServiceUnavailableError,
 )
 from uniprot_link.mcp.next_commands import cmd, default_error_next_commands
-from uniprot_link.mcp.untrusted_content import UntrustedTextLimitError
+from uniprot_link.mcp.untrusted_content import UntrustedTextLimitError, sanitize_message
 
 logger = logging.getLogger(__name__)
 
@@ -65,7 +65,11 @@ def _request_id() -> str:
 
 
 def _safe_message(exc: BaseException) -> str:
-    return (str(exc) or exc.__class__.__name__)[:280]
+    # Sanitize every exception-derived message: upstream response bodies are
+    # severed at the API client (never interpolated into an exception), but strip
+    # the fence's forbidden control/zero-width/bidi/NUL code points as a defensive
+    # backstop so nothing hostile can reach the caller-visible error frame.
+    return sanitize_message(str(exc) or exc.__class__.__name__)
 
 
 def _classify(exc: BaseException) -> tuple[str, str]:
@@ -109,7 +113,8 @@ def _error_envelope(exc: BaseException, context: McpErrorContext) -> dict[str, A
     envelope: dict[str, Any] = {
         "success": False,
         "error_code": error_code,
-        "message": message,
+        # Defensive: no forbidden code points reach the caller, whatever the path.
+        "message": sanitize_message(message),
         "retryable": error_code in _RETRYABLE,
         "recovery_action": _recovery_action(error_code),
         "_meta": {
@@ -192,7 +197,9 @@ def build_arg_error_envelope(
     envelope: dict[str, Any] = {
         "success": False,
         "error_code": "invalid_input",
-        "message": message[:280],
+        # The pydantic reason (value_message) can echo caller-influenced input;
+        # sanitize + length-cap it like every other caller-visible message.
+        "message": sanitize_message(message),
         "retryable": False,
         "recovery_action": "reformulate_input",
         "field": loc,

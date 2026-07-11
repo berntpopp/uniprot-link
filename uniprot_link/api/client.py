@@ -157,15 +157,18 @@ class SparqlClient:
             status = response.status_code
 
             if status == _HTTP_BAD_REQUEST:
-                # QLever surfaces a parse detail in the body for many errors; when
-                # it returns an empty 400 (it does for some malformed queries),
-                # give a cause-oriented hint instead of a bare string (Bug 11).
-                detail = response.text.strip()[:240] or (
-                    "Malformed SPARQL query (endpoint returned no detail). Common "
+                # Never echo the QLever 400 response BODY: a caller-influenced
+                # malformed query can make the endpoint reflect hostile prose (incl.
+                # control/zero-width/bidi/NUL code points) into that body, which would
+                # then reach the model through the MCP error envelope. Raise a fixed,
+                # body-free message with a static cause-oriented hint (the HTTP status
+                # is the only safe upstream-derived scalar); the raw body is
+                # deliberately neither surfaced nor logged (no-PII-in-logs invariant).
+                raise QuerySyntaxError(
+                    "Malformed SPARQL query (endpoint rejected it as invalid). Common "
                     "causes: unbalanced {}/() , a missing PREFIX, or an incomplete "
                     "FILTER/expression. Re-seed from a working example."
                 )
-                raise QuerySyntaxError(detail)
             if status == _HTTP_TOO_MANY_REQUESTS:
                 if attempt < self.config.max_retries:
                     await asyncio.sleep(self.config.retry_delay * (2**attempt))
