@@ -70,6 +70,19 @@ class SparqlEndpointConfig(BaseModel):
         le=100000,
         description="Hard cap on the LIMIT applied to any SELECT query.",
     )
+    max_response_bytes: int = Field(
+        # 32 MiB. Deliberately ABOVE the 8 MiB untrusted-text fence
+        # (mcp.untrusted_content.DEFAULT_MAX_TOTAL_TEXT_BYTES) so it never rejects a
+        # SELECT result the fence already permits; must stay above it.
+        default=33_554_432,
+        ge=1,
+        le=268_435_456,
+        description=(
+            "Hard cap (bytes) on a streamed SPARQL response body; the request "
+            "errors past it and NEVER truncates (a partial result set is "
+            "unparseable). Keep this above the 8 MiB untrusted-text fence."
+        ),
+    )
 
     @property
     def user_agent(self) -> str:

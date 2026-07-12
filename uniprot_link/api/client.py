@@ -8,12 +8,18 @@ HTTP failures onto the project's exception taxonomy.
 from __future__ import annotations
 
 import asyncio
+import json
 import time
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Self
 
 import httpx
 
+from uniprot_link.api.url_guard import (
+    build_host_allowlist,
+    make_url_guard,
+    read_body_capped,
+)
 from uniprot_link.exceptions import (
     QuerySyntaxError,
     QueryTimeoutError,
@@ -94,13 +100,20 @@ class SparqlClient:
         self.logger = logger
         self._rate_limiter = TokenBucketRateLimiter(config.rate_limit_per_second, config.burst_size)
         self._client: httpx.AsyncClient | None = None
+        # Exact host allowlist derived from the configured endpoint (never
+        # hardcoded) -- validates the initial POST and every auto-followed redirect.
+        self._allowed_hosts = build_host_allowlist(config.base_url)
 
     async def _get_client(self) -> httpx.AsyncClient:
         """Lazily create the shared httpx client."""
         if self._client is None:
             self._client = httpx.AsyncClient(
                 timeout=httpx.Timeout(self.config.timeout),
+                # Keep httpx's redirect machinery (a manual loop would mishandle the
+                # POST body on a 307/308); a request event-hook validates each hop.
                 follow_redirects=True,
+                max_redirects=5,
+                event_hooks={"request": [make_url_guard(self._allowed_hosts)]},
                 headers={"User-Agent": self.config.user_agent},
             )
         return self._client
@@ -134,12 +147,53 @@ class SparqlClient:
             started = time.monotonic()
             try:
                 client = await self._get_client()
-                response = await client.post(
+                # Stream the response so an oversized body is aborted BEFORE it is
+                # fully materialized/decoded (F-08/F-17 shared cap). The request
+                # event-hook fires here on the initial POST and every redirect hop;
+                # a DisallowedURLError / ResponseTooLargeError it raises is NOT an
+                # httpx error, so it escapes both except clauses -> non-retryable.
+                async with client.stream(
+                    "POST",
                     self.config.base_url,
                     data={"query": query},
                     headers={"Accept": accept},
                     timeout=request_timeout,
-                )
+                ) as response:
+                    status = response.status_code
+
+                    # Error statuses: never read (let alone echo) the body.
+                    if status == _HTTP_BAD_REQUEST:
+                        # A caller-influenced malformed query can make the endpoint
+                        # reflect hostile prose (control/zero-width/bidi/NUL) into
+                        # its 400 body, which would reach the model via the MCP error
+                        # envelope. Raise a fixed, body-free hint (the HTTP status is
+                        # the only safe upstream scalar); the raw body is neither
+                        # surfaced nor logged (no-PII-in-logs invariant).
+                        raise QuerySyntaxError(
+                            "Malformed SPARQL query (endpoint rejected it as invalid). Common "
+                            "causes: unbalanced {}/() , a missing PREFIX, or an incomplete "
+                            "FILTER/expression. Re-seed from a working example."
+                        )
+                    if status == _HTTP_TOO_MANY_REQUESTS:
+                        if attempt < self.config.max_retries:
+                            await asyncio.sleep(self.config.retry_delay * (2**attempt))
+                            continue
+                        raise RateLimitError()
+                    if status >= _HTTP_SERVER_ERROR:
+                        if attempt < self.config.max_retries:
+                            await asyncio.sleep(self.config.retry_delay * (2**attempt))
+                            continue
+                        raise ServiceUnavailableError(f"Endpoint returned HTTP {status}.")
+                    if status >= _HTTP_BAD_REQUEST:
+                        raise QuerySyntaxError(f"Endpoint returned HTTP {status}.")
+
+                    # Success: read the body under the byte cap (fail closed, never
+                    # truncate) before any decode/parse.
+                    body = await read_body_capped(
+                        response, max_bytes=self.config.max_response_bytes
+                    )
+                    content_type = response.headers.get("content-type", accept)
+                    encoding = response.charset_encoding or "utf-8"
             except httpx.TimeoutException as exc:
                 raise QueryTimeoutError(
                     f"Query exceeded the {request_timeout.read}s client timeout."
@@ -154,34 +208,6 @@ class SparqlClient:
                 ) from exc
 
             elapsed_ms = (time.monotonic() - started) * 1000.0
-            status = response.status_code
-
-            if status == _HTTP_BAD_REQUEST:
-                # Never echo the QLever 400 response BODY: a caller-influenced
-                # malformed query can make the endpoint reflect hostile prose (incl.
-                # control/zero-width/bidi/NUL code points) into that body, which would
-                # then reach the model through the MCP error envelope. Raise a fixed,
-                # body-free message with a static cause-oriented hint (the HTTP status
-                # is the only safe upstream-derived scalar); the raw body is
-                # deliberately neither surfaced nor logged (no-PII-in-logs invariant).
-                raise QuerySyntaxError(
-                    "Malformed SPARQL query (endpoint rejected it as invalid). Common "
-                    "causes: unbalanced {}/() , a missing PREFIX, or an incomplete "
-                    "FILTER/expression. Re-seed from a working example."
-                )
-            if status == _HTTP_TOO_MANY_REQUESTS:
-                if attempt < self.config.max_retries:
-                    await asyncio.sleep(self.config.retry_delay * (2**attempt))
-                    continue
-                raise RateLimitError()
-            if status >= _HTTP_SERVER_ERROR:
-                if attempt < self.config.max_retries:
-                    await asyncio.sleep(self.config.retry_delay * (2**attempt))
-                    continue
-                raise ServiceUnavailableError(f"Endpoint returned HTTP {status}.")
-            if status >= _HTTP_BAD_REQUEST:
-                raise QuerySyntaxError(f"Endpoint returned HTTP {status}.")
-
             if self.logger is not None:
                 self.logger.debug(
                     "sparql_request",
@@ -190,11 +216,11 @@ class SparqlClient:
                     elapsed_ms=round(elapsed_ms, 1),
                 )
 
-            parsed = response.json() if is_json else None
+            parsed = json.loads(body) if is_json else None
             return SparqlResult(
                 format=result_format,
-                content_type=response.headers.get("content-type", accept),
-                text=response.text,
+                content_type=content_type,
+                text=body.decode(encoding, errors="replace"),
                 status_code=status,
                 elapsed_ms=elapsed_ms,
                 json=parsed,

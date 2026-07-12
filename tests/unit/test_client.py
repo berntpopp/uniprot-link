@@ -9,14 +9,21 @@ import pytest
 import respx
 
 from uniprot_link.api.client import SparqlClient
+from uniprot_link.api.url_guard import (
+    DisallowedURLError,
+    ResponseTooLargeError,
+    build_host_allowlist,
+)
 from uniprot_link.config import SparqlEndpointConfig
 from uniprot_link.exceptions import (
     QuerySyntaxError,
     RateLimitError,
     ServiceUnavailableError,
 )
+from uniprot_link.mcp.untrusted_content import DEFAULT_MAX_TOTAL_TEXT_BYTES
 
 ENDPOINT = "https://sparql.uniprot.org/sparql"
+_SELECT = "SELECT ?s WHERE { ?s ?p ?o } LIMIT 1"
 _OK_JSON = {
     "head": {"vars": ["s"]},
     "results": {"bindings": [{"s": {"type": "uri", "value": "http://x"}}]},
@@ -155,4 +162,128 @@ async def test_csv_format_returns_text(config: SparqlEndpointConfig) -> None:
     result = await client.execute("SELECT ?s WHERE { ?s ?p ?o }", result_format="csv")
     assert result.json is None
     assert "http://x" in result.text
+    await client.aclose()
+
+
+# --- F-17: redirect/final-host validation + streamed response byte cap ---------
+
+
+def test_allowlist_is_derived_from_the_configured_base_url() -> None:
+    # NEVER hardcoded: the exact host allowlist comes from config.base_url.
+    cfg = SparqlEndpointConfig()
+    assert build_host_allowlist(cfg.base_url) == frozenset({"sparql.uniprot.org"})
+
+
+def test_byte_cap_default_is_above_the_untrusted_text_fence() -> None:
+    # The HTTP cap must sit ABOVE the 8 MiB untrusted-text fence, or it would
+    # reject SELECT results the fence already permits.
+    assert SparqlEndpointConfig().max_response_bytes > DEFAULT_MAX_TOTAL_TEXT_BYTES
+    assert SparqlEndpointConfig().max_response_bytes == 32 * 1024 * 1024
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_cross_host_redirect_raises_and_is_not_retried(
+    config: SparqlEndpointConfig,
+) -> None:
+    route = respx.post(ENDPOINT).mock(
+        return_value=httpx.Response(307, headers={"Location": "https://evil.example.org/sparql"})
+    )
+    client = SparqlClient(config)
+    with pytest.raises(DisallowedURLError):
+        await client.execute(_SELECT)
+    assert route.call_count == 1  # guard failure is non-retryable
+    await client.aclose()
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_https_downgrade_redirect_raises(config: SparqlEndpointConfig) -> None:
+    respx.post(ENDPOINT).mock(
+        return_value=httpx.Response(307, headers={"Location": "http://sparql.uniprot.org/sparql"})
+    )
+    client = SparqlClient(config)
+    with pytest.raises(DisallowedURLError):
+        await client.execute(_SELECT)
+    await client.aclose()
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_userinfo_in_redirect_target_raises(config: SparqlEndpointConfig) -> None:
+    # A ``user:pass@allowed-host`` target must be rejected even though the host
+    # itself is allowlisted (credential-smuggling / SSRF-shaping guard).
+    respx.post(ENDPOINT).mock(
+        return_value=httpx.Response(
+            307, headers={"Location": "https://user:pass@sparql.uniprot.org/sparql"}
+        )
+    )
+    client = SparqlClient(config)
+    with pytest.raises(DisallowedURLError):
+        await client.execute(_SELECT)
+    await client.aclose()
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_same_host_https_redirect_is_allowed(config: SparqlEndpointConfig) -> None:
+    # A legitimate same-host https redirect must still be followed.
+    respx.post(ENDPOINT).mock(
+        return_value=httpx.Response(307, headers={"Location": "https://sparql.uniprot.org/sparql/"})
+    )
+    respx.post("https://sparql.uniprot.org/sparql/").mock(
+        return_value=httpx.Response(200, json=_OK_JSON)
+    )
+    client = SparqlClient(config)
+    result = await client.execute(_SELECT)
+    assert result.json == _OK_JSON
+    await client.aclose()
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_oversized_response_raises_and_is_not_truncated(
+    config: SparqlEndpointConfig,
+) -> None:
+    # A body over the cap must ERROR (a truncated SPARQL JSON is unparseable),
+    # and the failure must not be retried.
+    cfg = SparqlEndpointConfig(timeout=5, max_retries=1, retry_delay=0.1, max_response_bytes=2048)
+    route = respx.post(ENDPOINT).mock(
+        return_value=httpx.Response(200, content=b"x" * 4096, headers={"content-type": "text/csv"})
+    )
+    client = SparqlClient(cfg)
+    with pytest.raises(ResponseTooLargeError):
+        await client.execute(_SELECT, result_format="csv")
+    assert route.call_count == 1
+    await client.aclose()
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_large_response_under_cap_is_unchanged(config: SparqlEndpointConfig) -> None:
+    # A large but under-cap CSV serialization streams through intact.
+    body = "s\n" + "http://example.org/x\n" * 1000
+    respx.post(ENDPOINT).mock(return_value=httpx.Response(200, text=body))
+    client = SparqlClient(config)
+    result = await client.execute(_SELECT, result_format="csv")
+    assert result.text == body
+    await client.aclose()
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_construct_response_over_cap_is_byte_bounded(
+    config: SparqlEndpointConfig,
+) -> None:
+    # F-08(c): a graph-returning CONSTRUCT/DESCRIBE cannot be row-LIMIT-bound, so
+    # the streamed byte cap is its ceiling -- an oversized turtle body errors.
+    cfg = SparqlEndpointConfig(timeout=5, max_retries=1, retry_delay=0.1, max_response_bytes=2048)
+    respx.post(ENDPOINT).mock(
+        return_value=httpx.Response(
+            200, content=b"@prefix x: <y> .\n" * 4096, headers={"content-type": "text/turtle"}
+        )
+    )
+    client = SparqlClient(cfg)
+    with pytest.raises(ResponseTooLargeError):
+        await client.execute("CONSTRUCT { ?s ?p ?o } WHERE { ?s ?p ?o }", result_format="turtle")
     await client.aclose()
