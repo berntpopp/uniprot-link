@@ -24,15 +24,16 @@ _TAXON_RE = re.compile(r"^\d+$")
 _ACCESSION_LIKE_RE = re.compile(r"^[A-Za-z][0-9][A-Za-z0-9]{4,}(-\d+)?$")
 # A ``LIMIT n`` solution modifier. Matched only against a *code-only* view of the
 # query (see ``_blank_noncode``) so LIMIT-like text in comments/literals/IRIs is
-# never mistaken for a real clause.
-_LIMIT_CLAUSE_RE = re.compile(r"\blimit\s+(\d+)", re.IGNORECASE)
+# never mistaken for a real clause. The lookbehind requires a real token boundary:
+# a leading ``?``/``$`` (variable), ``:`` (prefixed name), word char, ``.`` or ``-``
+# means it is an identifier like ``?limit``/``ex:limit`` -- a data token, NOT the
+# ``LIMIT`` keyword -- so its numeric object is never mistaken for a clause value.
+_LIMIT_CLAUSE_RE = re.compile(r"(?<![\w?$:.-])limit\s+(\d+)", re.IGNORECASE)
 # An IRIREF ``<...>`` per the SPARQL grammar (no spaces / forbidden chars inside).
 # Lets ``_blank_noncode`` skip a whole IRI as one unit -- so a ``#frag`` inside it
 # is not read as a comment, and a bare ``<`` (less-than operator) is left as code.
 _IRIREF_AT_RE = re.compile(r"<[^<>\"{}|^`\\\x00-\x20]*>")
 _STRING_DELIMS = ('"""', "'''", '"', "'")
-_COMMENT_RE = re.compile(r"#[^\n]*")
-_PREFIX_RE = re.compile(r"^\s*(?:PREFIX\s+[^:]*:\s*<[^>]*>|BASE\s*<[^>]*>)\s*", re.IGNORECASE)
 _READ_OPS = {"SELECT", "ASK", "CONSTRUCT", "DESCRIBE"}
 _WRITE_OPS = {"INSERT", "DELETE", "LOAD", "CLEAR", "CREATE", "DROP", "ADD", "MOVE", "COPY", "WITH"}
 # A UniProt cross-reference database key (e.g. PDB, HGNC, AlphaFoldDB): starts
@@ -218,19 +219,30 @@ def _blank_noncode(query: str) -> str:
     return "".join(out)
 
 
-def _leading_form(query: str) -> str:
-    """Return the query's leading form (SELECT/ASK/CONSTRUCT/DESCRIBE/...) upper-cased.
+def _leading_token(query: str) -> str:
+    """Return the query's leading keyword (SELECT/ASK/CONSTRUCT/DESCRIBE/...), upper-cased.
 
-    Mirrors :func:`classify_sparql_operation`'s comment/PREFIX/BASE strip but never
-    raises -- write-form rejection is that function's job, done before this runs.
+    Detection runs on the IRI/string/comment-blanked view (:func:`_blank_noncode`),
+    so a ``#`` inside a same-line ``<...#frag>`` prefix IRI is NEVER read as a
+    comment that swallows the query body (the F-08 bypass). Leading ``PREFIX`` and
+    ``BASE`` declarations are skipped -- their ``<...>`` IRI is already blanked to
+    whitespace in that view, so only the ``PREFIX``/``BASE`` keyword and the
+    prefix-name token remain to step over -- leaving the real query form. Returns
+    ``""`` when no token remains. Never raises; write-form rejection is
+    :func:`classify_sparql_operation`'s job.
     """
-    stripped = _COMMENT_RE.sub("", query)
-    while True:
-        new = _PREFIX_RE.sub("", stripped, count=1)
-        if new == stripped:
-            break
-        stripped = new
-    return (stripped.strip().split(None, 1) or [""])[0].upper()
+    words = _blank_noncode(query).split()
+    i, n = 0, len(words)
+    while i < n:
+        word = words[i].upper()
+        if word == "PREFIX":  # ``PREFIX`` + ``<name>:`` token (IRI already blanked)
+            i += 2
+            continue
+        if word == "BASE":  # ``BASE`` (its IRI is already blanked away)
+            i += 1
+            continue
+        return word
+    return ""
 
 
 def inject_limit(query: str, *, default: int, maximum: int) -> tuple[str, bool]:
@@ -267,7 +279,7 @@ def inject_limit(query: str, *, default: int, maximum: int) -> tuple[str, bool]:
             out = out[:num_start] + str(maximum) + out[num_end:]
 
     has_outer_limit = any(depth == 0 for *_head, depth in clauses)
-    if _leading_form(query) == "SELECT" and not has_outer_limit:
+    if _leading_token(query) == "SELECT" and not has_outer_limit:
         return f"{out.rstrip().rstrip(';')}\nLIMIT {min(default, maximum)}", True
     return out, False
 
@@ -276,24 +288,16 @@ def classify_sparql_operation(query: str) -> str:
     """Return the leading query form; raise InvalidInputError on UPDATE/write forms.
 
     Detection keys on the first significant keyword after comments and PREFIX/BASE
-    declarations, never a substring match anywhere — so a SELECT containing the
-    literal "insert" is unaffected. Unknown leading tokens pass through (the
+    declarations (found on the IRI/string/comment-blanked view via
+    :func:`_leading_token`, so a ``#`` inside a same-line ``<...#frag>`` IRI is not
+    read as a comment), never a substring match anywhere — so a SELECT containing
+    the literal "insert" is unaffected. Unknown leading tokens pass through (the
     endpoint will return a 400 -> query_syntax_error).
 
     This is a UX guard (clean invalid_input vs opaque internal_error), not a
-    security boundary — the endpoint is read-only regardless. Limitation: a ``#``
-    inside a same-line IRI fragment is treated as a comment, so a write whose verb
-    shares a physical line with a ``<...#frag>`` IRI may classify as unknown and be
-    rejected by the endpoint instead; the conventional one-declaration-per-line
-    form is always caught here.
+    security boundary — the endpoint is read-only regardless.
     """
-    stripped = _COMMENT_RE.sub("", query)
-    while True:
-        new = _PREFIX_RE.sub("", stripped, count=1)
-        if new == stripped:
-            break
-        stripped = new
-    token = (stripped.strip().split(None, 1) or [""])[0].upper()
+    token = _leading_token(query)
     if token in _READ_OPS:
         return token
     if token in _WRITE_OPS:

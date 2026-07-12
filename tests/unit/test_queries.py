@@ -193,6 +193,42 @@ class TestLimitCapBypass:
         assert d_inj is False
         assert "LIMIT" not in d_out.upper()
 
+    def test_same_line_prefix_iri_fragment_does_not_bypass_limit_injection(self) -> None:
+        # F-08 gate: a valid SAME-LINE prefix whose IRI ends in a ``#`` fragment
+        # (``rdf-schema#``) must NOT let the ``#`` be read as a comment that
+        # swallows the trailing ``SELECT`` -- the query is still a SELECT and MUST
+        # get a bounding LIMIT injected (else an unbounded SELECT reaches the
+        # endpoint). Old ``_leading_form`` mis-classified this as ``PREFIX``.
+        query = (
+            "PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#> "
+            "SELECT ?s WHERE { ?s rdfs:label ?l }"
+        )
+        out, injected = q.inject_limit(query, default=50, maximum=10000)
+        assert injected is True
+        assert out.rstrip().endswith("LIMIT 50")
+        assert "rdf-schema#" in out  # the prefix IRI survives verbatim
+        assert out.upper().count("LIMIT") == 1  # exactly the one injected clause
+
+    def test_variable_and_prefixed_limit_tokens_are_not_rewritten(self) -> None:
+        # F-08 regression: the LIMIT-clause regex must match only a real SPARQL
+        # ``LIMIT`` keyword at a token boundary -- never a variable ``?limit`` or a
+        # prefixed name ``ex:limit`` -- so an oversized numeric object literal that
+        # follows them survives untouched (old ``\\blimit\\s+\\d+`` rewrote it down
+        # to ``maximum``, corrupting the query data).
+        var_q = "SELECT ?s WHERE { ?s ?limit 999999999 } LIMIT 5"
+        var_out, var_inj = q.inject_limit(var_q, default=50, maximum=10000)
+        assert var_inj is False  # the real outer ``LIMIT 5`` already bounds it
+        assert "999999999" in var_out  # data literal survives, NOT clamped
+        assert "10000" not in var_out
+        assert "LIMIT 5" in var_out
+
+        pn_q = "SELECT ?s WHERE { ?s ex:limit 999999999 } LIMIT 5"
+        pn_out, pn_inj = q.inject_limit(pn_q, default=50, maximum=10000)
+        assert pn_inj is False
+        assert "999999999" in pn_out  # data literal survives, NOT clamped
+        assert "10000" not in pn_out
+        assert "LIMIT 5" in pn_out
+
 
 class TestFindProteins:
     def test_requires_an_anchor(self) -> None:
