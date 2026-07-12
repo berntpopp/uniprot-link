@@ -19,6 +19,7 @@ them -- a validation/cap failure is non-retryable by construction.
 from __future__ import annotations
 
 from collections.abc import Awaitable, Callable
+from dataclasses import dataclass
 from urllib.parse import urlsplit
 
 import httpx
@@ -32,38 +33,60 @@ class ResponseTooLargeError(Exception):
     """A response body exceeded the streamed byte cap. NON-RETRYABLE (never truncated)."""
 
 
-def build_host_allowlist(*base_urls: str) -> frozenset[str]:
-    """Derive an exact host allowlist from configured base URL(s).
+OUTBOUND_POLICY_ERROR = "outbound request rejected by policy"
 
-    Hosts are lower-cased for case-insensitive comparison. Never hardcode a host
-    literal -- every base URL is operator-overridable, so the allowlist must track
-    the configured endpoint.
+
+@dataclass(frozen=True, slots=True)
+class AllowedOrigin:
+    """A normalized configured HTTPS origin."""
+
+    host: str
+    port: int
+
+
+def build_allowed_origins(*base_urls: str) -> frozenset[AllowedOrigin]:
+    """Derive exact normalized origins from configured base URL(s).
+
+    An omitted port and ``:443`` are the same origin. A configured non-443 port
+    remains explicit, so a redirect cannot silently pivot to another service on
+    an otherwise allowlisted host.
     """
-    hosts: set[str] = set()
+    origins: set[AllowedOrigin] = set()
     for url in base_urls:
-        host = urlsplit(url).hostname
+        parsed = urlsplit(url)
+        host = parsed.hostname
         if host:
-            hosts.add(host.lower())
-    return frozenset(hosts)
+            origins.add(AllowedOrigin(host.lower(), parsed.port or 443))
+    return frozenset(origins)
+
+
+def build_host_allowlist(*base_urls: str) -> frozenset[str]:
+    """Compatibility view for callers that only need the configured hosts."""
+    return frozenset(origin.host for origin in build_allowed_origins(*base_urls))
 
 
 def make_url_guard(
-    allowed_hosts: frozenset[str],
+    allowed_origins: frozenset[AllowedOrigin] | frozenset[str],
 ) -> Callable[[httpx.Request], Awaitable[None]]:
     """Build an httpx async request event-hook validating each outgoing hop."""
+
+    normalized = frozenset(
+        AllowedOrigin(origin, 443) if isinstance(origin, str) else origin
+        for origin in allowed_origins
+    )
 
     async def _guard(request: httpx.Request) -> None:
         url = request.url
         if url.scheme != "https":
-            raise DisallowedURLError(f"non-https request scheme: {url.scheme!r}")
+            raise DisallowedURLError(OUTBOUND_POLICY_ERROR)
         # ``url.userinfo`` is the raw bytes (``b''`` when absent), so this also
         # rejects the empty ``:@`` form (username==password=="" but userinfo==b':')
         # that a ``username or password`` check would miss. Subsumes both.
         if url.userinfo:
-            raise DisallowedURLError("userinfo (user:pass@) is not permitted in the target URL")
+            raise DisallowedURLError(OUTBOUND_POLICY_ERROR)
         host = (url.host or "").lower()
-        if host not in allowed_hosts:
-            raise DisallowedURLError(f"host not allowlisted: {host!r}")
+        if AllowedOrigin(host, url.port or 443) not in normalized:
+            raise DisallowedURLError(OUTBOUND_POLICY_ERROR)
 
     return _guard
 
@@ -75,10 +98,6 @@ async def read_body_capped(response: httpx.Response, *, max_bytes: int) -> bytes
     async for chunk in response.aiter_bytes():
         total += len(chunk)
         if total > max_bytes:
-            raise ResponseTooLargeError(
-                f"SPARQL response exceeded the {max_bytes}-byte cap; refusing to "
-                "truncate (a partial result set is unparseable). Narrow the query "
-                "or lower the LIMIT."
-            )
+            raise ResponseTooLargeError(OUTBOUND_POLICY_ERROR)
         chunks.append(chunk)
     return b"".join(chunks)

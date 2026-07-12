@@ -16,7 +16,7 @@ from typing import TYPE_CHECKING, Any, Self
 import httpx
 
 from uniprot_link.api.url_guard import (
-    build_host_allowlist,
+    build_allowed_origins,
     make_url_guard,
     read_body_capped,
 )
@@ -99,7 +99,7 @@ class SparqlClient:
         self._client: httpx.AsyncClient | None = None
         # Exact host allowlist derived from the configured endpoint (never
         # hardcoded) -- validates the initial POST and every auto-followed redirect.
-        self._allowed_hosts = build_host_allowlist(config.base_url)
+        self._allowed_origins = build_allowed_origins(config.base_url)
 
     async def _get_client(self) -> httpx.AsyncClient:
         """Lazily create the shared httpx client."""
@@ -110,7 +110,7 @@ class SparqlClient:
                 # POST body on a 307/308); a request event-hook validates each hop.
                 follow_redirects=True,
                 max_redirects=5,
-                event_hooks={"request": [make_url_guard(self._allowed_hosts)]},
+                event_hooks={"request": [make_url_guard(self._allowed_origins)]},
                 headers={"User-Agent": self.config.user_agent},
             )
         return self._client
