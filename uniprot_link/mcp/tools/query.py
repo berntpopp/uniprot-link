@@ -37,7 +37,7 @@ def register_query_tools(mcp: FastMCP) -> None:
             "LIMIT is auto-injected into unbounded SELECTs (see `_meta`/`truncated`). "
             "This is the escape hatch for anything the typed tools do not cover -- "
             "seed queries from search_example_queries. Use uniprot://prefixes for the "
-            "standard PREFIX block. Unbounded or federated queries can take 10-60 s; "
+            "standard PREFIX block. Broad, unanchored queries can take 10-60 s; "
             "bound lookups (anchored on an accession/gene/taxon) return in <2 s. "
             "Signature: search_sparql_query(query, result_format=, limit=, timeout_seconds=)."
         ),
