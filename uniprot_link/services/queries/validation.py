@@ -22,7 +22,15 @@ _TAXON_RE = re.compile(r"^\d+$")
 # The accession interior signature: a letter, a digit, then 4+ alnum chars (e.g.
 # ``Q96T60XYZ``). Catches a *mangled* accession the strict grammar above rejects.
 _ACCESSION_LIKE_RE = re.compile(r"^[A-Za-z][0-9][A-Za-z0-9]{4,}(-\d+)?$")
-_SELECT_LIMIT_RE = re.compile(r"\blimit\s+\d+", re.IGNORECASE)
+# A ``LIMIT n`` solution modifier. Matched only against a *code-only* view of the
+# query (see ``_blank_noncode``) so LIMIT-like text in comments/literals/IRIs is
+# never mistaken for a real clause.
+_LIMIT_CLAUSE_RE = re.compile(r"\blimit\s+(\d+)", re.IGNORECASE)
+# An IRIREF ``<...>`` per the SPARQL grammar (no spaces / forbidden chars inside).
+# Lets ``_blank_noncode`` skip a whole IRI as one unit -- so a ``#frag`` inside it
+# is not read as a comment, and a bare ``<`` (less-than operator) is left as code.
+_IRIREF_AT_RE = re.compile(r"<[^<>\"{}|^`\\\x00-\x20]*>")
+_STRING_DELIMS = ('"""', "'''", '"', "'")
 _COMMENT_RE = re.compile(r"#[^\n]*")
 _PREFIX_RE = re.compile(r"^\s*(?:PREFIX\s+[^:]*:\s*<[^>]*>|BASE\s*<[^>]*>)\s*", re.IGNORECASE)
 _READ_OPS = {"SELECT", "ASK", "CONSTRUCT", "DESCRIBE"}
@@ -157,19 +165,111 @@ def clamp_limit(limit: int, *, default: int, maximum: int) -> int:
     return min(limit, maximum)
 
 
-def inject_limit(query: str, *, default: int, maximum: int) -> tuple[str, bool]:
-    """Ensure a SELECT query carries a LIMIT; return ``(query, was_injected)``.
+def _blank_noncode(query: str) -> str:
+    """Return ``query`` with comments, string literals, and IRIs blanked to spaces.
 
-    Existing LIMITs are left untouched (the endpoint still enforces them). Only
-    SELECT queries without a LIMIT get one appended. ASK/CONSTRUCT/DESCRIBE are
-    returned unchanged.
+    The result has the SAME length as the input (offsets are preserved), so a
+    match found in it maps 1:1 back onto the original. This is what makes LIMIT
+    detection *structural*: a ``LIMIT`` hidden in a ``#`` comment, a string
+    literal, or an ``<...#frag>`` IRI becomes invisible, while a bare ``<``
+    (the less-than operator) is left intact as code.
     """
-    lowered = query.lower()
-    if "select" not in lowered:
-        return query, False
-    if _SELECT_LIMIT_RE.search(query):
-        return query, False
-    return f"{query.rstrip().rstrip(';')}\nLIMIT {min(default, maximum)}", True
+    out = list(query)
+    i, n = 0, len(query)
+    while i < n:
+        ch = query[i]
+        if ch == "#":  # a comment runs to end of line
+            j = i
+            while j < n and query[j] != "\n":
+                out[j] = " "
+                j += 1
+            i = j
+            continue
+        if ch == "<":
+            m = _IRIREF_AT_RE.match(query, i)
+            if m:  # a real IRI -- blank it as one unit (its text is never code)
+                for k in range(m.start(), m.end()):
+                    out[k] = " "
+                i = m.end()
+                continue
+            i += 1  # a bare ``<`` is the comparison operator; keep it as code
+            continue
+        delim = next((d for d in _STRING_DELIMS if query.startswith(d, i)), None)
+        if delim:
+            dl = len(delim)
+            for k in range(dl):
+                out[i + k] = " "
+            j = i + dl
+            while j < n:
+                if query[j] == "\\" and j + 1 < n:  # escaped char inside the literal
+                    out[j] = out[j + 1] = " "
+                    j += 2
+                    continue
+                if query.startswith(delim, j):  # closing delimiter
+                    for k in range(dl):
+                        out[j + k] = " "
+                    j += dl
+                    break
+                out[j] = " "
+                j += 1
+            i = j
+            continue
+        i += 1
+    return "".join(out)
+
+
+def _leading_form(query: str) -> str:
+    """Return the query's leading form (SELECT/ASK/CONSTRUCT/DESCRIBE/...) upper-cased.
+
+    Mirrors :func:`classify_sparql_operation`'s comment/PREFIX/BASE strip but never
+    raises -- write-form rejection is that function's job, done before this runs.
+    """
+    stripped = _COMMENT_RE.sub("", query)
+    while True:
+        new = _PREFIX_RE.sub("", stripped, count=1)
+        if new == stripped:
+            break
+        stripped = new
+    return (stripped.strip().split(None, 1) or [""])[0].upper()
+
+
+def inject_limit(query: str, *, default: int, maximum: int) -> tuple[str, bool]:
+    """Structurally bound a query's result set; return ``(query, was_injected)``.
+
+    Closes the result-cap bypass (F-08) with two independent, structural clamps
+    (comments/string-literals/IRIs are ignored via :func:`_blank_noncode`, so
+    LIMIT-like decoy text can no longer fool the guard):
+
+    * Every *real* ``LIMIT n`` clause with ``n > maximum`` is rewritten DOWN to
+      ``maximum`` -- a huge explicit LIMIT can no longer request an unbounded row
+      count from the endpoint.
+    * A top-level ``SELECT`` carrying no real *outer* (brace-depth-0) LIMIT gets
+      one appended (``min(default, maximum)``). An unbounded SELECT -- or one whose
+      only ``LIMIT`` hides in a comment, a literal, or a sub-query -- never reaches
+      the endpoint uncapped.
+
+    ``ASK`` returns a single boolean and ``CONSTRUCT``/``DESCRIBE`` are
+    graph-returning forms bounded by the streamed response byte cap (F-17), so
+    none of those is LIMIT-injected; any oversized LIMIT they carry is still
+    clamped.
+    """
+    sanitized = _blank_noncode(query)
+    clauses: list[tuple[int, int, int, int]] = []
+    for m in _LIMIT_CLAUSE_RE.finditer(sanitized):
+        pos = m.start()
+        depth = sanitized.count("{", 0, pos) - sanitized.count("}", 0, pos)
+        clauses.append((m.start(1), m.end(1), int(m.group(1)), depth))
+
+    # Clamp oversized LIMITs right-to-left so earlier offsets stay valid.
+    out = query
+    for num_start, num_end, value, _depth in sorted(clauses, reverse=True):
+        if value > maximum:
+            out = out[:num_start] + str(maximum) + out[num_end:]
+
+    has_outer_limit = any(depth == 0 for *_head, depth in clauses)
+    if _leading_form(query) == "SELECT" and not has_outer_limit:
+        return f"{out.rstrip().rstrip(';')}\nLIMIT {min(default, maximum)}", True
+    return out, False
 
 
 def classify_sparql_operation(query: str) -> str:

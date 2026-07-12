@@ -111,6 +111,89 @@ class TestLimitInjection:
         assert q.clamp_limit(9999, default=25, maximum=200) == 200
 
 
+class TestLimitCapBypass:
+    """F-08: a SELECT must never reach the endpoint result-unbounded.
+
+    Adversarial cases that the *old* ``inject_limit`` (raw ``\\blimit\\s+\\d+``
+    substring scan, existing LIMITs left untouched) failed to bound.
+    """
+
+    def test_huge_explicit_limit_is_clamped_to_maximum(self) -> None:
+        # An oversized explicit LIMIT must be rewritten DOWN to ``maximum`` --
+        # the endpoint must never be asked for 999_999_999 rows.
+        out, _ = q.inject_limit(
+            "SELECT ?s WHERE { ?s ?p ?o } LIMIT 999999999", default=50, maximum=10000
+        )
+        assert "999999999" not in out
+        assert "LIMIT 10000" in out
+        # exactly one LIMIT clause survives (no double-LIMIT syntax error)
+        assert out.upper().count("LIMIT") == 1
+
+    def test_limit_hidden_in_comment_does_not_block_injection(self) -> None:
+        # The only "LIMIT" is inside a ``#`` comment -> it is NOT a real clause,
+        # so a structural LIMIT must still be injected (old code was fooled).
+        query = "SELECT ?s WHERE { ?s ?p ?o }\n# LIMIT 5 -- decoy in a comment"
+        out, injected = q.inject_limit(query, default=50, maximum=10000)
+        assert injected is True
+        assert out.rstrip().endswith("LIMIT 50")
+        assert "# LIMIT 5" in out  # comment preserved verbatim
+
+    def test_limit_hidden_in_string_literal_does_not_block_injection(self) -> None:
+        # The only "LIMIT" is inside a string literal -> not a real clause.
+        query = 'SELECT ?s WHERE { ?s ?p ?o . FILTER(?o = "LIMIT 100") }'
+        out, injected = q.inject_limit(query, default=50, maximum=10000)
+        assert injected is True
+        assert out.rstrip().endswith("LIMIT 50")
+        assert '"LIMIT 100"' in out  # literal preserved verbatim
+
+    def test_iri_fragment_hash_is_not_mistaken_for_a_comment(self) -> None:
+        # A ``#`` inside an ``<...#frag>`` IRI on the same line as a real LIMIT
+        # must NOT blank the rest of the line (which would drop the real LIMIT and
+        # trigger a spurious second injection -> invalid double-LIMIT).
+        query = "SELECT ?o WHERE { <http://ex.org/x#p> ?p ?o } LIMIT 100"
+        out, injected = q.inject_limit(query, default=50, maximum=10000)
+        assert injected is False
+        assert out.upper().count("LIMIT") == 1
+        assert "LIMIT 100" in out
+
+    def test_less_than_operator_is_not_mistaken_for_an_iri(self) -> None:
+        # A ``<`` comparison operator sharing a line with a real LIMIT must not be
+        # swallowed as an IRI (which would blank the trailing LIMIT).
+        query = "SELECT ?o WHERE { ?s ?p ?o FILTER(?o < 5) } LIMIT 200"
+        out, injected = q.inject_limit(query, default=50, maximum=10000)
+        assert injected is False
+        assert out.upper().count("LIMIT") == 1
+        assert "LIMIT 200" in out
+
+    def test_subquery_limit_still_forces_an_outer_limit(self) -> None:
+        # A LIMIT only inside a sub-SELECT does not bound the OUTER result set:
+        # an outer LIMIT must still be injected.
+        query = "SELECT ?s WHERE { { SELECT ?s WHERE { ?s ?p ?o } LIMIT 5 } }"
+        out, injected = q.inject_limit(query, default=50, maximum=10000)
+        assert injected is True
+        assert out.rstrip().endswith("LIMIT 50")
+        assert "LIMIT 5" in out  # the sub-query limit is preserved
+
+    def test_oversized_subquery_limit_is_also_clamped(self) -> None:
+        query = "SELECT ?s WHERE { { SELECT ?s WHERE { ?s ?p ?o } LIMIT 88888888 } } LIMIT 3"
+        out, _ = q.inject_limit(query, default=50, maximum=10000)
+        assert "88888888" not in out
+        assert "LIMIT 10000" in out
+        assert "LIMIT 3" in out  # small outer limit untouched
+
+    def test_construct_and_describe_are_never_limit_injected(self) -> None:
+        # Graph-returning forms are bounded by the streamed HTTP byte cap (F-17),
+        # never by a bogus row LIMIT appended to a CONSTRUCT/DESCRIBE.
+        c_out, c_inj = q.inject_limit(
+            "CONSTRUCT { ?s ?p ?o } WHERE { ?s ?p ?o }", default=50, maximum=10000
+        )
+        assert c_inj is False
+        assert "LIMIT" not in c_out.upper()
+        d_out, d_inj = q.inject_limit("DESCRIBE <http://ex.org/x>", default=50, maximum=10000)
+        assert d_inj is False
+        assert "LIMIT" not in d_out.upper()
+
+
 class TestFindProteins:
     def test_requires_an_anchor(self) -> None:
         with pytest.raises(InvalidInputError):
