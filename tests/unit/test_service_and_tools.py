@@ -777,6 +777,25 @@ async def test_run_query_rejects_construct(service_factory: Any) -> None:
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "query",
+    [
+        "# harmless prologue comment\nPREFIX ex: <https://example.org/>\nCoNsTrUcT { ?s ?p ?o } WHERE { ?s ?p ?o }",
+        "# another harmless comment\nBASE <https://example.org/>\ndEsCrIbE <protein/P05067>",
+        "SELECT ?s WHERE { { OPTIONAL { sErViCe ?endpoint { ?s ?p ?o } } } }",
+    ],
+)
+async def test_run_query_rejects_forbidden_forms_before_client_execution(
+    service_factory: Any, query: str
+) -> None:
+    """Policy validation must reject obfuscated forms before an HTTP-capable client runs."""
+    svc = service_factory([])
+    with pytest.raises(InvalidInputError):
+        await svc.run_query(query)
+    assert svc.client.calls == []
+
+
+@pytest.mark.asyncio
 async def test_run_query_ask(service_factory: Any) -> None:
     svc = service_factory([("ASK", {"head": {"link": []}, "boolean": True})])
     out = await svc.run_query("ASK { ?s ?p ?o }")

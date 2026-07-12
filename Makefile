@@ -1,6 +1,6 @@
 .PHONY: help install lock upgrade sync \
         format format-check lint lint-ci lint-fix lint-loc \
-        typecheck test test-fast test-unit test-integration test-cov \
+        typecheck test test-fast test-unit test-integration test-cov test-log-isolation \
         check ci-local precommit clean \
         dev \
         docker-build docker-up docker-down docker-logs docker-url info
@@ -61,9 +61,13 @@ test-integration: ## Run live-endpoint integration tests
 test-cov: ## Run tests with coverage
 	uv run pytest tests -m "not integration" --cov=uniprot_link --cov-report=term-missing --cov-report=html
 
+test-log-isolation: ## Repeat global logging isolation tests with two xdist workers
+	uv run pytest tests/unit/mcp/test_log_filters.py -q -n 2
+	uv run pytest tests/unit/mcp/test_log_filters.py -q -n 2
+
 check: format lint ## Format and lint
 
-ci-local: format-check lint-ci lint-loc typecheck test-fast ## Fast local CI-equivalent checks
+ci-local: format-check lint-ci lint-loc typecheck test-fast test-log-isolation ## Fast local CI-equivalent checks
 
 precommit: ci-local ## Run checks expected before commit
 
