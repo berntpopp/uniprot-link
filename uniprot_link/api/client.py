@@ -16,6 +16,8 @@ from typing import TYPE_CHECKING, Any, Self
 import httpx
 
 from uniprot_link.api.url_guard import (
+    OUTBOUND_POLICY_ERROR,
+    DisallowedURLError,
     build_allowed_origins,
     make_url_guard,
     read_body_capped,
@@ -213,6 +215,8 @@ class SparqlClient:
                     )
                     content_type = response.headers.get("content-type", accept)
                     encoding = response.charset_encoding or "utf-8"
+            except httpx.TooManyRedirects as exc:
+                raise DisallowedURLError(OUTBOUND_POLICY_ERROR) from exc
             except httpx.TimeoutException as exc:
                 raise QueryTimeoutError(
                     f"Query exceeded the {request_timeout.read}s client timeout."

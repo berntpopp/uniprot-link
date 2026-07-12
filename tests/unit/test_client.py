@@ -285,6 +285,29 @@ async def test_same_host_https_redirect_is_allowed(config: SparqlEndpointConfig)
 
 
 @pytest.mark.asyncio
+async def test_redirect_limit_maps_to_fixed_non_retryable_policy_error() -> None:
+    config = SparqlEndpointConfig(max_retries=0)
+    client = SparqlClient(config)
+    session = await client._get_client()
+    redirects = 0
+
+    def handler(_: httpx.Request) -> httpx.Response:
+        nonlocal redirects
+        location = f"https://sparql.uniprot.org/hop-{redirects}"
+        redirects += 1
+        return httpx.Response(302, headers={"Location": location})
+
+    session._transport = httpx.MockTransport(handler)
+    try:
+        with pytest.raises(DisallowedURLError) as captured:
+            await client.execute(_SELECT)
+    finally:
+        await client.aclose()
+    assert redirects == 6
+    assert str(captured.value) == "outbound request rejected by policy"
+
+
+@pytest.mark.asyncio
 @respx.mock
 async def test_oversized_response_raises_and_is_not_truncated(
     config: SparqlEndpointConfig,
