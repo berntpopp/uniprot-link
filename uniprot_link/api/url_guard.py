@@ -56,7 +56,10 @@ def make_url_guard(
         url = request.url
         if url.scheme != "https":
             raise DisallowedURLError(f"non-https request scheme: {url.scheme!r}")
-        if url.username or url.password:
+        # ``url.userinfo`` is the raw bytes (``b''`` when absent), so this also
+        # rejects the empty ``:@`` form (username==password=="" but userinfo==b':')
+        # that a ``username or password`` check would miss. Subsumes both.
+        if url.userinfo:
             raise DisallowedURLError("userinfo (user:pass@) is not permitted in the target URL")
         host = (url.host or "").lower()
         if host not in allowed_hosts:

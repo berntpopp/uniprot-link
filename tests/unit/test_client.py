@@ -13,6 +13,7 @@ from uniprot_link.api.url_guard import (
     DisallowedURLError,
     ResponseTooLargeError,
     build_host_allowlist,
+    make_url_guard,
 )
 from uniprot_link.config import SparqlEndpointConfig
 from uniprot_link.exceptions import (
@@ -222,6 +223,20 @@ async def test_userinfo_in_redirect_target_raises(config: SparqlEndpointConfig) 
     with pytest.raises(DisallowedURLError):
         await client.execute(_SELECT)
     await client.aclose()
+
+
+@pytest.mark.asyncio
+async def test_guard_rejects_empty_userinfo() -> None:
+    # The empty ``:@`` userinfo form must be rejected too (recipe uniformity):
+    # httpx parses ``https://:@sparql.uniprot.org/`` to ``url.userinfo == b':'``
+    # while ``url.username`` and ``url.password`` are both ``""`` -- a
+    # ``username or password`` check would MISS it. The guard tests the raw
+    # ``url.userinfo`` bytes, so any non-empty userinfo is rejected.
+    guard = make_url_guard(frozenset({"sparql.uniprot.org"}))
+    with pytest.raises(DisallowedURLError):
+        await guard(httpx.Request("GET", "https://:@sparql.uniprot.org/sparql"))
+    # A clean allowlisted URL (no userinfo) still passes.
+    await guard(httpx.Request("GET", "https://sparql.uniprot.org/sparql"))
 
 
 @pytest.mark.asyncio
