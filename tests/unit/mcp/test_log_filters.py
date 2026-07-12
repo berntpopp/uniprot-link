@@ -9,9 +9,75 @@ from __future__ import annotations
 
 import logging
 
+import pytest
+
 from uniprot_link.mcp.log_filters import ForbiddenCodepointLogFilter, install_log_sanitizer
+from uniprot_link.mcp.notfound_guard import install_validation_log_filter
 
 _FORBIDDEN = ("\x00", "‍", "﻿", "‮")
+_LOGGERS_UNDER_TEST = (
+    "",
+    "uniprot_link",
+    "fastmcp",
+    "fastmcp.server.server",
+    "fastmcp.server.mixins.mcp_operations",
+    "mcp",
+    "mcp.server.lowlevel.server",
+    "mcp.shared.session",
+)
+_LoggingState = list[
+    tuple[
+        logging.Logger,
+        list[logging.Filter],
+        list[logging.Handler],
+        int,
+        bool,
+        list[tuple[logging.Handler, list[logging.Filter], int]],
+    ]
+]
+
+
+def _capture_logging_state() -> _LoggingState:
+    """Capture every mutable logging property this module's tests can touch."""
+    snapshots: _LoggingState = []
+    for name in _LOGGERS_UNDER_TEST:
+        logger = logging.getLogger(name)
+        handlers = list(logger.handlers)
+        snapshots.append(
+            (
+                logger,
+                list(logger.filters),
+                handlers,
+                logger.level,
+                logger.propagate,
+                [(handler, list(handler.filters), handler.level) for handler in handlers],
+            )
+        )
+    return snapshots
+
+
+def _restore_captured_logging_state(snapshots: _LoggingState) -> None:
+    """Restore a state captured by :func:`_capture_logging_state`."""
+    for logger, filters, handlers, level, propagate, handler_states in snapshots:
+        logger.filters[:] = filters
+        logger.handlers[:] = handlers
+        logger.setLevel(level)
+        logger.propagate = propagate
+        for handler, handler_filters, handler_level in handler_states:
+            handler.filters[:] = handler_filters
+            handler.setLevel(handler_level)
+
+
+@pytest.fixture(autouse=True)
+def _restore_logging_state() -> None:
+    """Leave root/application logging exactly as this test found it.
+
+    Logging is process-global, so xdist workers and later tests must not inherit a
+    filter, handler, level, or propagation change made while testing sanitisation.
+    """
+    snapshots = _capture_logging_state()
+    yield
+    _restore_captured_logging_state(snapshots)
 
 
 def test_filter_strips_actual_codepoints_from_a_plain_message() -> None:
@@ -33,6 +99,32 @@ def test_filter_strips_actual_codepoints_from_a_plain_message() -> None:
     assert "delete_everything" in out  # prose kept; only code points removed
 
 
+def test_logging_fixture_restores_every_captured_global_state_after_mutation() -> None:
+    """Directly prove the fixture's snapshot/restore contract for global logging."""
+    before = _capture_logging_state()
+    marker = logging.Filter()
+    added_handlers: list[logging.Handler] = []
+    try:
+        for logger, *_rest in before:
+            handler = logging.NullHandler()
+            handler.addFilter(marker)
+            logger.addFilter(marker)
+            logger.addHandler(handler)
+            logger.setLevel(logging.CRITICAL)
+            logger.propagate = not logger.propagate
+            added_handlers.append(handler)
+            for existing_handler in logger.handlers:
+                existing_handler.addFilter(marker)
+                existing_handler.setLevel(logging.CRITICAL)
+    finally:
+        _restore_captured_logging_state(before)
+
+    assert _capture_logging_state() == before
+    assert all(
+        handler not in logger.handlers for logger, *_rest in before for handler in added_handlers
+    )
+
+
 def test_install_log_sanitizer_is_idempotent() -> None:
     install_log_sanitizer()
     install_log_sanitizer()
@@ -43,6 +135,7 @@ def test_install_log_sanitizer_is_idempotent() -> None:
 
 def test_installed_filter_sanitizes_records_end_to_end() -> None:
     install_log_sanitizer()
+    install_validation_log_filter()
     logger = logging.getLogger("fastmcp.server.server")
     records: list[logging.LogRecord] = []
     handler = logging.Handler()
@@ -61,4 +154,4 @@ def test_installed_filter_sanitizes_records_end_to_end() -> None:
     msg = records[0].getMessage()
     for forbidden in _FORBIDDEN:
         assert forbidden not in msg
-    assert "xy" in msg
+    assert msg == "MCP request rejected (details omitted)."

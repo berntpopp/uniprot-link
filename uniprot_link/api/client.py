@@ -16,7 +16,9 @@ from typing import TYPE_CHECKING, Any, Self
 import httpx
 
 from uniprot_link.api.url_guard import (
-    build_host_allowlist,
+    OUTBOUND_POLICY_ERROR,
+    DisallowedURLError,
+    build_allowed_origins,
     make_url_guard,
     read_body_capped,
 )
@@ -40,9 +42,6 @@ RESULT_FORMATS: dict[str, tuple[str, bool]] = {
     "xml": ("application/sparql-results+xml", False),
     "csv": ("text/csv", False),
     "tsv": ("text/tab-separated-values", False),
-    "turtle": ("text/turtle", False),
-    "rdfxml": ("application/rdf+xml", False),
-    "ntriples": ("application/n-triples", False),
 }
 
 _HTTP_BAD_REQUEST = 400
@@ -102,7 +101,7 @@ class SparqlClient:
         self._client: httpx.AsyncClient | None = None
         # Exact host allowlist derived from the configured endpoint (never
         # hardcoded) -- validates the initial POST and every auto-followed redirect.
-        self._allowed_hosts = build_host_allowlist(config.base_url)
+        self._allowed_origins = build_allowed_origins(config.base_url)
 
     async def _get_client(self) -> httpx.AsyncClient:
         """Lazily create the shared httpx client."""
@@ -113,12 +112,34 @@ class SparqlClient:
                 # POST body on a 307/308); a request event-hook validates each hop.
                 follow_redirects=True,
                 max_redirects=5,
-                event_hooks={"request": [make_url_guard(self._allowed_hosts)]},
+                event_hooks={"request": [make_url_guard(self._allowed_origins)]},
                 headers={"User-Agent": self.config.user_agent},
             )
         return self._client
 
     async def execute(
+        self,
+        query: str,
+        *,
+        result_format: str = "json",
+        timeout: float | None = None,
+    ) -> SparqlResult:
+        """Execute one query within one deadline across all retry work.
+
+        The HTTP client's phase timeouts remain useful for an individual request,
+        while this outer deadline also bounds rate-limiter waits, retry backoff,
+        connection/first-byte time, and streamed-body processing.
+        """
+        deadline = float(timeout if timeout is not None else self.config.timeout)
+        try:
+            async with asyncio.timeout(deadline):
+                return await self._execute_with_retries(
+                    query, result_format=result_format, timeout=deadline
+                )
+        except TimeoutError as exc:
+            raise QueryTimeoutError(f"Query exceeded the {deadline}s client timeout.") from exc
+
+    async def _execute_with_retries(
         self,
         query: str,
         *,
@@ -194,6 +215,8 @@ class SparqlClient:
                     )
                     content_type = response.headers.get("content-type", accept)
                     encoding = response.charset_encoding or "utf-8"
+            except httpx.TooManyRedirects as exc:
+                raise DisallowedURLError(OUTBOUND_POLICY_ERROR) from exc
             except httpx.TimeoutException as exc:
                 raise QueryTimeoutError(
                     f"Query exceeded the {request_timeout.read}s client timeout."

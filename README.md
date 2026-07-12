@@ -15,9 +15,9 @@ pubtator-link, genereviews-link, …) and follows their stack and conventions.
   proteins (UniProtKB), and taxonomy.
 - **Typed protein tools** — `get_protein`, sequence, features (with FALDO
   coordinates), natural variants, diseases, GO terms, cross-references, id mapping.
-- **`search_sparql_query`** — execute any SPARQL 1.1 query (SELECT/ASK/CONSTRUCT/
-  DESCRIBE, with `SERVICE` federation); auto-LIMIT on unbounded SELECTs; JSON/XML/
-  CSV/TSV/Turtle/RDF-XML/N-Triples output.
+- **`search_sparql_query`** — execute bounded SPARQL SELECT/ASK queries; graph-returning
+  forms and `SERVICE` federation are rejected; auto-LIMIT on unbounded SELECTs; JSON/XML/
+  CSV/TSV output.
 - **Example catalog** — `search_example_queries` / `get_example_query` expose
   UniProt's 126 curated, executable queries (backed by the `sparql-examples` graph).
 - **Agentic affordances** — every response carries `_meta.next_commands`
@@ -59,7 +59,7 @@ claude mcp add --transport http uniprot-link --scope user http://127.0.0.1:8000/
 | Tool | Purpose |
 |---|---|
 | `get_server_capabilities` | Tools, 21 named graphs, prefixes, formats, workflows, limits |
-| `search_sparql_query` | Execute any SPARQL 1.1 query (the power tool / federation) |
+| `search_sparql_query` | Execute bounded SELECT/ASK SPARQL (the power tool) |
 | `search_example_queries` | Search 126 curated example queries |
 | `get_example_query` | Full text + metadata of one example |
 | `find_proteins` | Search UniProtKB by `gene_symbol` / organism / keyword / EC / mnemonic |
@@ -87,7 +87,7 @@ Environment variables (prefix `UNIPROT_LINK_`, nested with `__`):
 | Variable | Default | Meaning |
 |---|---|---|
 | `UNIPROT_LINK_SPARQL__CONTACT_EMAIL` | `bernt.popp@charite.de` | Contact in the User-Agent (UniProt etiquette) |
-| `UNIPROT_LINK_SPARQL__TIMEOUT` | `30` | Per-request timeout (s) |
+| `UNIPROT_LINK_SPARQL__TIMEOUT` | `30` | End-to-end query deadline, including retries (s) |
 | `UNIPROT_LINK_SPARQL__DEFAULT_LIMIT` | `50` | Auto-LIMIT for unbounded SELECTs |
 | `UNIPROT_LINK_TRANSPORT` | `unified` | `unified` / `http` |
 | `UNIPROT_LINK_PORT` | `8000` | Server port |

@@ -272,7 +272,7 @@ async def test_search_sparql_raw_data_blob_is_fenced() -> None:
         mcp = create_uniprot_mcp()
         result = await mcp.call_tool(
             "search_sparql_query",
-            {"query": "CONSTRUCT { ?s ?p ?o } WHERE { ?s ?p ?o }", "result_format": "csv"},
+            {"query": "SELECT ?s WHERE { ?s ?p ?o }", "result_format": "csv"},
         )
         structured = result.structured_content
         assert structured is not None

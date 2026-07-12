@@ -127,7 +127,8 @@ def build_capabilities() -> dict[str, Any]:
                 "Bands track the QUERY CLASS you can detect, not a single number: "
                 "a bound accession/mnemonic/gene lookup is fast; a tool that joins "
                 "FALDO ranges or disease vocabularies is medium; an unbounded scan "
-                "(no anchor) or federation can approach the 45-min QLever cap. "
+                "(no anchor) can approach the QLever cap, although this server's "
+                "end-to-end deadline stops it first. "
                 "Figures are observed cold latencies, not guarantees."
             ),
             "bands": {

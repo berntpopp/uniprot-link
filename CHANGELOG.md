@@ -6,6 +6,23 @@ versioning.
 
 ## [Unreleased]
 
+## [4.0.0] - 2026-07-12
+
+### Changed (BREAKING)
+
+- `search_sparql_query` now permits only the documented read-only SPARQL query
+  forms and output formats. Federated (`SERVICE`) queries and unbounded or
+  policy-disallowed query shapes are rejected before execution; redirects are
+  followed only through approved UniProt endpoints and stop at the configured
+  redirect limit. Clients relying on previously accepted federated SPARQL,
+  disallowed query forms, or unsupported result formats must reformulate their
+  requests.
+
+### Security
+
+- Bound SPARQL request execution, apply HTTP Policy v1 outbound URL and
+  redirect controls, and keep policy failures in the typed error envelope.
+
 ## [3.0.2] - 2026-07-11
 
 ### Security

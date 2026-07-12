@@ -27,8 +27,8 @@ UNIPROT_SERVER_INSTRUCTIONS = (
     "- Grounding: get_protein_diseases returns both a clinical `definition` and the "
     "entry `involvement`; get_protein_go_terms carries ECO `evidence` + GO "
     "`evidence_codes`. Typed tools return structured output (outputSchema).\n"
-    "- SPARQL power use: search_sparql_query executes any SPARQL 1.1 query (SELECT/"
-    "ASK/CONSTRUCT/DESCRIBE, including SERVICE federation); a LIMIT is auto-injected "
+    "- SPARQL power use: search_sparql_query accepts bounded SELECT/ASK queries only; "
+    "SERVICE federation and CONSTRUCT/DESCRIBE are rejected, and a LIMIT is auto-injected "
     "into unbounded SELECTs. search_example_queries / get_example_query expose 126 "
     "curated, ready-to-run example queries to learn the data model.\n"
     "- Verbosity: get_protein / get_protein_sequence / get_protein_cross_references "
@@ -60,7 +60,7 @@ UNIPROT_REFERENCE_NOTES = (
     "QLever-backed SPARQL 1.1 service over 21 named graphs (~232B triples). "
     "Avoid unbounded scans: anchor queries on an accession, gene, organism, or "
     "keyword. Result formats for search_sparql_query: json, xml, csv, tsv (result sets) "
-    "and turtle, rdfxml, ntriples (CONSTRUCT/DESCRIBE)."
+    "only (SELECT/ASK result sets)."
 )
 
 RECOMMENDED_CITATION = (

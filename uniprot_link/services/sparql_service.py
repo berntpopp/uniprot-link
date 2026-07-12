@@ -117,10 +117,9 @@ class SparqlService(FindProteinsServiceMixin, TaxonomyServiceMixin):
         result = await self.client.execute(prepared, result_format=result_format, timeout=timeout)
         query_hash = hashlib.sha256(prepared.encode("utf-8")).hexdigest()[:16]
 
-        # F8: query_type reflects the actual query FORM (SELECT/ASK/CONSTRUCT/
-        # DESCRIBE); the serialization (json/csv/turtle/...) is reported separately
-        # so a SELECT projected to CSV is no longer mislabeled "RDF/raw".
-        known = op in {"SELECT", "ASK", "CONSTRUCT", "DESCRIBE"}
+        # The raw-query policy permits SELECT/ASK only; serialization is reported
+        # separately so a SELECT projected to CSV is never mislabeled.
+        known = op in {"SELECT", "ASK"}
         meta: dict[str, Any] = {
             "serialization": result_format,
             "result_format": result_format,

@@ -96,7 +96,7 @@ async def test_invalid_result_format_returns_valid_values() -> None:
         )
     )
     assert env["field"] == "result_format"
-    assert env["allowed_values"] == ["json", "xml", "csv", "tsv", "turtle", "rdfxml", "ntriples"]
+    assert env["allowed_values"] == ["json", "xml", "csv", "tsv"]
 
 
 @pytest.mark.asyncio

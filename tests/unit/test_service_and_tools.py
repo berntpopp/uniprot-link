@@ -7,7 +7,7 @@ from typing import Any
 import pytest
 
 from tests.conftest import make_select_json
-from uniprot_link.exceptions import NotFoundError
+from uniprot_link.exceptions import InvalidInputError, NotFoundError
 from uniprot_link.mcp import service_adapters
 from uniprot_link.mcp.envelope import McpErrorContext, McpToolError, run_mcp_tool
 
@@ -769,14 +769,30 @@ async def test_run_query_csv_select_labels_query_type_select(service_factory: An
 
 
 @pytest.mark.asyncio
-async def test_run_query_construct_turtle_labels_query_type_construct(service_factory: Any) -> None:
-    """F8: a CONSTRUCT to turtle keeps its true query form."""
+async def test_run_query_rejects_construct(service_factory: Any) -> None:
+    """The raw power query policy permits bounded SELECT/ASK only."""
     svc = service_factory([])
-    out = await svc.run_query(
-        "CONSTRUCT { ?s ?p ?o } WHERE { ?s ?p ?o } LIMIT 1", result_format="turtle"
-    )
-    assert out["query_type"] == "CONSTRUCT"
-    assert out["serialization"] == "turtle"
+    with pytest.raises(InvalidInputError, match="only SELECT and ASK"):
+        await svc.run_query("CONSTRUCT { ?s ?p ?o } WHERE { ?s ?p ?o }")
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "query",
+    [
+        "# harmless prologue comment\nPREFIX ex: <https://example.org/>\nCoNsTrUcT { ?s ?p ?o } WHERE { ?s ?p ?o }",
+        "# another harmless comment\nBASE <https://example.org/>\ndEsCrIbE <protein/P05067>",
+        "SELECT ?s WHERE { { OPTIONAL { sErViCe ?endpoint { ?s ?p ?o } } } }",
+    ],
+)
+async def test_run_query_rejects_forbidden_forms_before_client_execution(
+    service_factory: Any, query: str
+) -> None:
+    """Policy validation must reject obfuscated forms before an HTTP-capable client runs."""
+    svc = service_factory([])
+    with pytest.raises(InvalidInputError):
+        await svc.run_query(query)
+    assert svc.client.calls == []
 
 
 @pytest.mark.asyncio
