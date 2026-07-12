@@ -40,9 +40,6 @@ RESULT_FORMATS: dict[str, tuple[str, bool]] = {
     "xml": ("application/sparql-results+xml", False),
     "csv": ("text/csv", False),
     "tsv": ("text/tab-separated-values", False),
-    "turtle": ("text/turtle", False),
-    "rdfxml": ("application/rdf+xml", False),
-    "ntriples": ("application/n-triples", False),
 }
 
 _HTTP_BAD_REQUEST = 400
@@ -119,6 +116,28 @@ class SparqlClient:
         return self._client
 
     async def execute(
+        self,
+        query: str,
+        *,
+        result_format: str = "json",
+        timeout: float | None = None,
+    ) -> SparqlResult:
+        """Execute one query within one deadline across all retry work.
+
+        The HTTP client's phase timeouts remain useful for an individual request,
+        while this outer deadline also bounds rate-limiter waits, retry backoff,
+        connection/first-byte time, and streamed-body processing.
+        """
+        deadline = float(timeout if timeout is not None else self.config.timeout)
+        try:
+            async with asyncio.timeout(deadline):
+                return await self._execute_with_retries(
+                    query, result_format=result_format, timeout=deadline
+                )
+        except TimeoutError as exc:
+            raise QueryTimeoutError(f"Query exceeded the {deadline}s client timeout.") from exc
+
+    async def _execute_with_retries(
         self,
         query: str,
         *,

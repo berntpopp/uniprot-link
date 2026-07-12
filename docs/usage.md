@@ -45,11 +45,11 @@ claude mcp add --transport http uniprot-link --scope user http://127.0.0.1:8000/
 
 ## search_sparql_query notes
 
-- `result_format`: `json` (SELECT/ASK), or `csv`/`tsv`/`xml`, or `turtle`/`rdfxml`/
-  `ntriples` for CONSTRUCT/DESCRIBE.
+- `result_format`: `json` (SELECT/ASK), or `csv`/`tsv`/`xml` for SELECT results.
 - A `LIMIT` is auto-injected into unbounded SELECTs (see `_meta.limit_injected`
   and `truncated`). Pass `limit` to control it, or include your own `LIMIT`.
-- `SERVICE` federation works (e.g. joining Rhea or OMA); see the curated examples.
+- `CONSTRUCT`, `DESCRIBE`, and `SERVICE` federation are rejected. Curated examples
+  that use them are reference material, not directly executable through this tool.
 - Anchor queries on an accession/gene/organism/keyword to stay within timeouts.
 
 ## Discovery resources

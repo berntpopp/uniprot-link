@@ -41,10 +41,6 @@ class TestReadOnlyGuard:
         assert q.classify_sparql_operation("PREFIX up: <x> SELECT * WHERE {?s ?p ?o}") == "SELECT"
         assert q.classify_sparql_operation("# c\nASK { ?s ?p ?o }") == "ASK"
         assert q.classify_sparql_operation('SELECT ?x WHERE { ?x rdfs:label "insert" }') == "SELECT"
-        assert (
-            q.classify_sparql_operation("CONSTRUCT { ?s ?p ?o } WHERE { ?s ?p ?o }") == "CONSTRUCT"
-        )
-        assert q.classify_sparql_operation("DESCRIBE <http://x>") == "DESCRIBE"
         assert q.classify_sparql_operation("select ?s where {?s ?p ?o}") == "SELECT"
         assert q.classify_sparql_operation("\n\n  SELECT ?s WHERE {?s ?p ?o}") == "SELECT"
 
@@ -59,6 +55,34 @@ class TestReadOnlyGuard:
         ):
             with pytest.raises(InvalidInputError):
                 q.classify_sparql_operation(bad)
+
+    def test_classify_rejects_graph_returning_forms(self) -> None:
+        for bad in (
+            "CONSTRUCT { ?s ?p ?o } WHERE { ?s ?p ?o }",
+            "DESCRIBE <https://example.org/protein/P05067>",
+        ):
+            with pytest.raises(InvalidInputError, match="only SELECT and ASK"):
+                q.classify_sparql_operation(bad)
+
+    def test_classify_rejects_real_service_at_any_group_depth(self) -> None:
+        for bad in (
+            "SELECT ?s WHERE { SERVICE <https://evil.example/sparql> { ?s ?p ?o } }",
+            "SELECT ?s WHERE { { OPTIONAL { SERVICE ?endpoint { ?s ?p ?o } } } }",
+        ):
+            with pytest.raises(InvalidInputError, match="SERVICE"):
+                q.classify_sparql_operation(bad)
+
+    def test_classify_ignores_service_decoys_in_noncode(self) -> None:
+        query = """SELECT ?s WHERE {
+            ?s ?p "SERVICE <https://example.org/sparql>" .
+            # SERVICE <https://example.org/sparql> { ?s ?p ?o }
+            BIND(<https://example.org/SERVICE> AS ?iri)
+        }"""
+        assert q.classify_sparql_operation(query) == "SELECT"
+
+    def test_classify_does_not_mistake_service_prefix_for_clause(self) -> None:
+        query = "PREFIX service: <https://example.org/vocab/> SELECT ?s WHERE { ?s service:p ?o }"
+        assert q.classify_sparql_operation(query) == "SELECT"
 
 
 class TestProteinSummaryAnchor:

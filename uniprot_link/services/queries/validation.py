@@ -34,8 +34,9 @@ _LIMIT_CLAUSE_RE = re.compile(r"(?<![\w?$:.-])limit\s+(\d+)", re.IGNORECASE)
 # is not read as a comment, and a bare ``<`` (less-than operator) is left as code.
 _IRIREF_AT_RE = re.compile(r"<[^<>\"{}|^`\\\x00-\x20]*>")
 _STRING_DELIMS = ('"""', "'''", '"', "'")
-_READ_OPS = {"SELECT", "ASK", "CONSTRUCT", "DESCRIBE"}
+_READ_OPS = {"SELECT", "ASK"}
 _WRITE_OPS = {"INSERT", "DELETE", "LOAD", "CLEAR", "CREATE", "DROP", "ADD", "MOVE", "COPY", "WITH"}
+_SERVICE_KEYWORD_RE = re.compile(r"(?<![\w?$:.-])service(?![\w?$:.-])", re.IGNORECASE)
 # A UniProt cross-reference database key (e.g. PDB, HGNC, AlphaFoldDB): starts
 # alnum, then alnum/._- up to 64 chars total. Anything else -- notably an IRIREF
 # terminator (``>``, ``{``, whitespace) or a path/scheme separator (``/``, ``:``,
@@ -299,10 +300,17 @@ def classify_sparql_operation(query: str) -> str:
     """
     token = _leading_token(query)
     if token in _READ_OPS:
+        # Federation lets a caller make this service reach arbitrary third-party
+        # endpoints. Search the code-only view so SERVICE text in literals,
+        # comments, and IRIs remains harmless.
+        if _SERVICE_KEYWORD_RE.search(_blank_noncode(query)):
+            raise InvalidInputError(
+                "SERVICE clauses are not allowed in SPARQL queries.", field="query"
+            )
         return token
-    if token in _WRITE_OPS:
+    if token in _WRITE_OPS or token in {"CONSTRUCT", "DESCRIBE"}:
         raise InvalidInputError(
-            "read-only: only SELECT/ASK/CONSTRUCT/DESCRIBE queries are allowed.",
+            "read-only: only SELECT and ASK queries are allowed.",
             field="query",
         )
     return token  # unknown -> let the endpoint return a 400 (query_syntax_error)

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from typing import Any
 
 import httpx
@@ -18,6 +19,7 @@ from uniprot_link.api.url_guard import (
 from uniprot_link.config import SparqlEndpointConfig
 from uniprot_link.exceptions import (
     QuerySyntaxError,
+    QueryTimeoutError,
     RateLimitError,
     ServiceUnavailableError,
 )
@@ -157,6 +159,33 @@ async def test_500_retries_then_raises(config: SparqlEndpointConfig) -> None:
 
 @pytest.mark.asyncio
 @respx.mock
+async def test_execution_deadline_covers_retry_backoff(config: SparqlEndpointConfig) -> None:
+    # The caller's deadline is for the entire operation, not each individual
+    # attempt: a transient error must not allow retry sleep to exceed it.
+    route = respx.post(ENDPOINT).mock(return_value=httpx.Response(503))
+    client = SparqlClient(config)
+    with pytest.raises(QueryTimeoutError):
+        await client.execute(_SELECT, timeout=0.01)
+    assert route.call_count == 1
+    await client.aclose()
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_execution_deadline_covers_time_to_first_byte(config: SparqlEndpointConfig) -> None:
+    async def delayed_response(_: httpx.Request) -> httpx.Response:
+        await asyncio.sleep(0.05)
+        return httpx.Response(200, json=_OK_JSON)
+
+    respx.post(ENDPOINT).mock(side_effect=delayed_response)
+    client = SparqlClient(config)
+    with pytest.raises(QueryTimeoutError):
+        await client.execute(_SELECT, timeout=0.01)
+    await client.aclose()
+
+
+@pytest.mark.asyncio
+@respx.mock
 async def test_csv_format_returns_text(config: SparqlEndpointConfig) -> None:
     respx.post(ENDPOINT).mock(return_value=httpx.Response(200, text="s\nhttp://x\n"))
     client = SparqlClient(config)
@@ -287,18 +316,18 @@ async def test_large_response_under_cap_is_unchanged(config: SparqlEndpointConfi
 
 @pytest.mark.asyncio
 @respx.mock
-async def test_construct_response_over_cap_is_byte_bounded(
+async def test_select_csv_response_over_cap_is_byte_bounded(
     config: SparqlEndpointConfig,
 ) -> None:
-    # F-08(c): a graph-returning CONSTRUCT/DESCRIBE cannot be row-LIMIT-bound, so
-    # the streamed byte cap is its ceiling -- an oversized turtle body errors.
+    # The independent streamed byte cap applies even to a SELECT serialization,
+    # so an oversized body errors before it is materialized.
     cfg = SparqlEndpointConfig(timeout=5, max_retries=1, retry_delay=0.1, max_response_bytes=2048)
     respx.post(ENDPOINT).mock(
         return_value=httpx.Response(
-            200, content=b"@prefix x: <y> .\n" * 4096, headers={"content-type": "text/turtle"}
+            200, content=b"s\nhttp://example.org/x\n" * 4096, headers={"content-type": "text/csv"}
         )
     )
     client = SparqlClient(cfg)
     with pytest.raises(ResponseTooLargeError):
-        await client.execute("CONSTRUCT { ?s ?p ?o } WHERE { ?s ?p ?o }", result_format="turtle")
+        await client.execute(_SELECT, result_format="csv")
     await client.aclose()

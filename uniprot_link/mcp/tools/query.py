@@ -30,10 +30,10 @@ def register_query_tools(mcp: FastMCP) -> None:
         annotations=READ_ONLY_OPEN_WORLD,
         tags={"sparql", "power"},
         description=(
-            "Execute an arbitrary SPARQL 1.1 query against the UniProt endpoint "
-            "(SELECT / ASK / CONSTRUCT / DESCRIBE, including SERVICE federation to "
-            "Rhea, OMA, Bgee, etc.). SELECT results come back as columns+rows JSON; "
-            "ASK as a boolean; CONSTRUCT/DESCRIBE as raw RDF in the chosen format. A "
+            "Execute a bounded SPARQL SELECT/ASK query against the UniProt endpoint "
+            "(bounded SELECT / ASK only). SERVICE federation and graph-returning "
+            "CONSTRUCT/DESCRIBE forms are rejected. SELECT results come back as "
+            "columns+rows JSON; ASK as a boolean. A "
             "LIMIT is auto-injected into unbounded SELECTs (see `_meta`/`truncated`). "
             "This is the escape hatch for anything the typed tools do not cover -- "
             "seed queries from search_example_queries. Use uniprot://prefixes for the "
@@ -52,7 +52,7 @@ def register_query_tools(mcp: FastMCP) -> None:
             ),
         ],
         result_format: Annotated[
-            Literal["json", "xml", "csv", "tsv", "turtle", "rdfxml", "ntriples"],
+            Literal["json", "xml", "csv", "tsv"],
             Field(description="Result serialisation. Use json for SELECT/ASK."),
         ] = "json",
         limit: Annotated[

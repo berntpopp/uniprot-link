@@ -32,7 +32,10 @@ class SparqlEndpointConfig(BaseModel):
         default=30,
         ge=1,
         le=600,
-        description="Default per-request timeout in seconds (server hard limit is 45 min).",
+        description=(
+            "End-to-end query deadline in seconds, including rate limiting, retries, "
+            "time to first byte, and response reading."
+        ),
     )
     rate_limit_per_second: float = Field(
         default=3.0,
