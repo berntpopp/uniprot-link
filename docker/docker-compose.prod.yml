@@ -8,7 +8,12 @@
 
 services:
   uniprot-link:
+    build: !reset null
+    image: "${UNIPROT_LINK_IMAGE:?Set UNIPROT_LINK_IMAGE to ghcr.io/berntpopp/uniprot-link@sha256:<digest>}"
+    pull_policy: missing
+
     environment:
+      GF_HEALTHCHECK_HOST: localhost
       UNIPROT_LINK_TRANSPORT: unified
       UNIPROT_LINK_LOG_LEVEL: INFO
       UNIPROT_LINK_LOG_FORMAT: json
@@ -20,6 +25,8 @@ services:
     # !reset (not []) is required: Compose MERGES list fields across -f overlays,
     # so a plain `ports: []` would NOT drop the base file's host mapping.
     ports: !reset []
+    expose:
+      - "8000"
 
     # Read-only root filesystem; the only writable path is an ephemeral tmpfs
     # (stateless service — nothing persists across restarts).
@@ -32,30 +39,25 @@ services:
     cap_drop:
       - ALL
 
-    pids_limit: 256
     init: true
+    restart: on-failure
 
-    deploy:
+    deploy: !override
       resources:
         limits:
           memory: 512M
           cpus: "0.5"
           pids: 256
-        reservations:
-          memory: 128M
-          cpus: "0.25"
-      restart_policy:
-        condition: on-failure
-        delay: 5s
-        max_attempts: 3
-        window: 120s
 
+    # Default header remains "Host: localhost"; GF_HEALTHCHECK_HOST lets CI
+    # render the exact central healthcheck command without changing that value.
     healthcheck:
-      test: ["CMD", "curl", "-fsS", "-H", "Host: localhost", "http://127.0.0.1:8000/health"]
-      interval: 20s
-      timeout: 5s
-      retries: 5
-      start_period: 30s
+      test:
+        ["CMD", "sh", "-c", "curl -f -H \"Host: $${GF_HEALTHCHECK_HOST}\" http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
 
     logging:
       driver: "json-file"
