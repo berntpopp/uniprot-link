@@ -6,6 +6,15 @@ versioning.
 
 ## [Unreleased]
 
+## [4.0.2] - 2026-07-13
+
+### Fixed
+
+- Re-pin the reusable container CI and container release callers to the corrected
+  GeneFoundry container release standard, which fixes latent defects in the shared
+  release pipeline (notably GHCR authentication before the version alias is
+  pushed). No runtime behaviour change. Research use only.
+
 ## [4.0.1] - 2026-07-13
 
 ### Added
