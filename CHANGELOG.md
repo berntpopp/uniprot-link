@@ -6,6 +6,18 @@ versioning.
 
 ## [Unreleased]
 
+## [4.0.3] - 2026-07-14
+
+### Changed
+
+- **The NPM deployment pulls the released image instead of building from source.**
+  `docker/docker-compose.npm.yml` carried `build:`, so a deploy rebuilt the image on the
+  server even though CI had already published an attested, digest-addressable image to
+  GHCR — the released image was never consumed. It now requires `UNIPROT_LINK_IMAGE`
+  pinned to a digest and fails closed when it is unset. Nothing else in the overlay
+  changed: `container_name` (NPM routes to it), the Compose project name, the healthcheck,
+  networks and tmpfs are all preserved, so the deployed topology is untouched.
+
 ## [4.0.2] - 2026-07-13
 
 ### Fixed

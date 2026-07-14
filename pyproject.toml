@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "uniprot-link"
-version = "4.0.2"
+version = "4.0.3"
 description = "MCP/API server that grounds protein research in the UniProt SPARQL endpoint"
 readme = "README.md"
 license = { text = "MIT" }
