@@ -1,115 +1,115 @@
 # uniprot-link
 
-An MCP (Model Context Protocol) + REST server that grounds protein research in the
-**UniProt SPARQL endpoint** (`https://sparql.uniprot.org/sparql`). It wraps a
-~232-billion-triple, QLever-backed SPARQL 1.1 service behind intent-named,
-token-economical tools — and ships a safe raw-SPARQL escape hatch plus UniProt's
-126 curated example queries so an LLM can learn and write its own queries.
+[![Python 3.12+](https://img.shields.io/badge/python-3.12%2B-3776AB?logo=python&logoColor=white)](https://www.python.org/)
+[![CI](https://github.com/berntpopp/uniprot-link/actions/workflows/ci.yml/badge.svg)](https://github.com/berntpopp/uniprot-link/actions/workflows/ci.yml)
+[![Conformance](https://github.com/berntpopp/uniprot-link/actions/workflows/conformance.yml/badge.svg)](https://github.com/berntpopp/uniprot-link/actions/workflows/conformance.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
-Part of the `*-link` family of biomedical MCP servers (gnomad-link, gtex-link,
-pubtator-link, genereviews-link, …) and follows their stack and conventions.
+An MCP server (Streamable HTTP) that grounds protein research in the **UniProt SPARQL
+endpoint** (`https://sparql.uniprot.org/sparql`) — a QLever-backed SPARQL 1.1 service
+over ~232 billion triples in 21 named graphs. It exposes intent-named, token-economical
+tools, a guarded raw-SPARQL escape hatch, and UniProt's curated example queries.
 
-## Features
+> [!IMPORTANT]
+> Research use only. Not clinical decision support. Do not use for diagnosis,
+> treatment, triage, or patient management.
 
-- **15 MCP tools** across discovery, raw SPARQL, the curated example catalog,
-  proteins (UniProtKB), and taxonomy.
-- **Typed protein tools** — `get_protein`, sequence, features (with FALDO
-  coordinates), natural variants, diseases, GO terms, cross-references, id mapping.
-- **`search_sparql_query`** — execute bounded SPARQL SELECT/ASK queries; graph-returning
-  forms and `SERVICE` federation are rejected; auto-LIMIT on unbounded SELECTs; JSON/XML/
-  CSV/TSV output.
-- **Example catalog** — `search_example_queries` / `get_example_query` expose
-  UniProt's 126 curated, executable queries (backed by the `sparql-examples` graph).
-- **Agentic affordances** — every response carries `_meta.next_commands`
-  (ready-to-run `{tool, arguments}` steps), a structured error taxonomy, and a
-  `uniprot://capabilities` discovery resource.
-- **Two transports** — unified (REST + MCP/HTTP) and HTTP-only. Streamable HTTP only.
+## Why
+
+UniProt's SPARQL endpoint can answer questions no REST route can — cross-graph joins
+over sequence features, variants, diseases, GO terms, taxonomy and cross-references —
+but it is a hostile surface to write against. QLever is very fast on *bound* joins and
+falls off a cliff on shapes that look harmless: property paths inside `OPTIONAL`,
+`GROUP_CONCAT` over large literals, `ORDER BY` before `LIMIT`. The failure mode is not
+an error, it is a 45-minute server timeout.
+
+This server carries that discipline so the model does not have to. The typed tools
+compile to anchored, timeout-safe queries; `search_sparql_query` admits only bounded
+`SELECT`/`ASK` (`CONSTRUCT`/`DESCRIBE` and `SERVICE` federation are rejected, and a
+`LIMIT` is auto-injected into unbounded SELECTs); and UniProt's curated example queries
+are searchable and executable, so an agent learns the data model instead of guessing
+IRIs. Every response carries `_meta.next_commands` — ready-to-run `{tool, arguments}`
+steps — plus a structured error taxonomy.
 
 ## Quick start
 
+The GeneFoundry instance is hosted — no install required:
+
 ```bash
-make install                       # uv sync --group dev
-make dev                           # unified server: REST on / and MCP on /mcp (port 8000)
-uv run uniprot-link serve --help   # CLI: serve / config / health / version
-make ci-local                      # format + lint + loc + typecheck + tests
+claude mcp add --transport http uniprot-link https://uniprot-link.genefoundry.org/mcp
 ```
 
-### CLI
-
-The `uniprot-link` console script is the single entry point (Streamable HTTP only):
+To run your own (Python 3.12+, [uv](https://docs.astral.sh/uv/)):
 
 ```bash
-uniprot-link serve --transport unified --host 127.0.0.1 --port 8000  # REST + MCP/HTTP
-uniprot-link serve --transport http                                  # REST only
-uniprot-link config --validate                                       # show + validate config
-uniprot-link health --url http://127.0.0.1:8000                      # probe /health
-uniprot-link version                                                 # print version
-```
-
-### Connect an MCP client
-
-Point a Streamable-HTTP MCP client at the `/mcp` endpoint of a running server, e.g.:
-
-```bash
+make install    # uv sync --group dev
+make dev        # unified: REST on / and MCP on /mcp, port 8000
 claude mcp add --transport http uniprot-link --scope user http://127.0.0.1:8000/mcp
 ```
 
-## Tool catalog
+There is **no data build step** — every call queries the live endpoint, which needs no
+authentication. Do set `UNIPROT_LINK_SPARQL__CONTACT_EMAIL` to a mailbox you read:
+UniProt asks programmatic clients to identify themselves in the `User-Agent`.
+
+## Tools
 
 | Tool | Purpose |
 |---|---|
-| `get_server_capabilities` | Tools, 21 named graphs, prefixes, formats, workflows, limits |
-| `search_sparql_query` | Execute bounded SELECT/ASK SPARQL (the power tool) |
-| `search_example_queries` | Search 126 curated example queries |
-| `get_example_query` | Full text + metadata of one example |
-| `find_proteins` | Search UniProtKB by `gene_symbol` / organism / keyword / EC / mnemonic |
-| `get_protein` | Core entry summary by accession |
-| `get_protein_sequence` | Canonical + isoform sequences |
-| `get_protein_features` | Sequence features with FALDO coordinates |
+| `get_server_capabilities` | Discovery surface: tool inventory, named graphs, prefixes, formats, workflows, limits |
+| `search_sparql_query` | Execute a bounded SELECT/ASK SPARQL query (the power tool) |
+| `search_example_queries` | Search UniProt's curated, executable example queries |
+| `get_example_query` | Full SPARQL text and metadata of one curated example |
+| `find_proteins` | Search UniProtKB by gene symbol / organism / keyword / EC number / mnemonic |
+| `find_proteins_batch` | Resolve several gene symbols to entries concurrently in one call |
+| `get_protein` | Core entry summary for one accession |
+| `get_protein_sequence` | Canonical and isoform sequences |
+| `get_protein_features` | Sequence features with FALDO begin/end coordinates |
 | `get_protein_variants` | Natural-variant annotations |
 | `get_protein_diseases` | Disease annotations |
-| `get_protein_cross_references` | Cross-references grouped by database |
-| `get_protein_go_terms` | GO annotations by aspect |
-| `resolve_identifiers` | Resolve an accession to external DB ids |
-| `get_taxon` | Resolve a taxon by id or name |
+| `get_protein_cross_references` | Cross-references grouped by database (PDB, Ensembl, RefSeq, …) |
+| `get_protein_go_terms` | GO annotations grouped by aspect, with evidence codes |
+| `resolve_identifiers` | Resolve an accession to its primary external database ids |
+| `get_taxon` | Resolve an organism by NCBI taxon id or name |
 
-> Tool names are **unprefixed** (the GeneFoundry Tool-Naming Standard v1): the
-> server reports `serverInfo.name = "uniprot-link"` and its canonical gateway
-> **namespace token is `uniprot`**. When federated behind the
-> [`genefoundry-router`](https://github.com/berntpopp/genefoundry-router) gateway,
-> tools surface as `uniprot_<tool>` (e.g. `uniprot_find_proteins`); standalone MCP
-> clients already namespace them as `mcp__uniprot-link__<tool>`.
+Leaf names are **unprefixed** per the GeneFoundry [Tool-Naming Standard v1](https://github.com/berntpopp/genefoundry-router/blob/main/docs/TOOL-NAMING-STANDARD-v1.md):
+`serverInfo.name` is `uniprot-link` and the canonical gateway namespace token is
+`uniprot`, so behind the
+[genefoundry-router](https://github.com/berntpopp/genefoundry-router) the tools surface
+as `uniprot_<tool>` (e.g. `uniprot_find_proteins`). Standalone MCP clients namespace
+them as `mcp__uniprot-link__<tool>`.
 
-## Configuration
+## Data & provenance
 
-Environment variables (prefix `UNIPROT_LINK_`, nested with `__`):
+All data comes live from the [UniProt](https://www.uniprot.org/) SPARQL endpoint —
+there is no local mirror and no snapshot, so freshness tracks UniProt's release cycle
+directly. The release the query builders and the named-graph inventory were validated
+against is pinned in `uniprot_link/services/constants.py` and reported by
+`get_server_capabilities`. The curated examples come from UniProt's upstream
+`sparql-examples` graph.
 
-| Variable | Default | Meaning |
-|---|---|---|
-| `UNIPROT_LINK_SPARQL__CONTACT_EMAIL` | `bernt.popp@charite.de` | Contact in the User-Agent (UniProt etiquette) |
-| `UNIPROT_LINK_SPARQL__TIMEOUT` | `30` | End-to-end query deadline, including retries (s) |
-| `UNIPROT_LINK_SPARQL__DEFAULT_LIMIT` | `50` | Auto-LIMIT for unbounded SELECTs |
-| `UNIPROT_LINK_TRANSPORT` | `unified` | `unified` / `http` |
-| `UNIPROT_LINK_PORT` | `8000` | Server port |
-| `UNIPROT_LINK_ALLOWED_HOSTS` | loopback hosts | Exact accepted Host values; add the public proxy hostname. Wildcards are rejected. |
-| `UNIPROT_LINK_ALLOWED_ORIGINS` | `[]` | Accepted browser Origins; requests without Origin remain allowed. |
+UniProt data is licensed **CC BY 4.0**. Cite it, verbatim (also served at
+`uniprot://citation`):
 
-Request Origin validation is separate from CORS response headers. A browser-facing
-deployment must configure the same exact public HTTPS origin in both
-`UNIPROT_LINK_ALLOWED_ORIGINS` and `UNIPROT_LINK_CORS_ORIGINS`.
+> The UniProt Consortium. UniProt: the Universal Protein Knowledgebase in 2025.
+> Nucleic Acids Res. 2025;53(D1):D609-D617. doi:10.1093/nar/gkae1010
 
-## Development
+## Documentation
 
-See `AGENTS.md` for conventions (notably the **SPARQL / QLever discipline** that
-keeps queries off the timeout cliff) and `docs/` for architecture and usage.
-`research/verify_queries.py` validates every query builder against the live
-endpoint.
+- [Usage](docs/usage.md) — the CLI, typical workflows, `search_sparql_query` rules, and the `uniprot://` discovery resources.
+- [Configuration](docs/configuration.md) — every `UNIPROT_LINK_*` variable, the two transports, and the Host / Origin / CORS allowlists.
+- [Deployment](docs/deployment.md) — containers, the production overlays, the reverse-proxy boundary, and the build-provenance release gate.
+- [Architecture](docs/architecture.md) — the layer map, the response contract, and why QLever shapes the design.
+- [Development](docs/development.md) — setup, quality gates, and re-validating a query builder live.
+- [AGENTS.md](AGENTS.md) — engineering conventions, including the SPARQL / QLever discipline.
 
-## Disclaimer
+## Contributing
 
-Research use only; not for clinical decision support, diagnosis, treatment, or
-patient management. UniProt data is licensed CC BY 4.0.
+See [`AGENTS.md`](AGENTS.md) for conventions. `make ci-local` is the
+definition-of-done gate: format, lint, line budget, README standard, mypy, and tests.
+Changes to `uniprot_link/services/queries.py` must be re-validated against the live
+endpoint with `research/verify_queries.py`.
 
 ## License
 
-MIT
+Code: [MIT](LICENSE) © Bernt Popp. Data: UniProt is licensed **CC BY 4.0** by the
+UniProt Consortium and requires the citation above.

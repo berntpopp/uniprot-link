@@ -61,15 +61,11 @@ See `docs/architecture.md` for the layer map. Hard rules live in `AGENTS.md`
 
 ## Deploying / release gate
 
-The running MCP server can silently lag the source (e.g. the typed tools serving
-old behavior while the SPARQL endpoint is fresh). To prevent a release being
-considered "done" while the deployed process is stale:
+Containers, the production overlays, the Host/Origin boundary, and the
+build-provenance release gate (`scripts/check_deployed_version.py`) are documented
+in [`deployment.md`](deployment.md). Configuration variables are in
+[`configuration.md`](configuration.md).
 
-1. Build the image with provenance env/args:
-   `UNIPROT_LINK_GIT_SHA=$(git rev-parse --short HEAD)` and
-   `UNIPROT_LINK_BUILT_AT=$(date -u +%FT%TZ)`. These surface in
-   `get_server_capabilities().build` and `GET /health`.
-2. Redeploy.
-3. Gate the release: `python scripts/check_deployed_version.py <prod-url>` must
-   exit 0 (the deployed `/health` version equals `uniprot_link.__version__`).
-   Do not close the release until it passes.
+A release is not done until the deployed `/health` version equals
+`uniprot_link.__version__` — the running server can otherwise silently lag the
+source.
