@@ -1,11 +1,17 @@
 # Docker
 
+The container files live here; the runbook lives in
+[`../docs/deployment.md`](../docs/deployment.md) — local stack, the digest-pinned
+`docker-compose.prod.yml` and Nginx-Proxy-Manager `docker-compose.npm.yml` overlays,
+the Host/Origin boundary, and the release gate.
+
 Build and run uniprot-link in the unified transport (REST `/health` + MCP `/mcp`).
 
 ```bash
 # from the repo root
 make docker-build      # docker compose -f docker/docker-compose.yml build
-make docker-up         # start on http://localhost:8000
+make docker-up         # start (loopback-bound; UNIPROT_LINK_HOST_PORT, default 8013)
+make docker-url        # print the MCP URL
 make docker-logs
 make docker-down
 ```

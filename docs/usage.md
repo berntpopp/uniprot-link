@@ -9,7 +9,24 @@ uniprot-link serve --transport unified --host 127.0.0.1 --port 8000
 curl http://127.0.0.1:8000/health
 ```
 
-The server exposes 15 tools and a `uniprot://capabilities` resource at `/mcp`.
+The server exposes its tool surface and a `uniprot://capabilities` resource at `/mcp`.
+
+## CLI
+
+The `uniprot-link` console script is the single entry point. Streamable HTTP only —
+there is no SSE and no stdio transport.
+
+```bash
+uniprot-link serve --transport unified --host 127.0.0.1 --port 8000  # REST + MCP/HTTP
+uniprot-link serve --transport http                                  # REST host only
+uniprot-link config --validate                                       # show + validate config
+uniprot-link health --url http://127.0.0.1:8000                      # probe /health
+uniprot-link version                                                 # print version
+```
+
+`--transport http` serves the FastAPI host (`/health`, `/`) **without** the MCP
+endpoint; MCP clients need `unified`. See [configuration.md](configuration.md) for
+every environment variable.
 
 ## Connect an MCP client
 
@@ -42,6 +59,11 @@ claude mcp add --transport http uniprot-link --scope user http://127.0.0.1:8000/
 1. `search_example_queries` `{ "text": "disease" }`
 2. `get_example_query` `{ "example_id": "<iri from step 1>" }`
 3. `search_sparql_query` `{ "query": "<the example, edited>" }`
+
+`search_example_queries` / `get_example_query` expose UniProt's 126 curated, executable
+example queries, backed by the upstream `sparql-examples` graph
+(`https://sparql.uniprot.org/.well-known/sparql-examples`). They are the fastest way to
+learn the data model without guessing IRIs.
 
 ## search_sparql_query notes
 

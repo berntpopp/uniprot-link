@@ -13,8 +13,9 @@ Primary areas:
 
 - `uniprot_link/` - Python package: SPARQL client, query builders, shaping, MCP
   tools, config, server manager
-- `uniprot_link/services/queries.py` - parametrized SPARQL query builders (the
-  riskiest module; validate changes against the live endpoint)
+- `uniprot_link/services/queries/` - parametrized SPARQL query builders, split by
+  domain (`proteins.py`, `taxonomy.py`, `examples.py`, `validation.py`) - the
+  riskiest code in the repo; validate changes against the live endpoint
 - `uniprot_link/mcp/` - MCP tools, facade, error envelope, capabilities, resources
 - `tests/` - unit and integration tests
 - `docker/` - Dockerfile and Compose
@@ -47,7 +48,7 @@ The endpoint is fast for *bound* joins but can time out (45 min server cap) on:
 - `GROUP_CONCAT` / `GROUP BY` over large literals (sequences, comments)
 - `ORDER BY` over a large pre-LIMIT result set
 
-Mitigations used throughout `queries.py`: anchor on an accession/gene/organism;
+Mitigations used throughout the query builders: anchor on an accession/gene/organism;
 make universally-present fields REQUIRED joins (not OPTIONAL); expand FALDO ranges
 to explicit hops; isolate aggregation in sub-SELECTs; sort small result sets in
 Python (`shaping.py`) rather than in SPARQL. When you touch a query builder,
