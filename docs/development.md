@@ -43,8 +43,9 @@ endpoint and are excluded from `ci-local`.
 
 ## Changing SPARQL queries
 
-`uniprot_link/services/queries.py` is the riskiest module. After editing a
-builder, re-validate it live:
+The query builders in `uniprot_link/services/queries/` (`proteins.py`,
+`taxonomy.py`, `examples.py`, `validation.py`) are the riskiest code in the repo.
+After editing a builder, re-validate it live:
 
 ```bash
 python research/verify_queries.py

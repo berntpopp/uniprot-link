@@ -38,6 +38,7 @@ Streamable HTTP only — there is no SSE and no stdio entry point.
 | `UNIPROT_LINK_HOST` | `127.0.0.1` | Bind address (the container sets `0.0.0.0` behind its own boundary) |
 | `UNIPROT_LINK_PORT` | `8000` | Bind port |
 | `UNIPROT_LINK_MCP_PATH` | `/mcp` | MCP endpoint path |
+| `UNIPROT_LINK_RELOAD` | `false` | Auto-reload on code change. Development only — never set it in a container |
 | `UNIPROT_LINK_LOG_LEVEL` | `INFO` | `DEBUG` / `INFO` / `WARNING` / `ERROR` / `CRITICAL` |
 | `UNIPROT_LINK_LOG_FORMAT` | `console` | `console` or `json` (containers use `json`) |
 | `UNIPROT_LINK_CACHE__SIZE` | `512` | Max cached query results (`0` disables) |

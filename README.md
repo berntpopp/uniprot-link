@@ -106,8 +106,8 @@ UniProt data is licensed **CC BY 4.0**. Cite it, verbatim (also served at
 
 See [`AGENTS.md`](AGENTS.md) for conventions. `make ci-local` is the
 definition-of-done gate: format, lint, line budget, README standard, mypy, and tests.
-Changes to `uniprot_link/services/queries.py` must be re-validated against the live
-endpoint with `research/verify_queries.py`.
+Changes to the query builders in `uniprot_link/services/queries/` must be re-validated
+against the live endpoint with `research/verify_queries.py`.
 
 ## License
 
