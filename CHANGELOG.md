@@ -6,6 +6,12 @@ versioning.
 
 ## [Unreleased]
 
+### Changed
+
+- Re-vendored the behaviour conformance gate from genefoundry-router `ba09fdc`
+  (`docs/conformance/behaviour.py` blob `30d639242b`) so live MCP contract checks
+  treat not-found example probes as inconclusive instead of failures.
+
 ## [5.0.0] - 2026-07-15
 
 Security fix for the SPARQL operation-guard bypass (#29) plus the fleet MCP
