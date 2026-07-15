@@ -140,8 +140,9 @@ async def test_error_envelope_retryable_classification() -> None:
 
 
 @pytest.mark.asyncio
-async def test_error_envelope_unclassified_exception_becomes_internal_error() -> None:
-    """An unrecognised exception never escapes -- it is classified as internal_error."""
+async def test_error_envelope_unclassified_exception_becomes_internal() -> None:
+    """An unrecognised exception never escapes -- it is classified as `internal`
+    (the closed fleet enum member; formerly the non-enum `internal_error`)."""
 
     async def call() -> dict[str, Any]:
         raise RuntimeError("boom")
@@ -149,7 +150,7 @@ async def test_error_envelope_unclassified_exception_becomes_internal_error() ->
     out = await run_mcp_tool("get_protein", call, context=McpErrorContext("get_protein"))
 
     assert out["success"] is False
-    assert out["error_code"] == "internal_error"
+    assert out["error_code"] == "internal"
     assert out["retryable"] is False
     assert out["recovery_action"] == "switch_tool"
     assert "error" not in out
@@ -158,9 +159,10 @@ async def test_error_envelope_unclassified_exception_becomes_internal_error() ->
 
 @pytest.mark.asyncio
 async def test_error_envelope_untrusted_text_limit_is_typed_not_internal() -> None:
-    """v1.1: exceeding an untrusted-text ceiling is an explicit typed limit error,
-    never a masked generic internal_error (UntrustedTextLimitError subclasses
-    ValueError, so it must be classified before the generic fallthrough)."""
+    """v1.1: exceeding an untrusted-text ceiling means the request was too broad --
+    it maps onto the closed enum as `invalid_input` (narrow the request), never a
+    masked `internal` fault (UntrustedTextLimitError subclasses ValueError, so it
+    must be classified before the generic fallthrough)."""
     from uniprot_link.mcp.untrusted_content import UntrustedTextLimitError
 
     async def call() -> dict[str, Any]:
@@ -171,8 +173,8 @@ async def test_error_envelope_untrusted_text_limit_is_typed_not_internal() -> No
     )
 
     assert out["success"] is False
-    assert out["error_code"] == "limit_exceeded"
-    assert out["error_code"] != "internal_error"
+    assert out["error_code"] == "invalid_input"
+    assert out["error_code"] != "internal"
     assert out["retryable"] is False
     assert out["recovery_action"] == "reformulate_input"
     assert "200" in out["message"]  # the explicit ceiling message is surfaced

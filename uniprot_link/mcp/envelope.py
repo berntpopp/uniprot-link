@@ -37,7 +37,7 @@ logger = logging.getLogger(__name__)
 # not declared once via get_server_capabilities. Static provenance (research-use
 # restriction, citation DOI, UniProt release) still lives only in
 # get_server_capabilities to conserve context tokens.
-_RETRYABLE = {"rate_limited", "upstream_unavailable", "query_timeout"}
+_RETRYABLE = {"rate_limited", "upstream_unavailable"}
 _UNSAFE_FOR_CLINICAL_USE = True
 
 
@@ -73,22 +73,35 @@ def _safe_message(exc: BaseException) -> str:
 
 
 def _classify(exc: BaseException) -> tuple[str, str]:
-    """Return ``(error_code, client_safe_message)`` for an exception."""
+    """Return ``(error_code, client_safe_message)`` for an exception.
+
+    ``error_code`` is the closed fleet enum (Response-Envelope Standard v1):
+    ``invalid_input`` / ``not_found`` / ``ambiguous_query`` /
+    ``upstream_unavailable`` / ``rate_limited`` / ``internal``. UniProt's own
+    finer-grained conditions map ONTO the canon: a malformed SPARQL query or an
+    over-broad response is ``invalid_input`` (the caller reformulates); a query
+    timeout is an ``upstream_unavailable`` (the endpoint did not answer in time);
+    an unclassified fault is ``internal``.
+    """
     if isinstance(exc, McpToolError):
         return exc.error_code, exc.message
-    # Response-Envelope v1.1: exceeding an untrusted-text ceiling is an explicit
-    # typed limit error, never a masked generic internal_error. Checked before the
-    # generic ValueError fallthrough (UntrustedTextLimitError subclasses ValueError).
+    # Exceeding an untrusted-text ceiling means the request was too broad -> the
+    # caller must narrow it (invalid_input), never a masked internal fault. Checked
+    # before the ValueError fallthrough (UntrustedTextLimitError subclasses it).
     if isinstance(exc, UntrustedTextLimitError):
-        return "limit_exceeded", _safe_message(exc)
+        return "invalid_input", _safe_message(exc)
     if isinstance(exc, NotFoundError):
         return "not_found", _safe_message(exc)
     if isinstance(exc, InvalidInputError):
         return "invalid_input", _safe_message(exc)
     if isinstance(exc, QuerySyntaxError):
-        return "query_syntax_error", _safe_message(exc)
+        # A malformed SPARQL query the caller must fix -> invalid_input.
+        return "invalid_input", _safe_message(exc)
     if isinstance(exc, QueryTimeoutError):
-        return "query_timeout", "The query timed out. Add filters/LIMIT or anchor on an accession."
+        return (
+            "upstream_unavailable",
+            "The query timed out. Add filters/LIMIT or anchor on an accession, then retry.",
+        )
     if isinstance(exc, RateLimitError):
         return "rate_limited", "UniProt SPARQL rate limit hit. Retry shortly."
     if isinstance(exc, ServiceUnavailableError):
@@ -97,13 +110,13 @@ def _classify(exc: BaseException) -> tuple[str, str]:
         first = exc.errors()[0]
         loc = ".".join(str(p) for p in first["loc"]) or "input"
         return "invalid_input", f"Invalid input -- `{loc}`: {first['msg']}"
-    return "internal_error", "An internal error occurred. The request was not completed."
+    return "internal", "An internal error occurred. The request was not completed."
 
 
 def _recovery_action(error_code: str) -> str:
     if error_code in _RETRYABLE:
         return "retry_backoff"
-    if error_code in {"invalid_input", "not_found", "query_syntax_error", "limit_exceeded"}:
+    if error_code in {"invalid_input", "not_found", "ambiguous_query"}:
         return "reformulate_input"
     return "switch_tool"
 
@@ -253,6 +266,30 @@ def build_arg_error_envelope(
     if allowed is not None:
         envelope["allowed_values"] = allowed
     return envelope
+
+
+def promote_error_result(result: Any) -> Any:
+    """Set MCP ``isError: true`` on a ToolResult whose envelope is a domain error.
+
+    ``run_mcp_tool`` returns error envelopes as a plain ``dict`` (``success:
+    false`` / ``error_code``), which FastMCP serialises into a ``ToolResult`` with
+    ``isError: false`` -- so a client that branches on ``isError`` reads the error
+    as a SUCCESSFUL call (Response-Envelope Standard v1: "``isError: true`` is
+    REQUIRED so clients surface the error to the model for self-correction"). This
+    promotes any such result. Import lazily so this module stays free of a hard
+    FastMCP dependency at import time; a non-ToolResult (or an already-error one)
+    is returned unchanged.
+    """
+    from fastmcp.tools.tool import ToolResult
+
+    if not isinstance(result, ToolResult) or result.is_error:
+        return result
+    structured = result.structured_content
+    if isinstance(structured, dict) and (
+        structured.get("success") is False or structured.get("error_code")
+    ):
+        result.is_error = True
+    return result
 
 
 async def run_mcp_tool(

@@ -67,7 +67,8 @@ async def test_tools_resource_lists_all_with_signatures() -> None:
     names = {t["name"] for t in payload["tools"]}
     assert len(names) == 15
     fp = next(t for t in payload["tools"] if t["name"] == "find_proteins")
-    assert fp["signature"].startswith("find_proteins(gene_symbol=, organism_taxon=")
+    # gene_symbol is now REQUIRED (no `=` default) -> it leads the signature.
+    assert fp["signature"].startswith("find_proteins(gene_symbol, organism_taxon=")
     assert fp["summary"]  # one-line summary present
 
 

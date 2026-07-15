@@ -31,7 +31,7 @@ from uniprot_link.mcp.arg_help import (
     normalize_alias_args,
     tool_signature,
 )
-from uniprot_link.mcp.envelope import build_arg_error_envelope
+from uniprot_link.mcp.envelope import build_arg_error_envelope, promote_error_result
 from uniprot_link.mcp.untrusted_content import sanitize_message
 
 _MISSING_TYPES = {"missing", "missing_argument"}
@@ -88,7 +88,11 @@ class ArgValidationMiddleware(Middleware):
         ):
             meta = result.structured_content.setdefault("_meta", {})
             meta["argument_aliases_applied"] = [list(pair) for pair in applied]
-        return result
+        # A domain error envelope returned by run_mcp_tool is a plain dict that
+        # FastMCP wraps with isError:false; promote it so a client branching on
+        # isError sees the failure (Response-Envelope v1). This middleware is the
+        # innermost wrapper on the tool body, so it is the first to see the result.
+        return promote_error_result(result)
 
     def _error_result(
         self,
@@ -133,4 +137,5 @@ class ArgValidationMiddleware(Middleware):
         return ToolResult(
             structured_content=envelope,
             content=[TextContent(type="text", text=json.dumps(envelope))],
+            is_error=True,
         )

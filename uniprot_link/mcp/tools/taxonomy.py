@@ -9,7 +9,6 @@ from pydantic import Field
 from uniprot_link.mcp.annotations import READ_ONLY_OPEN_WORLD
 from uniprot_link.mcp.envelope import McpErrorContext, run_mcp_tool
 from uniprot_link.mcp.next_commands import cmd
-from uniprot_link.mcp.schemas import TAXON_SCHEMA
 from uniprot_link.mcp.service_adapters import get_sparql_service
 
 if TYPE_CHECKING:
@@ -21,7 +20,7 @@ def register_taxonomy_tools(mcp: FastMCP) -> None:
 
     @mcp.tool(
         name="get_taxon",
-        output_schema=TAXON_SCHEMA,
+        output_schema=None,
         title="Get Taxon",
         annotations=READ_ONLY_OPEN_WORLD,
         tags={"taxonomy"},
@@ -42,7 +41,11 @@ def register_taxonomy_tools(mcp: FastMCP) -> None:
     async def get_taxon(
         taxon: Annotated[
             str,
-            Field(description="NCBI taxon id (digits) or a scientific/common name.", min_length=1),
+            Field(
+                description="NCBI taxon id (digits) or a scientific/common name.",
+                min_length=1,
+                examples=["9606", "Homo sapiens"],
+            ),
         ],
         include_lineage: Annotated[
             bool, Field(description="Include the ancestor lineage (id lookups only).")

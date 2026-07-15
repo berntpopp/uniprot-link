@@ -16,19 +16,8 @@ from uniprot_link.mcp.next_commands import (
     after_obsolete_entry,
     cmd,
 )
-from uniprot_link.mcp.schemas import (
-    CROSS_REFERENCES_SCHEMA,
-    DISEASES_SCHEMA,
-    FEATURES_SCHEMA,
-    FIND_PROTEINS_BATCH_SCHEMA,
-    FIND_PROTEINS_SCHEMA,
-    GO_TERMS_SCHEMA,
-    MAP_IDENTIFIERS_SCHEMA,
-    PROTEIN_SCHEMA,
-    SEQUENCE_SCHEMA,
-    VARIANTS_SCHEMA,
-)
 from uniprot_link.mcp.service_adapters import get_sparql_service
+from uniprot_link.services.constants import FEATURE_TYPES
 
 if TYPE_CHECKING:
     from fastmcp import FastMCP
@@ -39,7 +28,10 @@ _ACC = Annotated[
     # instead of the server's structured envelope. Let validate_accession in the
     # query builder raise InvalidInputError (field="accession") so a bad value
     # flows through the polished error envelope with a helpful example + recovery.
-    Field(description="UniProtKB accession, e.g. P05067 (isoforms like P05067-2 accepted)."),
+    Field(
+        description="UniProtKB accession, e.g. P05067 (isoforms like P05067-2 accepted).",
+        examples=["P05067", "P38398"],
+    ),
 ]
 
 ResponseMode = Annotated[
@@ -58,31 +50,35 @@ def register_protein_tools(mcp: FastMCP) -> None:
 def _register_find_and_summary(mcp: FastMCP) -> None:
     @mcp.tool(
         name="find_proteins",
-        output_schema=FIND_PROTEINS_SCHEMA,
+        output_schema=None,
         title="Find Proteins",
         annotations=READ_ONLY_OPEN_WORLD,
         tags={"protein", "search"},
         description=(
-            "Search UniProtKB by structured filters and return matching entries "
+            "Search UniProtKB for the entries of a GENE and return matching entries "
             "(accession, mnemonic, recommended name, reviewed flag, organism). "
-            "Requires at least one anchor: gene symbol, mnemonic, EC number, keyword "
-            "(KW-id or label), OR organism_taxon together with name_contains "
-            "(matched per word, in any order, case-insensitive). "
+            "gene_symbol is REQUIRED; refine the hits with organism_taxon, reviewed, "
+            "name_contains (matched per word, in any order, case-insensitive), or the "
+            "structured filters mnemonic / ec_number / keyword. "
             "Reviewed (Swiss-Prot) hits are ranked first. UniProt SPARQL has no "
-            "general full-text index, so for broad text use search_example_queries "
-            "or search_sparql_query. Pair with get_protein for full detail. Results "
-            "are ordered reviewed-first, then by mnemonic, then accession (stable "
-            "across pages). Cold search can take several seconds; an identical "
-            "repeat is cached (~0 ms). If you already know the accession, call "
-            "get_protein directly -- it is far faster than a cold search. "
-            "Signature: find_proteins(gene_symbol=, organism_taxon=, reviewed=, keyword=, "
+            "general full-text index; for EC-only, keyword-only, or free-text "
+            "search WITHOUT a gene, use search_example_queries or search_sparql_query. "
+            "Pair with get_protein for full detail. Results are ordered reviewed-first, "
+            "then by mnemonic, then accession (stable across pages). Cold search can "
+            "take several seconds; an identical repeat is cached (~0 ms). If you already "
+            "know the accession, call get_protein directly -- it is far faster. "
+            "Signature: find_proteins(gene_symbol, organism_taxon=, reviewed=, keyword=, "
             "ec_number=, mnemonic=, name_contains=, limit=, offset=)."
         ),
     )
     async def find_proteins(
-        gene_symbol: Annotated[str | None, Field(description="Gene symbol, e.g. BRCA1.")] = None,
+        gene_symbol: Annotated[
+            str,
+            Field(description="Gene symbol to search for, e.g. BRCA1.", examples=["BRCA1", "TP53"]),
+        ],
         organism_taxon: Annotated[
-            int | None, Field(description="NCBI taxon id, e.g. 9606 for human.", ge=1)
+            int | None,
+            Field(description="NCBI taxon id, e.g. 9606 for human.", ge=1, examples=[9606]),
         ] = None,
         reviewed: Annotated[
             bool | None, Field(description="True = Swiss-Prot only; False = TrEMBL only.")
@@ -136,7 +132,7 @@ def _register_find_and_summary(mcp: FastMCP) -> None:
 
     @mcp.tool(
         name="find_proteins_batch",
-        output_schema=FIND_PROTEINS_BATCH_SCHEMA,
+        output_schema=None,
         title="Find Proteins (Batch)",
         annotations=READ_ONLY_OPEN_WORLD,
         tags={"protein", "search", "batch"},
@@ -162,6 +158,7 @@ def _register_find_and_summary(mcp: FastMCP) -> None:
                 description="Gene symbols to resolve, e.g. ['PNKP','NAA10'].",
                 min_length=1,
                 max_length=25,
+                examples=[["PNKP", "NAA10"]],
             ),
         ],
         organism_taxon: Annotated[
@@ -194,7 +191,7 @@ def _register_find_and_summary(mcp: FastMCP) -> None:
 
     @mcp.tool(
         name="get_protein",
-        output_schema=PROTEIN_SCHEMA,
+        output_schema=None,
         title="Get Protein",
         annotations=READ_ONLY_OPEN_WORLD,
         tags={"protein"},
@@ -241,7 +238,7 @@ def _register_find_and_summary(mcp: FastMCP) -> None:
 def _register_sequence_and_features(mcp: FastMCP) -> None:
     @mcp.tool(
         name="get_protein_sequence",
-        output_schema=SEQUENCE_SCHEMA,
+        output_schema=None,
         title="Get Protein Sequence",
         annotations=READ_ONLY_OPEN_WORLD,
         tags={"protein", "sequence"},
@@ -285,7 +282,7 @@ def _register_sequence_and_features(mcp: FastMCP) -> None:
 
     @mcp.tool(
         name="get_protein_features",
-        output_schema=FEATURES_SCHEMA,
+        output_schema=None,
         title="Get Protein Features",
         annotations=READ_ONLY_OPEN_WORLD,
         tags={"protein", "features"},
@@ -308,7 +305,18 @@ def _register_sequence_and_features(mcp: FastMCP) -> None:
         accession: _ACC,
         feature_types: Annotated[
             list[str] | None,
-            Field(description="Feature-type keys to keep (omit for all)."),
+            Field(
+                description=(
+                    "Feature-type keys to keep (omit for all). Closed vocabulary: an "
+                    "unrecognised key is rejected (invalid_input), never matched to "
+                    "nothing. See feature_types in get_server_capabilities."
+                ),
+                examples=[["domain", "region"]],
+                # Declare the closed vocabulary as an item enum so the schema states
+                # it (S4). The runtime (protein_features) is the enforcer -- it raises
+                # invalid_input on an unknown key -- so pydantic need not bind it.
+                json_schema_extra={"items": {"type": "string", "enum": sorted(FEATURE_TYPES)}},
+            ),
         ] = None,
         limit: Annotated[
             int, Field(description="Max features to return (default 200).", ge=1, le=1000)
@@ -340,7 +348,7 @@ def _register_sequence_and_features(mcp: FastMCP) -> None:
 def _register_annotations(mcp: FastMCP) -> None:
     @mcp.tool(
         name="get_protein_variants",
-        output_schema=VARIANTS_SCHEMA,
+        output_schema=None,
         title="Get Protein Variants",
         annotations=READ_ONLY_OPEN_WORLD,
         tags={"protein", "variants"},
@@ -377,7 +385,7 @@ def _register_annotations(mcp: FastMCP) -> None:
 
     @mcp.tool(
         name="get_protein_diseases",
-        output_schema=DISEASES_SCHEMA,
+        output_schema=None,
         title="Get Protein Diseases",
         annotations=READ_ONLY_OPEN_WORLD,
         tags={"protein", "disease"},
@@ -406,7 +414,7 @@ def _register_annotations(mcp: FastMCP) -> None:
 
     @mcp.tool(
         name="get_protein_cross_references",
-        output_schema=CROSS_REFERENCES_SCHEMA,
+        output_schema=None,
         title="Get Protein Cross-References",
         annotations=READ_ONLY_OPEN_WORLD,
         tags={"protein", "xref"},
@@ -425,7 +433,15 @@ def _register_annotations(mcp: FastMCP) -> None:
     async def get_protein_cross_references(
         accession: _ACC,
         databases: Annotated[
-            list[str] | None, Field(description="Database short names to keep (omit for all).")
+            list[str] | None,
+            Field(
+                description=(
+                    "Database short names to keep (case-sensitive; omit for all). A "
+                    "malformed name is rejected (invalid_input); a well-formed name "
+                    "that matched nothing is echoed under unmatched_databases."
+                ),
+                examples=[["PDB", "AlphaFoldDB"]],
+            ),
         ] = None,
         response_mode: ResponseMode = "compact",
     ) -> dict[str, Any]:
@@ -448,7 +464,7 @@ def _register_annotations(mcp: FastMCP) -> None:
 
     @mcp.tool(
         name="get_protein_go_terms",
-        output_schema=GO_TERMS_SCHEMA,
+        output_schema=None,
         title="Get Protein GO Terms",
         annotations=READ_ONLY_OPEN_WORLD,
         tags={"protein", "go"},
@@ -487,7 +503,7 @@ def _register_annotations(mcp: FastMCP) -> None:
 
     @mcp.tool(
         name="resolve_identifiers",
-        output_schema=MAP_IDENTIFIERS_SCHEMA,
+        output_schema=None,
         title="Resolve Identifiers",
         annotations=READ_ONLY_OPEN_WORLD,
         tags={"protein", "xref", "mapping"},
@@ -507,7 +523,10 @@ def _register_annotations(mcp: FastMCP) -> None:
         accession: _ACC,
         databases: Annotated[
             list[str] | None,
-            Field(description="Target database short names (omit for all available)."),
+            Field(
+                description="Target database short names (case-sensitive; omit for the primary set).",
+                examples=[["PDB", "Ensembl"]],
+            ),
         ] = None,
         response_mode: ResponseMode = "compact",
     ) -> dict[str, Any]:

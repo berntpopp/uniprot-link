@@ -13,7 +13,6 @@ from uniprot_link.mcp.capabilities import (
     project_capabilities,
 )
 from uniprot_link.mcp.envelope import McpErrorContext, run_mcp_tool
-from uniprot_link.mcp.schemas import CAPABILITIES_SCHEMA
 
 if TYPE_CHECKING:
     from fastmcp import FastMCP
@@ -26,7 +25,7 @@ def register_discovery_tools(mcp: FastMCP) -> None:
         name="get_server_capabilities",
         title="Get Server Capabilities",
         annotations=READ_ONLY_OPEN_WORLD,
-        output_schema=CAPABILITIES_SCHEMA,
+        output_schema=None,
         tags={"discovery"},
         description=(
             "Return the uniprot-link discovery surface. detail='summary' (default) "

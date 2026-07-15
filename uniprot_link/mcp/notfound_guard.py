@@ -81,6 +81,7 @@ def _unknown_tool_result() -> ToolResult:
     return ToolResult(
         structured_content=envelope,
         content=[TextContent(type="text", text=json.dumps(envelope))],
+        is_error=True,
     )
 
 

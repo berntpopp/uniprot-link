@@ -308,9 +308,13 @@ _XREF_COMPACT_ID_CAP = 25
 def project_cross_references(grouped: dict[str, list[str]], *, mode: str) -> dict[str, Any]:
     """Project sorted, grouped xrefs for a response_mode (token economy, F-VERB).
 
-    ``counts``/``total``/``database_count`` are always present. ``minimal`` omits
-    the id lists; ``compact`` caps each database at ``_XREF_COMPACT_ID_CAP`` and
-    reports ``truncated_databases``; ``standard``/``full`` return every id.
+    ``counts``/``total``/``database_count`` are always present. ``by_database`` (the
+    grouped ids) is the primary collection and is ALWAYS returned so no mode
+    silently empties it (Response-Envelope v1: ``minimal`` is "the mandatory
+    envelope plus stable identifiers" -- the ids ARE those identifiers). ``minimal``
+    and ``compact`` cap each database at ``_XREF_COMPACT_ID_CAP``; ``compact`` also
+    reports ``truncated_databases`` so the cap is never silent; ``standard``/``full``
+    return every id.
     """
     counts = {db: len(ids) for db, ids in grouped.items()}
     out: dict[str, Any] = {
@@ -318,12 +322,11 @@ def project_cross_references(grouped: dict[str, list[str]], *, mode: str) -> dic
         "total": sum(counts.values()),
         "counts": counts,
     }
-    if mode == "minimal":
-        return out
     if mode in ("standard", "full"):
         out["by_database"] = grouped
+        out["has_more"] = False  # every id is returned uncapped
         return out
-    # compact: cap each database, flag truncation so the cap is never silent.
+    # minimal / compact: cap each database. compact additionally flags the cap.
     capped: dict[str, list[str]] = {}
     truncated: dict[str, dict[str, int]] = {}
     for db, ids in grouped.items():
@@ -333,7 +336,11 @@ def project_cross_references(grouped: dict[str, list[str]], *, mode: str) -> dic
         else:
             capped[db] = ids
     out["by_database"] = capped
-    if truncated:
+    # A capped view returns fewer ids than `total`; declare it so a client never
+    # reads the partial id set as complete (Response-Envelope pagination honesty).
+    # standard/full lift the cap.
+    out["has_more"] = bool(truncated)
+    if truncated and mode != "minimal":
         out["truncated_databases"] = truncated
     return out
 

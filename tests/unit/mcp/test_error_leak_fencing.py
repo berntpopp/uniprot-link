@@ -87,7 +87,7 @@ async def test_search_sparql_query_400_body_not_echoed() -> None:
     respx.post(ENDPOINT).mock(return_value=httpx.Response(400, text=HOSTILE_BODY))
     for payload in await _call("search_sparql_query", {"query": "SELECT ?x WHERE { ?x ?y ?z }"}):
         assert payload["success"] is False
-        assert payload["error_code"] == "query_syntax_error"
+        assert payload["error_code"] == "invalid_input"
         _assert_no_leak(payload)
         # the fixed, static, body-free hint is used instead of the upstream body
         assert "Common causes" in payload["message"]
@@ -100,7 +100,7 @@ async def test_search_sparql_query_timeout_is_clean_fixed_message() -> None:
     respx.post(ENDPOINT).mock(side_effect=httpx.ConnectTimeout("boom"))
     for payload in await _call("search_sparql_query", {"query": "SELECT ?x WHERE { ?x ?y ?z }"}):
         assert payload["success"] is False
-        assert payload["error_code"] == "query_timeout"
+        assert payload["error_code"] == "upstream_unavailable"
         _assert_no_leak(payload)
         assert "timed out" in payload["message"]
 
@@ -169,7 +169,7 @@ async def test_classified_exception_with_hostile_str_is_sanitized() -> None:
     )
     for payload in (structured, mirror):
         assert payload["success"] is False
-        assert payload["error_code"] == "query_syntax_error"
+        assert payload["error_code"] == "invalid_input"
         blob = json.dumps(payload, ensure_ascii=False)
         for forbidden in _FORBIDDEN:
             assert forbidden not in blob
