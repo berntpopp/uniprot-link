@@ -60,7 +60,10 @@ from mcp.types import (
     TextContent,
 )
 
-from uniprot_link.mcp.envelope import build_unknown_tool_envelope
+from uniprot_link.mcp.envelope import (
+    build_internal_tool_envelope,
+    build_unknown_tool_envelope,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -172,9 +175,8 @@ def _is_structured_envelope(result: CallToolResult) -> bool:
     return isinstance(obj, dict) and "error_code" in obj
 
 
-def _fixed_tool_not_found_result() -> ServerResult:
-    """A fixed, name-free CallToolResult for an unknown/failed tool dispatch."""
-    envelope = build_unknown_tool_envelope()
+def _fixed_result(envelope: dict[str, Any]) -> ServerResult:
+    """Wrap a fixed, name-free error envelope as an isError CallToolResult."""
     return ServerResult(
         CallToolResult(
             content=[TextContent(type="text", text=json.dumps(envelope))],
@@ -182,6 +184,36 @@ def _fixed_tool_not_found_result() -> ServerResult:
             isError=True,
         )
     )
+
+
+def _fixed_tool_not_found_result() -> ServerResult:
+    """A fixed, name-free CallToolResult for a genuinely UNKNOWN tool."""
+    return _fixed_result(build_unknown_tool_envelope())
+
+
+def _fixed_tool_internal_result() -> ServerResult:
+    """A fixed, name-free CallToolResult for a KNOWN tool whose dispatch failed."""
+    return _fixed_result(build_internal_tool_envelope())
+
+
+async def _is_known_tool(mcp: Any, name: Any) -> bool:
+    """True if ``name`` resolves to a registered tool.
+
+    A KNOWN tool that failed to dispatch is a real error and must be reported as
+    ``internal``, NEVER masked as ``not_found`` (which tells the model the tool does
+    not exist). Only a name that resolves to nothing gets the not_found frame.
+    """
+    if not isinstance(name, str):
+        return False
+    try:
+        return (await mcp.get_tool(name)) is not None
+    except Exception:
+        return False
+
+
+def _masked_dispatch_result(is_known: bool) -> ServerResult:
+    """not_found for an unknown tool; internal for a known tool's dispatch fault."""
+    return _fixed_tool_internal_result() if is_known else _fixed_tool_not_found_result()
 
 
 def install_protocol_error_handler(mcp: Any) -> None:
@@ -200,25 +232,31 @@ def install_protocol_error_handler(mcp: Any) -> None:
             request: CallToolRequest,
             *,
             _orig: Any = call_tool,
+            _mcp: Any = mcp,
         ) -> ServerResult:
+            # The caller-supplied tool name, used ONLY to ask the registry whether
+            # the tool exists -- never echoed back (both fixed envelopes null it).
+            name = getattr(getattr(request, "params", None), "name", None)
             try:
                 result = cast(ServerResult, await _orig(request))
             except Exception:
-                # A registered tool never raises here (run_mcp_tool returns an
-                # envelope); any exception is a dispatch-level failure whose message
-                # would echo the caller name -- mask it.
+                # A registered tool's raw dispatch raised (a serialization/middleware
+                # fault outside run_mcp_tool's envelope). Report `internal` for a KNOWN
+                # tool; only a genuinely unknown name gets not_found -- masking a real
+                # tool as not_found strikes it from the model's list (the litvar bug).
                 logger.warning("mcp_protocol_error kind=tool")
-                return _fixed_tool_not_found_result()
+                return _masked_dispatch_result(await _is_known_tool(_mcp, name))
             root = getattr(result, "root", None)
             if (
                 isinstance(root, CallToolResult)
                 and root.isError
                 and not _is_structured_envelope(root)
             ):
-                # FastMCP RETURNS an isError result echoing "Unknown tool: '<name>'"
-                # for the return-path; replace any non-structured isError frame.
+                # A non-structured isError frame (e.g. FastMCP's "Unknown tool:
+                # '<name>'" return path). Same rule: not_found only for an unknown
+                # name; a known tool's raw error is `internal`, name never reflected.
                 logger.warning("mcp_protocol_error kind=tool")
-                return _fixed_tool_not_found_result()
+                return _masked_dispatch_result(await _is_known_tool(_mcp, name))
             return result
 
         handlers[CallToolRequest] = wrapped_call_tool

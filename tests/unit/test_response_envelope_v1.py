@@ -158,6 +158,20 @@ async def test_error_envelope_unclassified_exception_becomes_internal() -> None:
 
 
 @pytest.mark.asyncio
+async def test_error_code_is_clamped_to_the_closed_enum() -> None:
+    """An off-enum code (a stray McpToolError value or a future mapping) can never
+    reach the wire -- it is clamped to `internal` at the emit boundary (#30 review)."""
+    from uniprot_link.mcp.envelope import ERROR_CODES, McpToolError
+
+    async def call() -> dict[str, Any]:
+        raise McpToolError(error_code="validation_failed", message="bad")
+
+    out = await run_mcp_tool("get_protein", call, context=McpErrorContext("get_protein"))
+    assert out["error_code"] == "internal"
+    assert out["error_code"] in ERROR_CODES
+
+
+@pytest.mark.asyncio
 async def test_error_envelope_untrusted_text_limit_is_typed_not_internal() -> None:
     """v1.1: exceeding an untrusted-text ceiling means the request was too broad --
     it maps onto the closed enum as `invalid_input` (narrow the request), never a

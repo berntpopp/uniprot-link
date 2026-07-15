@@ -28,6 +28,12 @@ change, `find_proteins` now requires `gene_symbol`, and `outputSchema` is droppe
   but the advertised `search_sparql_query` contract is now actually enforced. This
   changes no MCP tool contract (name/description/schema/annotations), so **no router
   drift-baseline recapture** is needed for it.
+- **A `#` comment now terminates on CR as well as LF** (`_blank_noncode`, SPARQL 1.1
+  §19.4). It previously stopped only on `\n`, so a lone `\r` (`# c\rSELECT*{ SERVICE
+  … }`) blanked the whole tail in the guard's view while the endpoint still executed
+  it after the CR — the same operation-guard desync, via a carriage return. Re-audited
+  the blanker against block-comment, `SER/**/VICE`, literal/IRI-decoy, and preamble-CR
+  vectors.
 
 ### Changed (breaking)
 
@@ -61,6 +67,15 @@ change, `find_proteins` now requires `gene_symbol`, and `outputSchema` is droppe
   read as complete.
 - **`find_proteins` rejects a malformed `mnemonic` or `keyword`** with a named
   `invalid_input` instead of splicing it into the query to silently match nothing.
+- **`find_proteins` rejects a blank/whitespace `gene_symbol`** (named `gene_symbol`)
+  instead of splicing an empty `prefLabel` that matched nothing with `success:true`.
+- **The not-found backstop no longer masks a KNOWN tool's dispatch fault as
+  `not_found`.** A registered tool whose raw dispatch raised now returns `internal`
+  (name never reflected); only a genuinely unknown name gets `not_found` — masking a
+  real tool as not_found told the model the tool did not exist.
+- **`error_code` is clamped to the closed enum at the emit boundary**, so a stray
+  value can never reach the wire; discovery/instructions advertise the full six-value
+  enum and no longer claim tools publish `outputSchema`.
 
 ### Documentation
 

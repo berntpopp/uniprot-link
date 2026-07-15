@@ -37,6 +37,20 @@ logger = logging.getLogger(__name__)
 # not declared once via get_server_capabilities. Static provenance (research-use
 # restriction, citation DOI, UniProt release) still lives only in
 # get_server_capabilities to conserve context tokens.
+# The closed fleet error_code enum (Response-Envelope Standard v1). Nothing outside
+# this set may reach the wire: _error_envelope clamps any stray code to `internal`,
+# so a future mapping (or a McpToolError carrying a non-canonical code) can never
+# emit an off-enum value the behaviour gate would reject.
+ERROR_CODES = frozenset(
+    {
+        "invalid_input",
+        "not_found",
+        "ambiguous_query",
+        "upstream_unavailable",
+        "rate_limited",
+        "internal",
+    }
+)
 _RETRYABLE = {"rate_limited", "upstream_unavailable"}
 _UNSAFE_FOR_CLINICAL_USE = True
 
@@ -123,6 +137,11 @@ def _recovery_action(error_code: str) -> str:
 
 def _error_envelope(exc: BaseException, context: McpErrorContext) -> dict[str, Any]:
     error_code, message = _classify(exc)
+    # Enforce the closed enum at the emit boundary: any code not in the fleet six
+    # (a future mapping, or a McpToolError carrying a stray value) becomes `internal`
+    # so an off-enum code can never reach the wire.
+    if error_code not in ERROR_CODES:
+        error_code = "internal"
     envelope: dict[str, Any] = {
         "success": False,
         "error_code": error_code,
@@ -186,6 +205,37 @@ def build_unknown_tool_envelope() -> dict[str, Any]:
         "success": False,
         "error_code": "not_found",
         "message": _UNKNOWN_TOOL_MESSAGE,
+        "retryable": False,
+        "recovery_action": "switch_tool",
+        "_meta": {
+            "tool": None,
+            "request_id": _request_id(),
+            "next_commands": [cmd("get_server_capabilities")],
+            "unsafe_for_clinical_use": _UNSAFE_FOR_CLINICAL_USE,
+        },
+    }
+
+
+# Fixed, caller-echo-free message for a REGISTERED tool whose dispatch raised. It
+# must NOT claim the tool is missing (that is `build_unknown_tool_envelope`): a
+# known tool answered with `not_found` tells the model the tool does not exist, so
+# it strikes it from its list and never calls it again (the litvar misclass).
+_INTERNAL_TOOL_MESSAGE = "The tool failed to complete the request. Retry, or try a different tool."
+
+
+def build_internal_tool_envelope() -> dict[str, Any]:
+    """Fixed, name-free ``internal`` envelope for a KNOWN tool that failed to dispatch.
+
+    The not-found backstop must only answer ``not_found`` for a genuinely UNKNOWN
+    tool. A registered tool whose raw dispatch raised (a serialization/middleware
+    fault outside ``run_mcp_tool``'s envelope) is a real error and is reported as
+    ``internal`` -- never masked as ``not_found``. ``_meta.tool`` is ``None`` so the
+    caller-supplied name is never echoed back.
+    """
+    return {
+        "success": False,
+        "error_code": "internal",
+        "message": _INTERNAL_TOOL_MESSAGE,
         "retryable": False,
         "recovery_action": "switch_tool",
         "_meta": {

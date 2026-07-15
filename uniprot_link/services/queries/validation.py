@@ -197,8 +197,13 @@ def _blank_noncode(query: str) -> str:
     while i < n:
         ch = query[i]
         if ch == "#":  # a comment runs to end of line
+            # SPARQL 1.1 §19.4: a comment is terminated by CR (#xD) OR LF (#xA)
+            # (and thus by CRLF). Stopping only on LF would let a lone ``\r`` blank
+            # the whole tail here while the endpoint still executes it after the CR
+            # -- resurrecting the F-08/R-03 operation-guard desync (a lone-CR
+            # ``# c\rSELECT*{ SERVICE ... }`` bypass).
             j = i
-            while j < n and query[j] != "\n":
+            while j < n and query[j] not in ("\n", "\r"):
                 out[j] = " "
                 j += 1
             i = j

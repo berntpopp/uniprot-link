@@ -216,15 +216,15 @@ def build_capabilities() -> dict[str, Any]:
             "non-gene search (EC / keyword / free text) -> search_example_queries -> search_sparql_query",
             "learn SPARQL -> search_example_queries -> get_example_query -> search_sparql_query",
         ],
-        # The closed fleet error_code enum (Response-Envelope Standard v1); these
-        # are the members uniprot-link emits (a malformed SPARQL query or an
-        # over-broad response is invalid_input; a query timeout is
-        # upstream_unavailable).
+        # The closed fleet error_code enum (Response-Envelope Standard v1) -- every
+        # error_code is one of these six. (A malformed SPARQL query or an over-broad
+        # response is invalid_input; a query timeout is upstream_unavailable.)
         "error_codes": [
             "invalid_input",
             "not_found",
-            "rate_limited",
+            "ambiguous_query",
             "upstream_unavailable",
+            "rate_limited",
             "internal",
         ],
         "limits": {

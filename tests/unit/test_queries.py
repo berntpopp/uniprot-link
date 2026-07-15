@@ -179,6 +179,31 @@ class TestOperationGuardTokenBoundary:
         query = 'SELECT*{ ?s ?p "SERVICE <https://x/s>" . # SERVICE <https://x/s> { ?s ?p ?o }\n }'
         assert q.classify_sparql_operation(query) == "SELECT"
 
+    def test_comment_terminates_on_lone_cr_not_only_lf(self) -> None:
+        # SPARQL 1.1 §19.4: a comment ends on CR *or* LF. If the blanker only
+        # stopped on LF, a lone CR would blank the WHOLE tail -- hiding the real
+        # SELECT+SERVICE from the guard while the endpoint (which honours CR) still
+        # executes it. That is the exact F-08/R-03 desync, resurrected by a `\r`.
+        assert q.classify_sparql_operation("# c\rASK{?s ?p ?o}") == "ASK"
+        for bad in (
+            "# c\rSELECT*{ SERVICE <https://evil.example/s> {?s ?p ?o} }",
+            "# c\r\nSELECT*{ SERVICE <https://evil.example/s> {?s ?p ?o} }",  # CRLF
+            "PREFIX up:<http://x/>\r# c\rSELECT*{ SERVICE <https://evil.example/s> {?s} }",
+        ):
+            with pytest.raises(InvalidInputError, match="SERVICE"):
+                q.classify_sparql_operation(bad)
+        # ...and a graph form hidden behind a lone-CR comment is still rejected.
+        with pytest.raises(InvalidInputError, match="only SELECT and ASK"):
+            q.classify_sparql_operation("# c\rCONSTRUCT{?a ?b ?c}WHERE{?a ?b ?c}")
+
+    def test_blank_noncode_stops_a_comment_at_cr(self) -> None:
+        # A real LIMIT after a lone-CR comment must remain visible (not blanked),
+        # so it is neither dropped nor double-injected.
+        out, injected = q.inject_limit("SELECT*{?s ?p ?o}# c\rLIMIT 5", default=50, maximum=10000)
+        assert injected is False
+        assert out.upper().count("LIMIT") == 1
+        assert "LIMIT 5" in out
+
 
 class TestProteinSummaryAnchor:
     def test_requires_protein_type_anchor(self) -> None:
@@ -380,6 +405,16 @@ class TestFindProteins:
     def test_ec_number_validation(self) -> None:
         with pytest.raises(InvalidInputError):
             q.find_proteins(ec_number="not.an.ec.x")
+
+    def test_gene_symbol_rejects_blank_naming_the_field(self) -> None:
+        # gene_symbol is REQUIRED at the tool layer but pydantic allows a blank
+        # string. A blank/whitespace value must be rejected with field=gene_symbol
+        # -- never spliced in as skos:prefLabel "" (success:true, 0 rows), and never
+        # reported against the generic `filters` anchor error (#30 review HIGH).
+        for blank in ("", "   ", "\t"):
+            with pytest.raises(InvalidInputError) as exc:
+                q.find_proteins(gene=blank)
+            assert exc.value.field == "gene_symbol"
 
     def test_mnemonic_filter_rejects_malformed_value(self) -> None:
         # A mnemonic is ``NAME_SPECIES`` (e.g. BRCA1_HUMAN). A malformed value must

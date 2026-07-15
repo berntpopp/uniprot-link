@@ -51,8 +51,16 @@ def find_proteins(
     filters: list[str] = []
     strong = False
 
-    if gene:
-        g = escape_literal(gene.strip())
+    if gene is not None:
+        # gene_symbol is REQUIRED at the tool layer, but pydantic admits a blank /
+        # whitespace-only string. Reject it here (named field) rather than splicing
+        # an empty prefLabel that matches nothing with success:true (#30 review).
+        gene_stripped = gene.strip()
+        if not gene_stripped:
+            raise InvalidInputError(
+                "gene_symbol must not be blank (e.g. BRCA1).", field="gene_symbol"
+            )
+        g = escape_literal(gene_stripped)
         filters.append(
             f"  ?protein up:encodedBy ?_gene .\n"
             f'  {{ ?_gene skos:prefLabel "{g}" }} UNION {{ ?_gene skos:altLabel "{g}" }}'
