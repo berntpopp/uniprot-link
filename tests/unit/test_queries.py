@@ -6,6 +6,7 @@ import pytest
 
 from uniprot_link.exceptions import InvalidInputError
 from uniprot_link.services import queries as q
+from uniprot_link.services.queries import validation as V
 
 
 class TestValidation:
@@ -83,6 +84,125 @@ class TestReadOnlyGuard:
     def test_classify_does_not_mistake_service_prefix_for_clause(self) -> None:
         query = "PREFIX service: <https://example.org/vocab/> SELECT ?s WHERE { ?s service:p ?o }"
         assert q.classify_sparql_operation(query) == "SELECT"
+
+
+class TestOperationGuardTokenBoundary:
+    """R-03 (#29): the operation guard must key on a real keyword TOKEN, not a
+    whitespace split.
+
+    SPARQL allows no whitespace between the leading keyword and a following
+    ``*``/``{``/``?``/``(``/``<``. The old ``_leading_token`` split on whitespace,
+    so ``SELECT*{...}`` tokenised as ``SELECT*{?s`` -- matching neither the
+    read-op set (LIMIT injection + SERVICE reject) nor the write/graph set
+    (CONSTRUCT/DESCRIBE reject). All three controls fell open at once.
+    """
+
+    def test_leading_token_extracts_keyword_on_token_boundary(self) -> None:
+        # The exact F-08/R-03 evidence from the issue: no space after the keyword.
+        assert V._leading_token("SELECT*{?s ?p ?o}") == "SELECT"
+        assert V._leading_token("ASK{ ?s ?p ?o }") == "ASK"
+        assert V._leading_token("CONSTRUCT{?a ?b ?c}WHERE{?a ?b ?c}") == "CONSTRUCT"
+        assert V._leading_token("DESCRIBE<https://example.org/x>") == "DESCRIBE"
+        assert V._leading_token("SELECT(COUNT(*) AS ?n){?s ?p ?o}") == "SELECT"
+
+    def test_leading_token_after_prefix_without_whitespace(self) -> None:
+        # A PREFIX block whose IRI is blanked, then a no-whitespace SELECT.
+        q_ = "PREFIX up:<http://purl.uniprot.org/core/>SELECT*{?s a up:Protein}"
+        assert V._leading_token(q_) == "SELECT"
+
+    def test_inject_limit_bounds_no_whitespace_select(self) -> None:
+        # An unbounded ``SELECT*`` must still receive a bounding LIMIT (the old
+        # code injected nothing because the token was ``SELECT*{?s``).
+        out, injected = q.inject_limit("SELECT*{?s ?p ?o}", default=50, maximum=10000)
+        assert injected is True
+        assert out.rstrip().endswith("LIMIT 50")
+
+    def test_classify_rejects_no_whitespace_write_and_graph_forms(self) -> None:
+        for bad in (
+            "CONSTRUCT{?a ?b ?c}WHERE{?a ?b ?c}",
+            "DESCRIBE<https://example.org/protein/P05067>",
+            "DESCRIBE{?s ?p ?o}",
+            "INSERT{?s ?p ?o}WHERE{?s ?p ?o}",
+            "DELETE{?s ?p ?o}WHERE{?s ?p ?o}",
+        ):
+            with pytest.raises(InvalidInputError, match="only SELECT and ASK"):
+                q.classify_sparql_operation(bad)
+
+    def test_classify_rejects_service_in_no_whitespace_select(self) -> None:
+        # The headline bypass: SERVICE federation smuggled behind ``SELECT*``.
+        for bad in (
+            "SELECT*{ SERVICE <https://evil.example/sparql> {?s ?p ?o} }",
+            "ASK{SERVICE <https://evil.example/sparql>{?s ?p ?o}}",
+        ):
+            with pytest.raises(InvalidInputError, match="SERVICE"):
+                q.classify_sparql_operation(bad)
+
+    def test_classify_rejects_service_in_unknown_leading_form(self) -> None:
+        # Fail-closed: a query we cannot classify must NOT fall through to execute
+        # while carrying a SERVICE clause. The leading token is unknown here (the
+        # query opens with a brace), yet SERVICE must still be rejected.
+        with pytest.raises(InvalidInputError, match="SERVICE"):
+            q.classify_sparql_operation("{ SERVICE <https://evil.example/sparql> {?s ?p ?o} }")
+
+    def test_classify_read_forms_still_allowed(self) -> None:
+        assert q.classify_sparql_operation("SELECT*{?s ?p ?o}") == "SELECT"
+        assert q.classify_sparql_operation("ASK{?s ?p ?o}") == "ASK"
+
+    def test_classify_rejects_service_behind_leading_whitespace_variants(self) -> None:
+        # A leading tab / newline / SPARQL comment / unicode whitespace / BOM must
+        # not desync this classifier from the endpoint: SERVICE is rejected in
+        # every case (the read/unknown token still triggers the code-only search).
+        for bad in (
+            "\tSELECT*{ SERVICE <https://evil.example/s> {?s ?p ?o} }",
+            "\n\n  SELECT*{ SERVICE <https://evil.example/s> {?s ?p ?o} }",
+            "# leading comment\nSELECT*{ SERVICE <https://evil.example/s> {?s ?p ?o} }",
+            "\u00a0SELECT*{ SERVICE <https://evil.example/s> {?s ?p ?o} }",  # NBSP
+            "\ufeffSELECT*{ SERVICE <https://evil.example/s> {?s ?p ?o} }",  # BOM
+        ):
+            with pytest.raises(InvalidInputError, match="SERVICE"):
+                q.classify_sparql_operation(bad)
+
+    def test_classify_rejects_construct_behind_leading_bom_and_whitespace(self) -> None:
+        # The CONSTRUCT/DESCRIBE reject must also survive a leading BOM / NBSP /
+        # tab: the advertised "graph-returning forms are rejected" contract holds.
+        for bad in (
+            "\ufeffCONSTRUCT{?a ?b ?c}WHERE{?a ?b ?c}",
+            "\u00a0DESCRIBE<https://example.org/x>",
+            "\tCONSTRUCT{?a ?b ?c}WHERE{?a ?b ?c}",
+        ):
+            with pytest.raises(InvalidInputError, match="only SELECT and ASK"):
+                q.classify_sparql_operation(bad)
+
+    def test_service_decoys_still_ignored_in_no_whitespace_select(self) -> None:
+        # A SERVICE token that lives only in a comment / string literal / IRI is
+        # still harmless, even for a no-whitespace SELECT.
+        query = 'SELECT*{ ?s ?p "SERVICE <https://x/s>" . # SERVICE <https://x/s> { ?s ?p ?o }\n }'
+        assert q.classify_sparql_operation(query) == "SELECT"
+
+    def test_comment_terminates_on_lone_cr_not_only_lf(self) -> None:
+        # SPARQL 1.1 §19.4: a comment ends on CR *or* LF. If the blanker only
+        # stopped on LF, a lone CR would blank the WHOLE tail -- hiding the real
+        # SELECT+SERVICE from the guard while the endpoint (which honours CR) still
+        # executes it. That is the exact F-08/R-03 desync, resurrected by a `\r`.
+        assert q.classify_sparql_operation("# c\rASK{?s ?p ?o}") == "ASK"
+        for bad in (
+            "# c\rSELECT*{ SERVICE <https://evil.example/s> {?s ?p ?o} }",
+            "# c\r\nSELECT*{ SERVICE <https://evil.example/s> {?s ?p ?o} }",  # CRLF
+            "PREFIX up:<http://x/>\r# c\rSELECT*{ SERVICE <https://evil.example/s> {?s} }",
+        ):
+            with pytest.raises(InvalidInputError, match="SERVICE"):
+                q.classify_sparql_operation(bad)
+        # ...and a graph form hidden behind a lone-CR comment is still rejected.
+        with pytest.raises(InvalidInputError, match="only SELECT and ASK"):
+            q.classify_sparql_operation("# c\rCONSTRUCT{?a ?b ?c}WHERE{?a ?b ?c}")
+
+    def test_blank_noncode_stops_a_comment_at_cr(self) -> None:
+        # A real LIMIT after a lone-CR comment must remain visible (not blanked),
+        # so it is neither dropped nor double-injected.
+        out, injected = q.inject_limit("SELECT*{?s ?p ?o}# c\rLIMIT 5", default=50, maximum=10000)
+        assert injected is False
+        assert out.upper().count("LIMIT") == 1
+        assert "LIMIT 5" in out
 
 
 class TestProteinSummaryAnchor:
@@ -285,6 +405,38 @@ class TestFindProteins:
     def test_ec_number_validation(self) -> None:
         with pytest.raises(InvalidInputError):
             q.find_proteins(ec_number="not.an.ec.x")
+
+    def test_gene_symbol_rejects_blank_naming_the_field(self) -> None:
+        # gene_symbol is REQUIRED at the tool layer but pydantic allows a blank
+        # string. A blank/whitespace value must be rejected with field=gene_symbol
+        # -- never spliced in as skos:prefLabel "" (success:true, 0 rows), and never
+        # reported against the generic `filters` anchor error (#30 review HIGH).
+        for blank in ("", "   ", "\t"):
+            with pytest.raises(InvalidInputError) as exc:
+                q.find_proteins(gene=blank)
+            assert exc.value.field == "gene_symbol"
+
+    def test_mnemonic_filter_rejects_malformed_value(self) -> None:
+        # A mnemonic is ``NAME_SPECIES`` (e.g. BRCA1_HUMAN). A malformed value must
+        # be rejected with invalid_input naming the field -- never spliced into the
+        # query to silently match nothing (the silently-empty filter defect).
+        with pytest.raises(InvalidInputError) as exc:
+            q.find_proteins(gene="BRCA1", mnemonic="__gf_conformance_no_such_value__")
+        assert exc.value.field == "mnemonic"
+        # a well-formed mnemonic still builds
+        assert 'up:mnemonic "BRCA1_HUMAN"' in q.find_proteins(gene="BRCA1", mnemonic="brca1_human")
+
+    def test_keyword_filter_rejects_malformed_value(self) -> None:
+        # keyword is a KW-id (KW-0007) or a keyword label; a value that is neither
+        # (leading underscore / control chars) is rejected, not matched to nothing.
+        with pytest.raises(InvalidInputError) as exc:
+            q.find_proteins(gene="BRCA1", keyword="__gf_conformance_no_such_value__")
+        assert exc.value.field == "keyword"
+        # a KW-id and a plain label both still build
+        assert "keywords/7>" in q.find_proteins(gene="BRCA1", keyword="KW-0007")
+        assert 'skos:prefLabel "3D-structure"' in q.find_proteins(
+            gene="BRCA1", keyword="3D-structure"
+        )
 
     def test_name_contains_pairs_with_taxon(self) -> None:
         query = q.find_proteins(organism_taxon=9606, name_contains="kinase")

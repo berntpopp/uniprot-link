@@ -26,7 +26,7 @@ from __future__ import annotations
 import io
 import json
 import logging
-from typing import Any
+from typing import Any, ClassVar
 
 import anyio
 import pytest
@@ -337,6 +337,49 @@ async def test_unknown_prompt_full_forbidden_set_no_leak(label: str, ch: str) ->
     response, logs = await _raw_request("prompts/get", {"name": name, "arguments": {}})
     _assert_no_leak(response, ch)
     _assert_no_leak(logs, ch)
+
+
+async def test_known_tool_dispatch_error_is_internal_not_masked_as_not_found() -> None:
+    """A REGISTERED tool whose raw dispatch raises must yield ``internal`` -- NEVER
+    ``not_found``. Masking a real tool as not_found tells the model the tool does not
+    exist, so it strikes it from its list and never calls it again (#30 review HIGH /
+    the litvar misclassification). An UNKNOWN name still gets not_found. Neither frame
+    echoes the caller-supplied name."""
+    from mcp.types import CallToolRequest, CallToolRequestParams
+
+    from uniprot_link.mcp.notfound_guard import install_protocol_error_handler
+
+    async def raising_handler(_request: Any) -> Any:
+        raise RuntimeError("serialization boom for a registered tool")
+
+    known = {"get_protein"}
+
+    class _FakeServer:
+        request_handlers: ClassVar[dict] = {CallToolRequest: raising_handler}
+
+    class _FakeMCP:
+        _mcp_server = _FakeServer()
+
+        async def get_tool(self, name: str) -> Any:
+            if name in known:
+                return object()
+            return None
+
+    mcp = _FakeMCP()
+    install_protocol_error_handler(mcp)
+    wrapped = _FakeServer.request_handlers[CallToolRequest]
+
+    def _req(name: str) -> CallToolRequest:
+        return CallToolRequest(
+            method="tools/call", params=CallToolRequestParams(name=name, arguments={})
+        )
+
+    known_env = (await wrapped(_req("get_protein"))).root.structuredContent
+    unknown_env = (await wrapped(_req("__no_such_tool__"))).root.structuredContent
+    assert known_env["error_code"] == "internal"  # a real tool's real fault
+    assert unknown_env["error_code"] == "not_found"  # a genuinely absent tool
+    assert "get_protein" not in json.dumps(known_env)  # name never reflected
+    assert "__no_such_tool__" not in json.dumps(unknown_env)
 
 
 @pytest.mark.parametrize(("label", "ch"), list(_FORBIDDEN_SAMPLE.items()))

@@ -9,11 +9,6 @@ from pydantic import Field
 from uniprot_link.mcp.annotations import READ_ONLY_OPEN_WORLD
 from uniprot_link.mcp.envelope import McpErrorContext, run_mcp_tool
 from uniprot_link.mcp.next_commands import after_get_example, after_search_sparql, cmd
-from uniprot_link.mcp.schemas import (
-    EXAMPLE_DETAIL_SCHEMA,
-    EXAMPLE_LIST_SCHEMA,
-    SPARQL_RESULT_SCHEMA,
-)
 from uniprot_link.mcp.service_adapters import get_sparql_service
 
 if TYPE_CHECKING:
@@ -25,7 +20,7 @@ def register_query_tools(mcp: FastMCP) -> None:
 
     @mcp.tool(
         name="search_sparql_query",
-        output_schema=SPARQL_RESULT_SCHEMA,
+        output_schema=None,
         title="Search via SPARQL Query",
         annotations=READ_ONLY_OPEN_WORLD,
         tags={"sparql", "power"},
@@ -46,9 +41,17 @@ def register_query_tools(mcp: FastMCP) -> None:
         query: Annotated[
             str,
             Field(
-                description="A complete SPARQL 1.1 query string.",
+                description=(
+                    "A complete SPARQL 1.1 query string. SELECT/ASK only; SERVICE "
+                    "federation and CONSTRUCT/DESCRIBE are rejected. An unbounded "
+                    "SELECT gets an auto-injected LIMIT."
+                ),
                 min_length=8,
                 max_length=20000,
+                examples=[
+                    "PREFIX up: <http://purl.uniprot.org/core/>\n"
+                    "SELECT ?protein WHERE { ?protein a up:Protein } LIMIT 1"
+                ],
             ),
         ],
         result_format: Annotated[
@@ -83,7 +86,7 @@ def register_query_tools(mcp: FastMCP) -> None:
 
     @mcp.tool(
         name="search_example_queries",
-        output_schema=EXAMPLE_LIST_SCHEMA,
+        output_schema=None,
         title="Search Example Queries",
         annotations=READ_ONLY_OPEN_WORLD,
         tags={"sparql", "examples"},
@@ -118,7 +121,7 @@ def register_query_tools(mcp: FastMCP) -> None:
 
     @mcp.tool(
         name="get_example_query",
-        output_schema=EXAMPLE_DETAIL_SCHEMA,
+        output_schema=None,
         title="Get Example Query",
         annotations=READ_ONLY_OPEN_WORLD,
         tags={"sparql", "examples"},
@@ -133,7 +136,14 @@ def register_query_tools(mcp: FastMCP) -> None:
     async def get_example_query(
         example_id: Annotated[
             str,
-            Field(description="Full example IRI from search_example_queries.", min_length=10),
+            Field(
+                description="Full example IRI from search_example_queries.",
+                min_length=10,
+                examples=[
+                    "https://sparql.uniprot.org/.well-known/sparql-examples/"
+                    "121_proteins_and_diseases_linked"
+                ],
+            ),
         ],
     ) -> dict[str, Any]:
         async def call() -> dict[str, Any]:

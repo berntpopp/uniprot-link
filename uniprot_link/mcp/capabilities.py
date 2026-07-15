@@ -202,27 +202,30 @@ def build_capabilities() -> dict[str, Any]:
             ),
             "cross_references": (
                 "Ids and database keys are sorted (stable across calls and identical "
-                "between get_protein_cross_references and resolve_identifiers). compact "
-                "caps each database at 25 ids with a truncated_databases note and "
-                "always reports per-database counts; minimal returns counts only; "
-                "standard/full return every id."
+                "between get_protein_cross_references and resolve_identifiers). minimal "
+                "and compact cap each database at 25 ids and always report per-database "
+                "counts; compact adds a truncated_databases note; standard/full return "
+                "every id."
             ),
         },
         "recommended_workflows": [
             "accession -> get_protein -> get_protein_{sequence,features,variants,diseases}",
-            "gene_symbol + organism_taxon -> find_proteins -> get_protein",
+            "gene_symbol (+ organism_taxon) -> find_proteins -> get_protein",
             "several genes -> find_proteins_batch(gene_symbols=[...]) -> get_protein_features per hit",
-            "organism name -> get_taxon -> find_proteins(organism_taxon=...)",
+            "organism name -> get_taxon -> find_proteins(gene_symbol=..., organism_taxon=...)",
+            "non-gene search (EC / keyword / free text) -> search_example_queries -> search_sparql_query",
             "learn SPARQL -> search_example_queries -> get_example_query -> search_sparql_query",
         ],
+        # The closed fleet error_code enum (Response-Envelope Standard v1) -- every
+        # error_code is one of these six. (A malformed SPARQL query or an over-broad
+        # response is invalid_input; a query timeout is upstream_unavailable.)
         "error_codes": [
             "invalid_input",
             "not_found",
-            "query_syntax_error",
-            "query_timeout",
-            "rate_limited",
+            "ambiguous_query",
             "upstream_unavailable",
-            "internal_error",
+            "rate_limited",
+            "internal",
         ],
         "limits": {
             "default_select_limit": 50,
@@ -236,8 +239,10 @@ def build_capabilities() -> dict[str, Any]:
             "find_proteins_max_limit": 200,
             "cross_reference_compact_id_cap": 25,
             "server_query_timeout_minutes": 45,
-            "find_proteins_requires_anchor": (
-                "gene_symbol, mnemonic, ec_number, keyword, or organism_taxon+name_contains"
+            "find_proteins_requires_gene_symbol": (
+                "gene_symbol is required; refine with organism_taxon, reviewed, "
+                "name_contains, mnemonic, ec_number, or keyword. For EC/keyword/"
+                "free-text search without a gene, use search_sparql_query."
             ),
         },
         "notes": UNIPROT_REFERENCE_NOTES,

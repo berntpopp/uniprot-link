@@ -36,7 +36,23 @@ _IRIREF_AT_RE = re.compile(r"<[^<>\"{}|^`\\\x00-\x20]*>")
 _STRING_DELIMS = ('"""', "'''", '"', "'")
 _READ_OPS = {"SELECT", "ASK"}
 _WRITE_OPS = {"INSERT", "DELETE", "LOAD", "CLEAR", "CREATE", "DROP", "ADD", "MOVE", "COPY", "WITH"}
+_GRAPH_OPS = {"CONSTRUCT", "DESCRIBE"}
 _SERVICE_KEYWORD_RE = re.compile(r"(?<![\w?$:.-])service(?![\w?$:.-])", re.IGNORECASE)
+# "Invisible" leading run carrying no SPARQL meaning: ASCII/Unicode whitespace
+# (\s) PLUS the byte-order mark (U+FEFF) and the zero-width format chars a client
+# may prepend (ZWSP/ZWNJ/ZWJ/WORD-JOINER). Skipping it before the keyword stops a
+# BOM/zero-width prefix from desyncing this classifier from the endpoint (R-03: a
+# leading BOM+CONSTRUCT would otherwise read as an unknown token and slip the
+# graph-form reject). ``\s`` already covers Unicode Zs whitespace (e.g. NBSP).
+_LEADING_SKIP = r"[\s\ufeff\u200b\u200c\u200d\u2060]*"
+# The leading keyword extracted on a TOKEN BOUNDARY from the code-only view: the
+# optional invisible prefix, then a run of letters. ``SELECT*`` -> ``SELECT`` and
+# ``CONSTRUCT{`` -> ``CONSTRUCT`` (SPARQL needs no whitespace after the keyword),
+# where the old whitespace split produced ``SELECT*{?s`` and matched nothing.
+_LEADING_KEYWORD_RE = re.compile(_LEADING_SKIP + r"([A-Za-z]+)")
+# The ``prefix_name:`` token that follows ``PREFIX`` (its ``<iri>`` is already
+# blanked away in the code-only view): an optional PN_PREFIX then the colon.
+_PREFIX_NAME_RE = re.compile(_LEADING_SKIP + r"[A-Za-z0-9_.-]*:")
 # A UniProt cross-reference database key (e.g. PDB, HGNC, AlphaFoldDB): starts
 # alnum, then alnum/._- up to 64 chars total. Anything else -- notably an IRIREF
 # terminator (``>``, ``{``, whitespace) or a path/scheme separator (``/``, ``:``,
@@ -181,8 +197,13 @@ def _blank_noncode(query: str) -> str:
     while i < n:
         ch = query[i]
         if ch == "#":  # a comment runs to end of line
+            # SPARQL 1.1 §19.4: a comment is terminated by CR (#xD) OR LF (#xA)
+            # (and thus by CRLF). Stopping only on LF would let a lone ``\r`` blank
+            # the whole tail here while the endpoint still executes it after the CR
+            # -- resurrecting the F-08/R-03 operation-guard desync (a lone-CR
+            # ``# c\rSELECT*{ SERVICE ... }`` bypass).
             j = i
-            while j < n and query[j] != "\n":
+            while j < n and query[j] not in ("\n", "\r"):
                 out[j] = " "
                 j += 1
             i = j
@@ -225,22 +246,34 @@ def _leading_token(query: str) -> str:
 
     Detection runs on the IRI/string/comment-blanked view (:func:`_blank_noncode`),
     so a ``#`` inside a same-line ``<...#frag>`` prefix IRI is NEVER read as a
-    comment that swallows the query body (the F-08 bypass). Leading ``PREFIX`` and
-    ``BASE`` declarations are skipped -- their ``<...>`` IRI is already blanked to
-    whitespace in that view, so only the ``PREFIX``/``BASE`` keyword and the
+    comment that swallows the query body (the F-08 bypass). The keyword is matched
+    on a real TOKEN BOUNDARY (``^\\s*[A-Za-z]+`` against the code-only view), NOT
+    by splitting on whitespace: SPARQL allows no space between the leading keyword
+    and a following ``*``/``{``/``?``/``(``/``<``, so ``SELECT*{...}`` yields
+    ``SELECT`` (the old whitespace split produced ``SELECT*{?s`` and matched
+    neither the read-op nor the write/graph set -- the R-03 residual of F-08).
+    Leading ``PREFIX`` and ``BASE`` declarations are skipped -- their ``<...>`` IRI
+    is already blanked to whitespace in that view, so only the keyword and the
     prefix-name token remain to step over -- leaving the real query form. Returns
-    ``""`` when no token remains. Never raises; write-form rejection is
-    :func:`classify_sparql_operation`'s job.
+    ``""`` when no alphabetic keyword remains (e.g. the query opens with a brace):
+    an unknown form the caller treats fail-closed. Never raises; write-form
+    rejection is :func:`classify_sparql_operation`'s job.
     """
-    words = _blank_noncode(query).split()
-    i, n = 0, len(words)
-    while i < n:
-        word = words[i].upper()
-        if word == "PREFIX":  # ``PREFIX`` + ``<name>:`` token (IRI already blanked)
-            i += 2
+    view = _blank_noncode(query)
+    pos, n = 0, len(view)
+    while pos < n:
+        m = _LEADING_KEYWORD_RE.match(view, pos)
+        if not m:  # no keyword at this position (a symbol/brace) -> unknown form
+            return ""
+        word = m.group(1).upper()
+        if word == "PREFIX":  # step over ``PREFIX`` + the ``name:`` token
+            pos = m.end()
+            name = _PREFIX_NAME_RE.match(view, pos)
+            if name:
+                pos = name.end()
             continue
         if word == "BASE":  # ``BASE`` (its IRI is already blanked away)
-            i += 1
+            pos = m.end()
             continue
         return word
     return ""
@@ -286,31 +319,36 @@ def inject_limit(query: str, *, default: int, maximum: int) -> tuple[str, bool]:
 
 
 def classify_sparql_operation(query: str) -> str:
-    """Return the leading query form; raise InvalidInputError on UPDATE/write forms.
+    """Return the leading query form; raise InvalidInputError on UPDATE/write/graph forms.
 
     Detection keys on the first significant keyword after comments and PREFIX/BASE
     declarations (found on the IRI/string/comment-blanked view via
-    :func:`_leading_token`, so a ``#`` inside a same-line ``<...#frag>`` IRI is not
-    read as a comment), never a substring match anywhere — so a SELECT containing
-    the literal "insert" is unaffected. Unknown leading tokens pass through (the
-    endpoint will return a 400 -> query_syntax_error).
+    :func:`_leading_token`, on a TOKEN BOUNDARY so ``SELECT*``/``CONSTRUCT{`` are
+    classified, not just whitespace-delimited keywords), never a substring match
+    anywhere — so a SELECT containing the literal "insert" is unaffected. An
+    unknown leading token (``""``) is a query this guard cannot classify.
 
-    This is a UX guard (clean invalid_input vs opaque internal_error), not a
-    security boundary — the endpoint is read-only regardless.
+    Two enforced boundaries, both advertised in the ``search_sparql_query``
+    contract the router fingerprints:
+
+    * write/graph forms (INSERT/DELETE/.../CONSTRUCT/DESCRIBE) are rejected;
+    * SERVICE federation is rejected for read-form AND unknown queries alike
+      (**fail-closed**): a query this guard cannot classify must not fall through
+      to execute while carrying a clause that reaches arbitrary third-party
+      endpoints. The search runs on the code-only view, so SERVICE text in
+      literals, comments, and IRIs stays harmless.
+
+    Unknown non-federated tokens still pass through (the endpoint returns a 400 ->
+    invalid_input). Beyond this UX guard the endpoint is read-only regardless.
     """
     token = _leading_token(query)
-    if token in _READ_OPS:
-        # Federation lets a caller make this service reach arbitrary third-party
-        # endpoints. Search the code-only view so SERVICE text in literals,
-        # comments, and IRIs remains harmless.
-        if _SERVICE_KEYWORD_RE.search(_blank_noncode(query)):
-            raise InvalidInputError(
-                "SERVICE clauses are not allowed in SPARQL queries.", field="query"
-            )
-        return token
-    if token in _WRITE_OPS or token in {"CONSTRUCT", "DESCRIBE"}:
+    if token in _WRITE_OPS or token in _GRAPH_OPS:
         raise InvalidInputError(
             "read-only: only SELECT and ASK queries are allowed.",
             field="query",
         )
-    return token  # unknown -> let the endpoint return a 400 (query_syntax_error)
+    # Fail-closed on unknown: run the federation reject for every read-form OR
+    # unclassifiable query, not only an exact SELECT/ASK match (R-03).
+    if _SERVICE_KEYWORD_RE.search(_blank_noncode(query)):
+        raise InvalidInputError("SERVICE clauses are not allowed in SPARQL queries.", field="query")
+    return token  # SELECT/ASK, or an unknown form the endpoint will 400 on

@@ -51,16 +51,33 @@ def find_proteins(
     filters: list[str] = []
     strong = False
 
-    if gene:
-        g = escape_literal(gene.strip())
+    if gene is not None:
+        # gene_symbol is REQUIRED at the tool layer, but pydantic admits a blank /
+        # whitespace-only string. Reject it here (named field) rather than splicing
+        # an empty prefLabel that matches nothing with success:true (#30 review).
+        gene_stripped = gene.strip()
+        if not gene_stripped:
+            raise InvalidInputError(
+                "gene_symbol must not be blank (e.g. BRCA1).", field="gene_symbol"
+            )
+        g = escape_literal(gene_stripped)
         filters.append(
             f"  ?protein up:encodedBy ?_gene .\n"
             f'  {{ ?_gene skos:prefLabel "{g}" }} UNION {{ ?_gene skos:altLabel "{g}" }}'
         )
         strong = True
     if mnemonic:
-        m = escape_literal(mnemonic.strip().upper())
-        filters.append(f'  ?protein up:mnemonic "{m}" .')
+        # A UniProtKB entry name is ``NAME_SPECIES`` (e.g. BRCA1_HUMAN). Reject a
+        # malformed value with a named invalid_input rather than splicing it in to
+        # silently match nothing (the silently-empty filter defect).
+        raw_mnemonic = mnemonic.strip().upper()
+        if not re.match(r"^[0-9A-Z]+_[0-9A-Z]+$", raw_mnemonic):
+            raise InvalidInputError(
+                f"'{mnemonic}' is not a valid UniProtKB entry mnemonic "
+                "(NAME_SPECIES, e.g. BRCA1_HUMAN).",
+                field="mnemonic",
+            )
+        filters.append(f'  ?protein up:mnemonic "{escape_literal(raw_mnemonic)}" .')
         strong = True
     if ec_number:
         ec = ec_number.strip()
@@ -69,8 +86,8 @@ def find_proteins(
         filters.append(f"  ?protein up:enzyme <http://purl.uniprot.org/enzyme/{ec}> .")
         strong = True
     if keyword:
-        kw = escape_literal(keyword.strip())
-        kw_match = re.match(r"^KW-?(\d+)$", keyword.strip(), re.IGNORECASE)
+        kw_raw = keyword.strip()
+        kw_match = re.match(r"^KW-?(\d+)$", kw_raw, re.IGNORECASE)
         if kw_match:
             # Keyword IRIs use the integer id with leading zeros stripped:
             # KW-0007 (Acetylation) -> .../keywords/7.
@@ -78,8 +95,19 @@ def find_proteins(
             filters.append(
                 f"  ?protein up:classifiedWith <http://purl.uniprot.org/keywords/{kw_id}> ."
             )
+        elif re.match(r"^[0-9A-Za-z][0-9A-Za-z '(),./+-]*$", kw_raw):
+            # A keyword label (e.g. "3D-structure", "Zinc-finger"). A value that is
+            # neither a KW-id nor a well-formed label (leading punctuation / control
+            # chars) is rejected, not spliced in to silently match nothing.
+            filters.append(
+                f'  ?protein up:classifiedWith ?_kw . ?_kw skos:prefLabel "{escape_literal(kw_raw)}" .'
+            )
         else:
-            filters.append(f'  ?protein up:classifiedWith ?_kw . ?_kw skos:prefLabel "{kw}" .')
+            raise InvalidInputError(
+                f"'{keyword}' is not a valid UniProt keyword "
+                "(a KW-id like KW-0007, or a keyword label like 'Acetylation').",
+                field="keyword",
+            )
         strong = True
     if organism_taxon is not None:
         tid = validate_taxon(organism_taxon)

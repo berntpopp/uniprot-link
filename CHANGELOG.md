@@ -6,6 +6,88 @@ versioning.
 
 ## [Unreleased]
 
+## [5.0.0] - 2026-07-15
+
+Security fix for the SPARQL operation-guard bypass (#29) plus the fleet MCP
+contract-hardening sweep, together. Major because the error-code wire values
+change, `find_proteins` now requires `gene_symbol`, and `outputSchema` is dropped.
+
+### Security
+
+- **The SPARQL operation guard no longer falls open to a no-whitespace leading
+  keyword (#29, R-03 / F-08 residual).** `_leading_token` split the query on
+  whitespace, so `SELECT*{...}` tokenised as `SELECT*{?s` and matched neither the
+  read-op set nor the write/graph set — defeating the auto-LIMIT injection, the
+  `SERVICE`-federation reject, and the `CONSTRUCT`/`DESCRIBE` reject all at once.
+  The keyword is now extracted on a real **token boundary** (`^\s*[A-Za-z]+`, skipping
+  a leading BOM / zero-width / Unicode-whitespace run) against the comment/string/IRI
+  blanked view, so `SELECT*` → `SELECT` and `CONSTRUCT{` → `CONSTRUCT`. The
+  `SERVICE` reject now runs for read-form **and unknown** queries (**fail-closed**):
+  a query the guard cannot classify can no longer fall through to execute while
+  carrying a federation clause. Bounded before by the #16/#17 caps, so contained,
+  but the advertised `search_sparql_query` contract is now actually enforced. This
+  changes no MCP tool contract (name/description/schema/annotations), so **no router
+  drift-baseline recapture** is needed for it.
+- **A `#` comment now terminates on CR as well as LF** (`_blank_noncode`, SPARQL 1.1
+  §19.4). It previously stopped only on `\n`, so a lone `\r` (`# c\rSELECT*{ SERVICE
+  … }`) blanked the whole tail in the guard's view while the endpoint still executed
+  it after the CR — the same operation-guard desync, via a carriage return. Re-audited
+  the blanker against block-comment, `SER/**/VICE`, literal/IRI-decoy, and preamble-CR
+  vectors.
+
+### Changed (breaking)
+
+- **`error_code` is closed to the fleet six-value enum** (Response-Envelope v1):
+  `invalid_input`, `not_found`, `ambiguous_query`, `upstream_unavailable`,
+  `rate_limited`, `internal`. UniProt's finer codes map onto it —
+  `query_syntax_error` and `limit_exceeded` → `invalid_input`, `query_timeout` →
+  `upstream_unavailable`, `internal_error` → `internal`. A client branching on the
+  old codes must update.
+- **`find_proteins` now requires `gene_symbol`.** Its schema previously advertised
+  every filter as optional while the runtime refused an anchorless call — a schema
+  more permissive than the runtime (the harmful direction). It is now a gene-centric
+  search; EC-only, keyword-only, mnemonic-only, and organism-only searches move to
+  `search_sparql_query` / `search_example_queries` (the documented escape hatches).
+- **`outputSchema` is suppressed on every tool** (Tool-Surface Budget v1). It was
+  ~39% of the advertised surface (8,578t → 5,595t), is optional in MCP, and no model
+  reads it. `structuredContent` is unaffected — FastMCP still emits it for every dict
+  envelope — and this also removed a latent bug where a null `query_text` failed the
+  declared output schema and the not-found backstop masked it as "tool not available".
+
+### Fixed
+
+- **Every error envelope now sets MCP `isError: true`** (Response-Envelope v1). A
+  returned dict envelope (`success:false`) was wrapped by FastMCP with
+  `isError:false`, so a client branching on `isError` saw the failure as a
+  successful call. The dispatch middleware now promotes any error envelope, and the
+  arg-validation and unknown-tool results set it directly.
+- **`get_protein_cross_references` / `resolve_identifiers` at `response_mode=minimal`
+  no longer discard the id collection** — the ids ARE the stable identifiers minimal
+  must retain — and a capped view now declares `has_more` so a partial page is never
+  read as complete.
+- **`find_proteins` rejects a malformed `mnemonic` or `keyword`** with a named
+  `invalid_input` instead of splicing it into the query to silently match nothing.
+- **`find_proteins` rejects a blank/whitespace `gene_symbol`** (named `gene_symbol`)
+  instead of splicing an empty `prefLabel` that matched nothing with `success:true`.
+- **The not-found backstop no longer masks a KNOWN tool's dispatch fault as
+  `not_found`.** A registered tool whose raw dispatch raised now returns `internal`
+  (name never reflected); only a genuinely unknown name gets `not_found` — masking a
+  real tool as not_found told the model the tool did not exist.
+- **`error_code` is clamped to the closed enum at the emit boundary**, so a stray
+  value can never reach the wire; discovery/instructions advertise the full six-value
+  enum and no longer claim tools publish `outputSchema`.
+
+### Documentation
+
+- Every input property already carried a description; every **required** and
+  **array** parameter now also carries `examples`, and the `feature_types` closed
+  vocabulary is declared as a schema enum (Tool-Schema Documentation v1). This makes
+  the fleet behaviour gate report **0 UNGATED** tools.
+- `FastMCP(dereference_schemas=False)` (surface amplifier off).
+- Vendored the Behaviour Conformance v1 gate (`tests/conformance/behaviour.py` +
+  `test_behaviour_v1.py`, byte-identical from the router) and wired the behaviour
+  probe into `conformance.yml`. The gate is CONFORMANT: 0 fail, 0 UNGATED.
+
 ## [4.0.3] - 2026-07-14
 
 ### Changed

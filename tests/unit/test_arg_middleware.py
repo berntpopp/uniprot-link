@@ -23,7 +23,8 @@ def _structured(result: Any) -> dict[str, Any]:
 async def test_wrong_keyword_routes_through_envelope() -> None:
     mcp = create_uniprot_mcp()
     # `bogus_arg` is neither a real param nor a known alias -> pure routing case.
-    result = await mcp.call_tool("find_proteins", {"bogus_arg": "9606"})
+    # gene_symbol (now required) is supplied so the ONLY error is the unknown arg.
+    result = await mcp.call_tool("find_proteins", {"gene_symbol": "BRCA1", "bogus_arg": "9606"})
     env = _structured(result)
     assert env["success"] is False
     assert env["error_code"] == "invalid_input"
@@ -38,14 +39,18 @@ async def test_wrong_keyword_routes_through_envelope() -> None:
 @pytest.mark.asyncio
 async def test_non_alias_near_miss_gets_did_you_mean() -> None:
     mcp = create_uniprot_mcp()
-    env = _structured(await mcp.call_tool("find_proteins", {"organism_taxa": "9606"}))
+    env = _structured(
+        await mcp.call_tool("find_proteins", {"gene_symbol": "BRCA1", "organism_taxa": "9606"})
+    )
     assert "organism_taxon" in env["message"]
 
 
 @pytest.mark.asyncio
 async def test_wrong_type_routes_through_envelope() -> None:
     mcp = create_uniprot_mcp()
-    env = _structured(await mcp.call_tool("find_proteins", {"organism_taxon": "notanint"}))
+    env = _structured(
+        await mcp.call_tool("find_proteins", {"gene_symbol": "BRCA1", "organism_taxon": "notanint"})
+    )
     assert env["error_code"] == "invalid_input"
     assert env["field"] == "organism_taxon"
 
@@ -103,7 +108,9 @@ async def test_invalid_result_format_returns_valid_values() -> None:
 async def test_unknown_argument_name_still_lists_names() -> None:
     """Regression: a wrong NAME still lists argument names (the other category)."""
     mcp = create_uniprot_mcp()
-    env = _structured(await mcp.call_tool("find_proteins", {"bogus_arg": "9606"}))
+    env = _structured(
+        await mcp.call_tool("find_proteins", {"gene_symbol": "BRCA1", "bogus_arg": "9606"})
+    )
     assert env["field"] == "bogus_arg"
     assert "organism_taxon" in env["allowed_values"]
     assert "argument names" in env["message"]

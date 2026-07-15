@@ -737,7 +737,11 @@ async def test_cross_references_lean_compact_and_minimal(service_factory: Any) -
     assert len(compact["by_database"]["PDB"]) == 25  # capped
     assert compact["truncated_databases"]["PDB"] == {"returned": 25, "total": 40}
     minimal = await svc.get_cross_references("P05067", response_mode="minimal")
-    assert "by_database" not in minimal
+    # minimal retains the id collection (capped), never destroys it: the ids ARE
+    # the stable identifiers Response-Envelope v1 requires minimal to keep. It only
+    # drops the truncated_databases cap-flag (compact keeps that).
+    assert len(minimal["by_database"]["PDB"]) == 25  # capped, still present
+    assert "truncated_databases" not in minimal
     assert minimal["counts"]["PDB"] == 40
     full = await svc.get_cross_references("P05067", response_mode="full")
     assert len(full["by_database"]["PDB"]) == 40  # all ids
@@ -992,7 +996,7 @@ async def test_search_sparql_query_error_offers_examples_fallback() -> None:
         context=McpErrorContext("search_sparql_query", fallback=cmd("search_example_queries")),
     )
     assert env["success"] is False
-    assert env["error_code"] == "query_syntax_error"
+    assert env["error_code"] == "invalid_input"
     assert any(c["tool"] == "search_example_queries" for c in env["_meta"]["next_commands"])
 
 

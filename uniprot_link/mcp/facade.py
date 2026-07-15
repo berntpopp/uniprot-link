@@ -34,6 +34,11 @@ def create_uniprot_mcp() -> FastMCP:
         version=__version__,
         instructions=UNIPROT_SERVER_INSTRUCTIONS,
         mask_error_details=True,
+        # Tool-Surface Budget v1: do NOT inline $defs/$ref at every use site (the
+        # constructor defaults this True and appends DereferenceRefsMiddleware).
+        # Safe -- no input schema here carries a $ref -- and part of trimming the
+        # advertised surface alongside per-tool output_schema=None.
+        dereference_schemas=False,
     )
 
     # FastMCP-core not-found reflection guard: core echoes the caller's OWN
