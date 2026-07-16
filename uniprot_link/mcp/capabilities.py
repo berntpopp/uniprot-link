@@ -52,6 +52,7 @@ _SUMMARY_KEYS: tuple[str, ...] = (
     "tool_count",
     "response_modes",
     "default_response_mode",
+    "response_mode_defaults",
     "recommended_workflows",
     "error_codes",
     "limits",
@@ -100,7 +101,18 @@ def build_capabilities() -> dict[str, Any]:
         "common_xref_databases": COMMON_XREF_DATABASES,
         "map_identifier_databases": MAP_IDENTIFIER_DATABASES,
         "response_modes": list(RESPONSE_MODES),
-        "default_response_mode": "compact",
+        "default_response_mode": "per_tool",
+        "response_mode_defaults": {
+            "get_protein": "compact",
+            "get_protein_sequence": "compact",
+            # New annotation modes preserve their historical full records unless
+            # requested explicitly; compact/minimal remove repeated fenced prose.
+            "get_protein_features": "standard",
+            "get_protein_variants": "standard",
+            "get_protein_diseases": "standard",
+            "get_protein_cross_references": "compact",
+            "resolve_identifiers": "compact",
+        },
         "provenance_policy": (
             "Static provenance (research-use restriction, citation, UniProt "
             "release) is declared here and applies to ALL tool outputs; it is "

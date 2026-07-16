@@ -6,17 +6,34 @@ versioning.
 
 ## [Unreleased]
 
-### Changed
-
-- Re-vendored the behaviour conformance gate from genefoundry-router `56db958`
-  (`docs/conformance/behaviour.py` blob `c69801687`) so live MCP contract checks
-  treat not-found example probes as inconclusive and keep empty auxiliary objects from hiding counted rows.
-
 ## [5.0.0] - 2026-07-15
 
 Security fix for the SPARQL operation-guard bypass (#29) plus the fleet MCP
 contract-hardening sweep, together. Major because the error-code wire values
 change, `find_proteins` now requires `gene_symbol`, and `outputSchema` is dropped.
+
+### Fixed
+
+- **Close the remaining source-level defects from audit #28.**
+  `get_protein_features` no longer advertises the impossible `dna_binding` filter:
+  UniProt RDF does not expose `DNA_Binding_Annotation` records, so legacy requests
+  now receive named `invalid_input` with an upstream-availability hint instead of a
+  silent zero. `get_protein_features`, `get_protein_variants`, and
+  `get_protein_diseases` now expose opt-in `response_mode=compact|minimal` records
+  that omit repeated fenced curator prose and its provenance/hash envelope while
+  retaining stable positions or identifiers. Their default remains `standard` to
+  preserve existing no-argument output.
+- **Record the audit crash/error closure accurately.** The source already contains
+  v5.0.0's output-schema removal (the root cause of the default annotation-call
+  serialization failure) and the registered-tool dispatch guard that maps any
+  remaining raw failure to `internal`, never `not_found`; focused facade regression
+  coverage now exercises default feature and variant calls.
+
+### Changed
+
+- Re-vendored the behaviour conformance gate from genefoundry-router `56db958`
+  (`docs/conformance/behaviour.py` blob `c69801687`) so live MCP contract checks
+  treat not-found example probes as inconclusive and keep empty auxiliary objects from hiding counted rows.
 
 ### Security
 

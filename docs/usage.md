@@ -65,6 +65,18 @@ example queries, backed by the upstream `sparql-examples` graph
 (`https://sparql.uniprot.org/.well-known/sparql-examples`). They are the fastest way to
 learn the data model without guessing IRIs.
 
+## Annotation response modes
+
+`get_protein_features`, `get_protein_variants`, and `get_protein_diseases` preserve
+their historical complete records by default (`response_mode="standard"`). Use
+`response_mode="compact"` to retain positional/identifier fields while omitting
+curator free text and its repeated untrusted-content provenance; use `minimal` for
+the smallest stable-record projection. `full` is an alias for `standard`.
+
+UniProt RDF does not publish `DNA_Binding_Annotation` records, so `dna_binding` is
+not an accepted `feature_types` value. A legacy request receives a named
+`invalid_input` error explaining that source limitation rather than a silent zero.
+
 ## search_sparql_query notes
 
 - `result_format`: `json` (SELECT/ASK), or `csv`/`tsv`/`xml` for SELECT results.

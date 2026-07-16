@@ -36,7 +36,7 @@ _ACC = Annotated[
 
 ResponseMode = Annotated[
     Literal["minimal", "compact", "standard", "full"],
-    Field(description="Verbosity: minimal | compact | standard | full (default compact)."),
+    Field(description="Verbosity: minimal | compact | standard | full."),
 ]
 
 
@@ -296,9 +296,12 @@ def _register_sequence_and_features(mcp: FastMCP) -> None:
             "accepted keys as a filter_hint. Secondary-structure features "
             "(helix/strand/turn) are hidden by default and disclosed under "
             "excluded_secondary_structure; set include_secondary_structure=true (or "
-            "name them in feature_types) to return them. "
+            "name them in feature_types) to return them. DNA-binding extents are not "
+            "available from UniProt RDF, so dna_binding is deliberately not a filter. "
+            "response_mode=compact/minimal drops repeated fenced descriptions; standard "
+            "(default) preserves existing full records. "
             "Signature: get_protein_features(accession, feature_types=, limit=, "
-            "include_secondary_structure=)."
+            "include_secondary_structure=, response_mode=)."
         ),
     )
     async def get_protein_features(
@@ -325,10 +328,15 @@ def _register_sequence_and_features(mcp: FastMCP) -> None:
             bool,
             Field(description="Include helix/strand/turn features (hidden by default)."),
         ] = False,
+        response_mode: ResponseMode = "standard",
     ) -> dict[str, Any]:
         async def call() -> dict[str, Any]:
             payload = await get_sparql_service().get_features(
-                accession, feature_types, limit, include_secondary_structure
+                accession,
+                feature_types,
+                limit,
+                include_secondary_structure,
+                response_mode,
             )
             nxt = after_entry_subresource(
                 payload["accession"], "get_protein_features", count=payload.get("count")
@@ -358,7 +366,10 @@ def _register_annotations(mcp: FastMCP) -> None:
             "`L176F`) for simple substitutions, `variant_type` (substitution|other), "
             "free-text description, structured linked `diseases`, and `dbsnp` rsIDs. "
             "Set disease_associated_only=true to keep only disease-linked variants. "
-            "Signature: get_protein_variants(accession, limit=, disease_associated_only=)."
+            "response_mode=compact/minimal drops the repeated free-text provenance; "
+            "standard (default) preserves the existing full records. "
+            "Signature: get_protein_variants(accession, limit=, disease_associated_only=, "
+            "response_mode=)."
         ),
     )
     async def get_protein_variants(
@@ -367,10 +378,11 @@ def _register_annotations(mcp: FastMCP) -> None:
         disease_associated_only: Annotated[
             bool, Field(description="Return only variants linked to a disease.")
         ] = False,
+        response_mode: ResponseMode = "standard",
     ) -> dict[str, Any]:
         async def call() -> dict[str, Any]:
             payload = await get_sparql_service().get_variants(
-                accession, limit, disease_associated_only
+                accession, limit, disease_associated_only, response_mode
             )
             payload["_meta"] = {
                 "next_commands": after_entry_subresource(
@@ -394,13 +406,16 @@ def _register_annotations(mcp: FastMCP) -> None:
             "UniProt disease id, mnemonic, MIM id, the clinical `definition` (the "
             "disease vocabulary's own description), and `involvement` (the "
             "entry-specific note). Pairs with get_protein_variants for "
-            "variant-level disease evidence. "
-            "Signature: get_protein_diseases(accession)."
+            "variant-level disease evidence. response_mode=compact/minimal drops "
+            "the free-text definition/involvement; standard (default) preserves them. "
+            "Signature: get_protein_diseases(accession, response_mode=)."
         ),
     )
-    async def get_protein_diseases(accession: _ACC) -> dict[str, Any]:
+    async def get_protein_diseases(
+        accession: _ACC, response_mode: ResponseMode = "standard"
+    ) -> dict[str, Any]:
         async def call() -> dict[str, Any]:
-            payload = await get_sparql_service().get_diseases(accession)
+            payload = await get_sparql_service().get_diseases(accession, response_mode)
             payload["_meta"] = {
                 "next_commands": after_entry_subresource(
                     payload["accession"], "get_protein_diseases", count=payload.get("count")

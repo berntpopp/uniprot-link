@@ -17,6 +17,13 @@ from uniprot_link.services.queries.validation import (
     validate_taxon,
 )
 
+_UNAVAILABLE_FEATURE_TYPE_HINTS = {
+    "dna_binding": (
+        "'dna_binding' is not available from UniProt RDF: the source does not publish "
+        "DNA_Binding_Annotation records, so this filter cannot truthfully answer a zero-match."
+    )
+}
+
 
 def find_proteins(
     *,
@@ -293,16 +300,22 @@ def protein_features(
     if feature_types:
         classes: list[str] = []
         for ft in feature_types:
-            cls = FEATURE_TYPES.get(ft.strip().lower())
+            normalized = ft.strip().lower()
+            cls = FEATURE_TYPES.get(normalized)
             if cls is None:
+                hint = _UNAVAILABLE_FEATURE_TYPE_HINTS.get(normalized)
                 # The full allowed list goes in the structured `allowed` field,
                 # never the (length-capped) message — so it can never truncate.
                 raise InvalidInputError(
-                    f"Unknown feature type '{ft}'. See allowed_values "
-                    "or call get_server_capabilities (feature_types).",
+                    (
+                        f"Feature type '{ft}' is unavailable from this source."
+                        if hint
+                        else f"Unknown feature type '{ft}'. See allowed_values "
+                        "or call get_server_capabilities (feature_types)."
+                    ),
                     field="feature_types",
                     allowed=sorted(FEATURE_TYPES),
-                    hint="feature_types keys are listed in get_server_capabilities.",
+                    hint=hint or "feature_types keys are listed in get_server_capabilities.",
                 )
             classes.append(f"up:{cls}")
         type_block = f"  VALUES ?type {{ {' '.join(classes)} }}\n  ?a a ?type .\n"
