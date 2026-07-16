@@ -35,6 +35,48 @@ _UNTRUSTED_SOURCE = "uniprot"
 # limits remain the real DoS backstop (10000 real descriptions hit 8 MiB first).
 _MAX_UNTRUSTED_OBJECTS = 10_000
 
+_ANNOTATION_FIELDS: dict[str, dict[str, tuple[str, ...]]] = {
+    "features": {
+        "compact": ("type", "begin", "end"),
+        "minimal": ("type", "begin", "end"),
+    },
+    "variants": {
+        "compact": (
+            "begin",
+            "end",
+            "wild_type",
+            "substitution",
+            "notation",
+            "variant_type",
+            "diseases",
+            "dbsnp",
+        ),
+        "minimal": ("begin", "end", "notation", "variant_type", "dbsnp"),
+    },
+    "diseases": {
+        "compact": ("disease", "disease_id", "mnemonic", "mim"),
+        "minimal": ("disease", "disease_id", "mim"),
+    },
+}
+
+
+def project_annotation_records(
+    records: list[dict[str, Any]], *, kind: str, mode: str
+) -> list[dict[str, Any]]:
+    """Project high-volume annotations without dropping their stable record identity.
+
+    ``standard`` and ``full`` retain the prior complete records. ``compact``
+    removes only fenced curator prose (and its repeated provenance/hash frame);
+    ``minimal`` retains each record's position or stable identifiers so it cannot
+    turn a non-empty result into a misleading empty list.
+    """
+    if mode in {"standard", "full"}:
+        return records
+    fields = _ANNOTATION_FIELDS[kind][mode]
+    return [
+        {field: value for field, value in record.items() if field in fields} for record in records
+    ]
+
 
 def shape_features(result_json: dict[str, Any] | None, accession: str) -> list[dict[str, Any]]:
     """Shape feature rows; emit only filterable `type` keys (Bug 1).

@@ -23,8 +23,18 @@ def test_capabilities_advertises_response_modes_and_contracts() -> None:
     cap = build_capabilities()
     assert cap["server_version"] == __version__
     assert cap["response_modes"] == ["minimal", "compact", "standard", "full"]
-    assert cap["default_response_mode"] == "compact"
+    assert cap["default_response_mode"] == "per_tool"
+    assert cap["response_mode_defaults"] == {
+        "get_protein": "compact",
+        "get_protein_sequence": "compact",
+        "get_protein_features": "standard",
+        "get_protein_variants": "standard",
+        "get_protein_diseases": "standard",
+        "get_protein_cross_references": "compact",
+        "resolve_identifiers": "compact",
+    }
     assert "domain" in cap["feature_types"]
+    assert "dna_binding" not in cap["feature_types"]
     # Bug 1: the dump-emitted classes now round-trip into the filter vocabulary.
     assert "natural_variant" in cap["feature_types"]
     assert "alternative_sequence" in cap["feature_types"]

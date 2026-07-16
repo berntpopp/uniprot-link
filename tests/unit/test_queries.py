@@ -503,6 +503,19 @@ class TestProteinQueries:
         assert "domain, " not in e.message
         assert len(e.message) < 200
 
+    def test_dna_binding_is_rejected_as_unavailable_from_uniprot_rdf(self) -> None:
+        """Do not advertise a filter whose RDF class is absent upstream (#28)."""
+        from uniprot_link.services.constants import FEATURE_TYPES
+
+        assert "dna_binding" not in FEATURE_TYPES
+        with pytest.raises(InvalidInputError) as exc:
+            q.protein_features("P26367", ["dna_binding"])
+        assert exc.value.field == "feature_types"
+        assert exc.value.allowed is not None
+        assert "dna_binding" not in exc.value.allowed
+        assert exc.value.hint is not None
+        assert "not available from UniProt RDF" in exc.value.hint
+
     def test_features_filter_uses_bound_values_join(self) -> None:
         # VALUES binds ?type first (fast); the slow FILTER(?type IN ...) is gone
         query = q.protein_features("P05067", ["domain"])

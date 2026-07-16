@@ -235,7 +235,6 @@ FEATURE_TYPES: dict[str, str] = {
     "compositional_bias": "Compositional_Bias_Annotation",
     "repeat": "Repeat_Annotation",
     "zinc_finger": "Zinc_Finger_Annotation",
-    "dna_binding": "DNA_Binding_Annotation",
     "np_binding": "Nucleotide_Binding_Annotation",
     "beta_strand": "Beta_Strand_Annotation",
     "helix": "Helix_Annotation",

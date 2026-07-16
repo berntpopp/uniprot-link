@@ -39,6 +39,7 @@ from uniprot_link.services.service_taxonomy import TaxonomyServiceMixin
 # et al. as an unexported attribute (mirrors service_taxonomy.py's direct import).
 from uniprot_link.services.shaping_annotations import (
     enforce_emitted_feature_limits,
+    project_annotation_records,
     shape_diseases,
     shape_features,
     shape_variants,
@@ -300,6 +301,7 @@ class SparqlService(FindProteinsServiceMixin, TaxonomyServiceMixin):
         feature_types: list[str] | None = None,
         limit: int = 200,
         include_secondary_structure: bool = False,
+        response_mode: str = "standard",
     ) -> dict[str, Any]:
         """Return sequence features with coordinates (token-lean via limit)."""
         display_limit = Q.clamp_limit(limit, default=200, maximum=1000)
@@ -371,10 +373,23 @@ class SparqlService(FindProteinsServiceMixin, TaxonomyServiceMixin):
                     "arguments": {"accession": acc, "feature_types": ["domain", "region"]},
                 },
             }
-        return attach_isoform_context(payload, accession, acc)
+        return attach_isoform_context(
+            {
+                **payload,
+                "features": project_annotation_records(
+                    features, kind="features", mode=response_mode
+                ),
+            },
+            accession,
+            acc,
+        )
 
     async def get_variants(
-        self, accession: str, limit: int = 200, disease_associated_only: bool = False
+        self,
+        accession: str,
+        limit: int = 200,
+        disease_associated_only: bool = False,
+        response_mode: str = "standard",
     ) -> dict[str, Any]:
         """Return natural-variant annotations."""
         limit = Q.clamp_limit(limit, default=200, maximum=2000)
@@ -403,9 +418,18 @@ class SparqlService(FindProteinsServiceMixin, TaxonomyServiceMixin):
                 "recovery": "raise `limit`, or set disease_associated_only=true to focus on "
                 "disease-linked variants.",
             }
-        return attach_isoform_context(payload, accession, acc)
+        return attach_isoform_context(
+            {
+                **payload,
+                "variants": project_annotation_records(
+                    variants, kind="variants", mode=response_mode
+                ),
+            },
+            accession,
+            acc,
+        )
 
-    async def get_diseases(self, accession: str) -> dict[str, Any]:
+    async def get_diseases(self, accession: str, response_mode: str = "standard") -> dict[str, Any]:
         """Return disease annotations."""
         query = Q.protein_diseases(accession)
         _, (data_json, qmeta) = await asyncio.gather(
@@ -414,7 +438,14 @@ class SparqlService(FindProteinsServiceMixin, TaxonomyServiceMixin):
         acc = Q.validate_accession(accession).split("-")[0]
         diseases = shape_diseases(data_json, acc)
         return attach_isoform_context(
-            {"accession": acc, "count": len(diseases), "diseases": diseases, **qmeta},
+            {
+                "accession": acc,
+                "count": len(diseases),
+                "diseases": project_annotation_records(
+                    diseases, kind="diseases", mode=response_mode
+                ),
+                **qmeta,
+            },
             accession,
             acc,
         )

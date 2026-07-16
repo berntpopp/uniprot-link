@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import pytest
+
 from tests.conftest import make_select_json
 from uniprot_link.services import shaping as S
 
@@ -79,6 +81,89 @@ def test_shape_features_round_trips_type_to_filter_key() -> None:
     out = S.shape_features(body, "P05067")
     assert out[0]["type"] == "domain"  # round-trips to the filter key
     assert out[0]["begin"] == 1642
+
+
+@pytest.mark.parametrize(
+    ("kind", "records", "compact", "minimal"),
+    [
+        (
+            "features",
+            [
+                {
+                    "type": "domain",
+                    "begin": 4,
+                    "end": 130,
+                    "description": {"kind": "untrusted_text", "text": "Paired"},
+                }
+            ],
+            [{"type": "domain", "begin": 4, "end": 130}],
+            [{"type": "domain", "begin": 4, "end": 130}],
+        ),
+        (
+            "variants",
+            [
+                {
+                    "begin": 176,
+                    "end": 176,
+                    "wild_type": "L",
+                    "substitution": "F",
+                    "notation": "L176F",
+                    "variant_type": "substitution",
+                    "diseases": ["Example disease"],
+                    "dbsnp": "rs1",
+                    "description": {"kind": "untrusted_text", "text": "Long prose"},
+                }
+            ],
+            [
+                {
+                    "begin": 176,
+                    "end": 176,
+                    "wild_type": "L",
+                    "substitution": "F",
+                    "notation": "L176F",
+                    "variant_type": "substitution",
+                    "diseases": ["Example disease"],
+                    "dbsnp": "rs1",
+                }
+            ],
+            [
+                {
+                    "begin": 176,
+                    "end": 176,
+                    "notation": "L176F",
+                    "variant_type": "substitution",
+                    "dbsnp": "rs1",
+                }
+            ],
+        ),
+        (
+            "diseases",
+            [
+                {
+                    "disease": "Ataxia",
+                    "disease_id": "123",
+                    "mnemonic": "AOA4",
+                    "mim": "616267",
+                    "definition": {"kind": "untrusted_text", "text": "Long definition"},
+                    "involvement": {"kind": "untrusted_text", "text": "Long involvement"},
+                }
+            ],
+            [{"disease": "Ataxia", "disease_id": "123", "mnemonic": "AOA4", "mim": "616267"}],
+            [{"disease": "Ataxia", "disease_id": "123", "mim": "616267"}],
+        ),
+    ],
+)
+def test_project_annotation_records_compacts_free_text(
+    kind: str,
+    records: list[dict[str, object]],
+    compact: list[dict[str, object]],
+    minimal: list[dict[str, object]],
+) -> None:
+    """Compact/minimal retain actionable records without repeated fenced prose (#28)."""
+    assert S.project_annotation_records(records, kind=kind, mode="standard") == records
+    assert S.project_annotation_records(records, kind=kind, mode="full") == records
+    assert S.project_annotation_records(records, kind=kind, mode="compact") == compact
+    assert S.project_annotation_records(records, kind=kind, mode="minimal") == minimal
 
 
 def test_shape_variants_merges_diseases() -> None:

@@ -33,6 +33,102 @@ _ACTIVE_STATUS = make_select_json(["obsolete"], [{"obsolete": False}])
 
 
 @pytest.mark.asyncio
+async def test_high_volume_annotation_tools_expose_response_mode() -> None:
+    """The three high-volume annotation tools offer explicit lean projections (#28)."""
+    from uniprot_link.mcp.facade import create_uniprot_mcp
+
+    mcp = create_uniprot_mcp()
+    for name in ("get_protein_features", "get_protein_variants", "get_protein_diseases"):
+        tool = await mcp.get_tool(name)
+        assert tool is not None
+        response_mode = tool.parameters["properties"]["response_mode"]
+        assert response_mode["default"] == "standard"
+        assert response_mode["enum"] == ["minimal", "compact", "standard", "full"]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("method", "args", "route", "collection", "prose_fields"),
+    [
+        (
+            "get_features",
+            ("P05067",),
+            (
+                "up:range",
+                make_select_json(
+                    ["type", "begin", "end", "comment"],
+                    [
+                        {
+                            "type": "http://purl.uniprot.org/core/Domain_Extent_Annotation",
+                            "begin": 4,
+                            "end": 130,
+                            "comment": "Paired",
+                        }
+                    ],
+                ),
+            ),
+            "features",
+            {"description"},
+        ),
+        (
+            "get_variants",
+            ("P05067",),
+            (
+                "Natural_Variant_Annotation",
+                make_select_json(
+                    ["begin", "end", "substitution", "comment", "disease"],
+                    [
+                        {
+                            "begin": 176,
+                            "end": 176,
+                            "substitution": "F",
+                            "comment": "Long prose",
+                            "disease": "Example disease",
+                        }
+                    ],
+                ),
+            ),
+            "variants",
+            {"description"},
+        ),
+        (
+            "get_diseases",
+            ("P05067",),
+            (
+                "Disease_Annotation",
+                make_select_json(
+                    ["disease", "diseaseLabel", "comment", "definition"],
+                    [
+                        {
+                            "disease": "http://purl.uniprot.org/diseases/123",
+                            "diseaseLabel": "Example disease",
+                            "comment": "Long involvement",
+                            "definition": "Long definition",
+                        }
+                    ],
+                ),
+            ),
+            "diseases",
+            {"definition", "involvement"},
+        ),
+    ],
+)
+async def test_annotation_compact_mode_omits_repeated_fenced_prose(
+    service_factory: Any,
+    method: str,
+    args: tuple[str],
+    route: tuple[str, dict[str, Any]],
+    collection: str,
+    prose_fields: set[str],
+) -> None:
+    """Compact modes retain records while omitting their repeated text envelopes (#28)."""
+    svc = service_factory([("up:obsolete ?obsolete", _ACTIVE_STATUS), route])
+    result = await getattr(svc, method)(*args, response_mode="compact")
+    assert result[collection]
+    assert not (prose_fields & result[collection][0].keys())
+
+
+@pytest.mark.asyncio
 async def test_get_protein_shapes_summary(service_factory: Any) -> None:
     svc = service_factory([("up:recommendedName", _SUMMARY)])
     out = await svc.get_protein("P05067")
@@ -901,6 +997,56 @@ async def test_tool_call_through_facade(service_factory: Any) -> None:
         assert payload["success"] is True
         assert payload["mnemonic"] == "A4_HUMAN"
         assert payload["_meta"]["next_commands"][0]["tool"] == "get_protein_sequence"
+    finally:
+        service_adapters.set_sparql_service(None)
+
+
+@pytest.mark.asyncio
+async def test_default_feature_and_variant_tools_complete_through_facade(
+    service_factory: Any,
+) -> None:
+    """Default annotation calls remain serializable and successful (#28)."""
+    from uniprot_link.mcp.facade import create_uniprot_mcp
+
+    feature_body = make_select_json(
+        ["type", "begin", "end", "comment"],
+        [
+            {
+                "type": "http://purl.uniprot.org/core/Domain_Extent_Annotation",
+                "begin": 4,
+                "end": 130,
+                "comment": "Paired",
+            }
+        ],
+    )
+    variant_body = make_select_json(
+        ["begin", "end", "substitution", "comment", "disease"],
+        [
+            {
+                "begin": 176,
+                "end": 176,
+                "substitution": "F",
+                "comment": "Long prose",
+                "disease": "Example disease",
+            }
+        ],
+    )
+    svc = service_factory(
+        [
+            ("up:obsolete ?obsolete", _ACTIVE_STATUS),
+            ("Natural_Variant_Annotation", variant_body),
+            ("up:range", feature_body),
+        ]
+    )
+    service_adapters.set_sparql_service(svc)
+    try:
+        mcp = create_uniprot_mcp()
+        for name in ("get_protein_features", "get_protein_variants"):
+            result = await mcp.call_tool(name, {"accession": "P05067"})
+            payload = result.structured_content if hasattr(result, "structured_content") else result
+            assert payload["success"] is True
+            assert payload["count"] == 1
+            assert payload["_meta"]["tool"] == name
     finally:
         service_adapters.set_sparql_service(None)
 

@@ -532,6 +532,7 @@ def apply_response_mode(payload: dict[str, Any], mode: str, *, kind: str) -> dic
 # etc. unchanged. Imported last, after the primitives above that the sibling
 # depends on (mirrors the shaping_taxonomy split below).
 from uniprot_link.services.shaping_annotations import (  # noqa: E402,F401
+    project_annotation_records,
     shape_diseases,
     shape_features,
     shape_variants,
