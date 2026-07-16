@@ -6,6 +6,12 @@ versioning.
 
 ## [Unreleased]
 
+## [5.0.0] - 2026-07-15
+
+Security fix for the SPARQL operation-guard bypass (#29) plus the fleet MCP
+contract-hardening sweep, together. Major because the error-code wire values
+change, `find_proteins` now requires `gene_symbol`, and `outputSchema` is dropped.
+
 ### Fixed
 
 - **Close the remaining source-level defects from audit #28.**
@@ -28,12 +34,6 @@ versioning.
 - Re-vendored the behaviour conformance gate from genefoundry-router `56db958`
   (`docs/conformance/behaviour.py` blob `c69801687`) so live MCP contract checks
   treat not-found example probes as inconclusive and keep empty auxiliary objects from hiding counted rows.
-
-## [5.0.0] - 2026-07-15
-
-Security fix for the SPARQL operation-guard bypass (#29) plus the fleet MCP
-contract-hardening sweep, together. Major because the error-code wire values
-change, `find_proteins` now requires `gene_symbol`, and `outputSchema` is dropped.
 
 ### Security
 
