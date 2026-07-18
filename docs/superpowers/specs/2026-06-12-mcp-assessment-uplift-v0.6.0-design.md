@@ -1,5 +1,8 @@
 # uniprot-link v0.6.0 — Assessment Uplift Design (target > 9.5 / 10)
 
+> Historical record — this document records the design or plan as of its date. Current behavior is
+> defined by implemented code, standards, release evidence, and tests.
+
 Design contract for closing every finding in `docs/mcp-assessment-v0.5.0.md`
 (F-OBS, F-ISO, F-VERB, F-SORT, F-ECO, F-MAP + the two nits) plus the two
 remaining dimension gaps the assessment named (static chaining; token economy on

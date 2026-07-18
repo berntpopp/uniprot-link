@@ -1,5 +1,8 @@
 # v0.5.0 Assessment Uplift Implementation Plan
 
+> Historical record — this document records the design or plan as of its date. Current behavior is
+> defined by implemented code, standards, release evidence, and tests.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Close the v0.4.0 LLM-consumer assessment punch-list (F1–F8) to push both scores > 9.5/10.

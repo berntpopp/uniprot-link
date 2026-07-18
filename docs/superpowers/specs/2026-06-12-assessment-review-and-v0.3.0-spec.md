@@ -1,6 +1,10 @@
 # uniprot-link — Assessment Review + v0.3.0 Uplift Spec
 
 **Date:** 2026-06-12
+
+> Historical record — this document records the design or plan as of its date. Current behavior is
+> defined by implemented code, standards, release evidence, and tests.
+
 **Author:** Claude (Fable 5) for bernt.popp@charite.de
 **Reviews:** `uniprot-link-mcp-assessment.md` (LLM-consumer + senior-tester, scored 6–7/10)
 **Method:** Every claim re-verified against the **live** endpoint (release 2026_01,

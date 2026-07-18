@@ -2,6 +2,10 @@
 
 **Date:** 2026-06-11
 **Status:** Approved-for-build (autonomous goal directive)
+
+> Historical record — this document records the design or plan as of its date. Current behavior is
+> defined by implemented code, standards, release evidence, and tests.
+
 **Author:** Claude (Fable 5) for bernt.popp@charite.de
 
 A Model Context Protocol (MCP) server that grounds protein/proteome research in the

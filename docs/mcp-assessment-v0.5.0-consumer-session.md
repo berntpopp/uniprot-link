@@ -77,8 +77,9 @@ reaches for the obvious synonyms first.
 **Fixes (cheapest first):**
 
 - Accept aliases: `taxon` / `organism` / `organism_id` → `organism_taxon`.
-- Put canonical signatures in the tool blurbs, e.g.
-  `find_proteins(gene=, organism_taxon=, reviewed=, keyword=, ec_number=, mnemonic=, name_contains=)`.
+- Put canonical signatures in the tool blurbs, listing the then-current `gene`
+  argument followed by `organism_taxon`, `reviewed`, `keyword`, `ec_number`, `mnemonic`,
+  and `name_contains`.
 
 ### F2 — Error-handling inconsistency (most fixable; shares F1's root cause)
 
@@ -149,13 +150,15 @@ recreate) is the fix.
 
 The scores above rest on this real task: *"get domains for PNKP."*
 
-1. **`find_proteins(gene="PNKP", taxon="9606", reviewed=true)`** → rejected,
+1. **`find_proteins` with the then-canonical `gene="PNKP"` and rejected
+   `taxon="9606"` arguments** → rejected,
    raw pydantic `Unexpected keyword argument: taxon`.
 2. **`organism="9606"`** → rejected (raw pydantic).
 3. **`organism_id="9606"`** → rejected (raw pydantic).
 4. **`get_server_capabilities()`** → learned the parameter is `organism_taxon`;
    confirmed deployed build 0.5.0 / `f7233d6`.
-5. **`find_proteins(gene="PNKP", organism_taxon="9606", reviewed=true)`** →
+5. **`find_proteins` with the then-canonical `gene="PNKP"`,
+   `organism_taxon="9606"`, and `reviewed=true` arguments** →
    `Q96T60` (PNKP_HUMAN, "Bifunctional polynucleotide phosphatase/kinase"),
    `elapsed_ms` 5935.5, `cached` false.
 6. **`get_protein_features("Q96T60", feature_types=["domain"])`** → 1 feature

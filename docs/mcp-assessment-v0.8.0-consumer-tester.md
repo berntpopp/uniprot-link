@@ -79,7 +79,7 @@ F4: the advertised latency bands under-state reality for two tools.)
 
 ### Error handling — 9/10
 
-I made a real mistake — `search_example_queries(query=...)` when it wants
+I made a real mistake — `search_example_queries` with `query=...` when it wants
 `text=`. The server returned `invalid_input` with `allowed_values: [text, limit]`,
 the correct signature as a `hint`, and a `next_commands` pointer. A bogus
 accession `ZZZ999` came back with a concrete valid example. Best-in-class.
