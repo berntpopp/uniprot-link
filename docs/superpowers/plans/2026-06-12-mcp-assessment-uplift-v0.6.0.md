@@ -1,5 +1,8 @@
 # uniprot-link v0.6.0 Assessment Uplift — Implementation Plan
 
+> Historical record — this document records the design or plan as of its date. Current behavior is
+> defined by implemented code, standards, release evidence, and tests.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Close every finding in `docs/mcp-assessment-v0.5.0.md` (F-OBS, F-ISO, F-VERB, F-SORT, F-ECO, F-MAP + the two nits) plus the static-chaining gap, lifting the consumer score from 8.7 to > 9.5.

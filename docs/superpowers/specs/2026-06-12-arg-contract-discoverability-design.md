@@ -1,5 +1,8 @@
 # Design — Argument Contract & Discoverability Uplift (v0.7.0)
 
+> Historical record — this document records the design or plan as of its date. Current behavior is
+> defined by implemented code, standards, release evidence, and tests.
+
 **Goal:** Take the cold-consumer assessment score from **7.5/10 to >9.5/10** by
 closing the two early-friction findings that share one root cause — *argument
 validation is not wrapped in the product's own error contract* — plus the

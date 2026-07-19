@@ -68,7 +68,7 @@ about trimming repeated overhead and smoothing one data-model gotcha.
    domains — are typed `region`, not `domain`. Extend the existing low-result
    `filter_hint` to point at `region`.
 3. **Smarter error-recovery suggestions.** A malformed accession produced a
-   `next_commands` entry of `find_proteins(gene="<bad accession>")`, which is
+   `next_commands` entry using the then-current `gene` argument to `find_proteins`, which is
    unlikely to help. Suggest `get_server_capabilities` or the format help instead.
 4. **Set latency expectations / pre-warm.** The 5+ s cold `find_proteins` is the
    roughest edge. Pre-warm common anchor queries, or surface a typical-latency
@@ -193,7 +193,7 @@ test. No SPARQL query-builder semantics changed (QLever risk surface untouched).
 | No advertised latency | **C2** New `latency_profile` band map in capabilities + one-line latency cues on `find_proteins`, `get_taxon`, `run_sparql_query`. | Speed/latency 7 → ~9; Discoverability |
 | `get_taxon` by-name ~40× slower | **C3** Curated `COMMON_TAXA` index resolves ~30 model-organism names (human, mouse, yeast, E. coli, SARS-CoV-2, …) with **zero** network round-trips (~11 s → ~0 ms); long-tail names still scan. All 20 ids verified live. | Speed/latency |
 | `domain`/`region` trap | **C4** `get_protein_features(['domain'])` now attaches a `domain_region_hint` and prepends a ready `['domain','region']` next-command, independent of result count. | Correctness + chaining |
-| Malformed-accession recovery suggested `find_proteins(gene=<bad>)` | **C5** `looks_like_gene_symbol` excludes real + near-miss accessions (e.g. `Q96T60XYZ`) while still redirecting genuine genes (`BRCA1`, `G6PD`). | Error handling 9 → 10 |
+| Malformed-accession recovery suggested the then-current `gene` argument to `find_proteins` | **C5** `looks_like_gene_symbol` excludes real + near-miss accessions (e.g. `Q96T60XYZ`) while still redirecting genuine genes (`BRCA1`, `G6PD`). | Error handling 9 → 10 |
 | `substitution:""` for inapplicable field | **C6** Empty substitution is omitted (house style); `variant_type:"other"` carries the meaning. No fabricated `notation`. | Structured output 9 → 10 |
 | Non-canonical isoform `mass_da:null` | **C7** Isoform mass is computed from the sequence (average residue masses), flagged `mass_computed:true`; the table is locked by a test matching UniProt's canonical 57076 Da within 2 Da. | Structured output 9 → 10 |
 | Opaque `find_proteins` ordering | **C8** Total sort `reviewed → mnemonic → accession` (unique tiebreak); documented in capabilities `result_ordering` and the tool description. | Discoverability/determinism |

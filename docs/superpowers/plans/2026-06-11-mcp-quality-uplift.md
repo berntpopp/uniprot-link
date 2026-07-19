@@ -1,5 +1,8 @@
 # MCP Quality Uplift Implementation Plan
 
+> Historical record — this document records the design or plan as of its date. Current behavior is
+> defined by implemented code, standards, release evidence, and tests.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Fix the five correctness bugs and two systemic contract gaps in uniprot-link's typed tools, then trim token cost, to lift the server from 6/10 to >9/10.

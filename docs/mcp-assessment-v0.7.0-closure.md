@@ -42,8 +42,9 @@ change that covers all 14 tools and all three failure modes.
   (`uniprot_link/mcp/arg_help.py::ARG_ALIASES`). The rewrite is disclosed in
   `_meta.argument_aliases_applied`.
 - **Signatures in descriptions:** every tool description ends with a canonical
-  `Signature: find_proteins(gene=, organism_taxon=, reviewed=, ...)` line — the
-  LLM's primary decision surface, so a competent first call needs no guessing.
+  signature listing the then-canonical `gene` argument followed by `organism_taxon`,
+  `reviewed`, and the other accepted names — the LLM's primary decision surface, so a
+  competent first call needs no guessing.
 - **Did-you-mean:** a non-alias near-miss gets a fuzzy suggestion (below).
 - **Evidence:** `tests/integration/test_live.py::test_pnkp_resolves_in_one_call_with_taxon_alias`
   (live, one call, `argument_aliases_applied == [["taxon","organism_taxon"]]`);
@@ -64,7 +65,7 @@ errors into the standard `invalid_input` envelope. A cold consumer now sees:
   "recovery_action": "reformulate_input",
   "field": "organism_taxa",
   "allowed_values": ["gene", "organism_taxon", "reviewed", "keyword", "ec_number", "mnemonic", "name_contains", "limit", "offset"],
-  "hint": "find_proteins(gene=, organism_taxon=, reviewed=, keyword=, ec_number=, mnemonic=, name_contains=, limit=, offset=)",
+  "hint": "find_proteins signature using the then-canonical gene argument, followed by organism_taxon, reviewed, keyword, ec_number, mnemonic, name_contains, limit, and offset",
   "_meta": { "tool": "find_proteins", "request_id": "…", "next_commands": [ { "tool": "get_server_capabilities", "arguments": {} } ] }
 }
 ```

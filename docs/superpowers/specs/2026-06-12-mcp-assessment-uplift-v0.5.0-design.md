@@ -1,6 +1,10 @@
 # uniprot-link v0.5.0 — Assessment Uplift (8.5/8.7 → >9.5) Design
 
 **Date:** 2026-06-12
+
+> Historical record — this document records the design or plan as of its date. Current behavior is
+> defined by implemented code, standards, release evidence, and tests.
+
 **Author:** MCP engineering pass (Claude Fable 5)
 **Target version:** 0.5.0
 **Source assessment:** `docs/mcp-assessment-v0.4.0.md`

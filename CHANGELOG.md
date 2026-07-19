@@ -365,8 +365,8 @@ MCP gateway. The canonical gateway **namespace token for this server is `uniprot
   - `map_identifiers` → **`resolve_identifiers`** (`map` is not a canonical verb;
     the tool resolves an accession to its external identifiers).
 - **Argument canonicalization** to the fleet canon (`gene_symbol`):
-  - `find_proteins(gene=…)` → **`find_proteins(gene_symbol=…)`**.
-  - `find_proteins_batch(genes=…)` → **`find_proteins_batch(gene_symbols=…)`**.
+  - `find_proteins` argument `gene` → **`find_proteins(gene_symbol=…)`**.
+  - `find_proteins_batch` argument `genes` → **`find_proteins_batch(gene_symbols=…)`**.
   - The legacy `gene` / `genes` (and `gene_name` / `symbol`) names are still
     accepted as **inbound aliases** and transparently normalized + disclosed via
     `_meta.argument_aliases_applied`.
@@ -559,8 +559,8 @@ re-assessment plus token-efficiency, latency, and consistency gaps. Targets
 - Accession validation uses the official UniProtKB grammar, so malformed input
   (e.g. `999999`) fails locally as `invalid_input` instead of round-tripping for a
   404. (Bug 7)
-- `get_protein` not-found recovery no longer replays a non-gene accession as
-  `find_proteins(gene=...)`. (Bug 8)
+- `get_protein` not-found recovery no longer replays a non-gene accession as the
+  then-current `gene` argument to `find_proteins`. (Bug 8)
 - `find_proteins` anchor hint names the real tool `run_sparql_query` (was
   `sparql_query`). (Bug 4)
 - `run_sparql_query` empty-body 400s return a cause-oriented hint. (Bug 11)
