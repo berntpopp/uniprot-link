@@ -232,7 +232,12 @@ def shape_protein_summary(
     # Presence flags bypass the empty-value filter: an explicit ``False`` is
     # meaningful (the entry has no variants/diseases/structure) and drives
     # content-aware chaining.
-    flags = {k: r[k] for k in ("has_variants", "has_diseases", "has_structure") if k in r}
+    # Annotated: mypy >=2.3 infers the comprehension key as ``Literal[...]`` from the
+    # literal tuple, and ``dict`` keys are invariant, so the ``**`` merge below would
+    # not accept it as a ``dict[str, Any]``.
+    flags: dict[str, Any] = {
+        k: r[k] for k in ("has_variants", "has_diseases", "has_structure") if k in r
+    }
     if fenced_objects:
         enforce_untrusted_text_limits(fenced_objects)
     return {**cleaned, **flags}
