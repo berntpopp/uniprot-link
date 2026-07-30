@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "uniprot-link"
-version = "5.0.0"
+version = "5.0.1"
 description = "MCP/API server that grounds protein research in the UniProt SPARQL endpoint"
 readme = "README.md"
 license = { text = "MIT" }
@@ -68,7 +68,12 @@ line-length = 100
 target-version = "py312"
 
 [tool.ruff.lint]
-extend-select = [
+# `select`, not `extend-select`: ruff 0.16 grows the *implicit default* rule set
+# from 59 to 413 rules, and `extend-select` extends whatever ruff happens to
+# default to. This list is already a strict superset of the pre-0.16 default
+# (E4/E7/E9 + F), so the effective policy is byte-identical -- it just stops an
+# upstream default from silently driving this repo's lint scope.
+select = [
     "E", "W", "F", "I", "N", "UP", "B", "C4", "S", "T20", "SIM", "RUF",
 ]
 ignore = [
