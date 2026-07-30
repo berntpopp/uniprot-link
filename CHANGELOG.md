@@ -6,6 +6,46 @@ versioning.
 
 ## [Unreleased]
 
+## [5.0.2] - 2026-07-30
+
+Python 3.12 → **3.14** for the shipped container and for the interpreter CI executes.
+No tool contract, schema, or response shape changes, so **no router drift-baseline
+recapture is needed**.
+
+### Changed
+
+- **`docker/Dockerfile` base `python:3.12-slim` → `python:3.14-slim`** (digest
+  `cea0e604`, Debian 13.6, CPython 3.14.6) on both the `builder` and `prepared` stages.
+  This closes the deferral recorded in 5.0.1. Debian trixie is unchanged, so the
+  Dockerfile's exact-hardlink assertion (`/usr/bin/perl` ↔ `/usr/bin/perl5.40.1`) and
+  the setuid sweep both still hold — verified by an actual `make docker-build`.
+- **CI now executes on the interpreter the image ships**: `python-version` moves
+  `3.12` → `3.14` in **both** `ci.yml` and `integration.yml`. This is the substantive
+  half of the migration and the reason a bare base bump (Dependabot #36) is not
+  sufficient — it would have shipped a 3.14 runtime that no gate had ever run.
+  `uv sync --frozen` resolves cleanly on 3.14 from the existing lock, so `uv.lock`
+  changes only by the version restamp.
+- `container-release.json` needed **no change**: this repo is `data.mode: "none"` with an
+  **empty `image_allowlist`**, so it carries none of the interpreter-versioned
+  `opt/venv/lib/python3.12/site-packages/…` paths that make a base bump break the OCI
+  content inspector elsewhere in the fleet. Verified directly rather than assumed.
+
+### Not changed, deliberately
+
+- **`requires-python` stays `>=3.12`**, and with it ruff's `target-version = "py312"`
+  and mypy's `python_version = "3.12"`. Moving the floor to `>=3.14` makes
+  **Container CI fail**, and the failure is not fixable from this repo: the pinned
+  reusable workflow (`berntpopp/genefoundry-router/.github/workflows/_container-ci.yml`
+  @`35f31f3a`) sets up **only Python 3.12** and then runs `uv lock --check` in the caller
+  repo. `uv lock --check` (uv 0.8.7) refuses to download an interpreter, so it aborts
+  with `No interpreter found for Python >=3.14 in managed installations or search path`.
+  Picking up a fix would require re-pinning that workflow, which is out of scope here.
+  The floor is a packaging lower bound, not a claim about the tested runtime; the tested
+  runtime is 3.14 and matches the image.
+- The README **badge** stays at "Python 3.12+": that line is a canonical string
+  hardcoded in the fleet-vendored `scripts/check_readme.py` (README Standard v1), so it
+  can only move fleet-wide from genefoundry-router's copy.
+
 ## [5.0.1] - 2026-07-30
 
 Dependency-and-supply-chain maintenance only. No tool contract, schema, or
