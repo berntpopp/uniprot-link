@@ -6,6 +6,61 @@ versioning.
 
 ## [Unreleased]
 
+## [5.0.1] - 2026-07-30
+
+Dependency-and-supply-chain maintenance only. No tool contract, schema, or
+response shape changes, so **no router drift-baseline recapture is needed**.
+
+### Added
+
+- **Dependabot coverage (`.github/dependabot.yml`).** This repo had no Dependabot
+  config at all. Without one, Dependabot runs *security* updates only — so
+  uniprot-link had never received a single **version** update, and the drift
+  accumulated precisely where security updates never look: the Docker base digest,
+  the pinned Action SHAs, and the CodeQL pin. The config is the fleet-standard
+  shape: `uv` and `github-actions` at `/`, `docker` and `docker-compose` at
+  `/docker`, weekly Monday, Europe/Berlin, staggered 04:00 / 04:15 / 04:30 / 04:45,
+  limit 5, `deps` / `ci` commit prefixes.
+
+### Security
+
+- **Unfroze the CodeQL pin.** `github/codeql-action@ed410739` was never a commit —
+  it was the SHA of the *annotated tag object* for `v4` as it stood at v4.35.3.
+  Upstream has since re-pointed `v4`, orphaning that object, so no ref matched the
+  pin, Dependabot could see no update path, and CodeQL had been running v4.35.3
+  indefinitely. Repinned to commit `f205ea1c` (v4.37.4), matching the fleet
+  decision shipped in genefoundry-router v0.7.3.
+- Refreshed the `python:3.12-slim` base digest `423ed6ab` → `57cd7c3a`
+  (Debian 13.5 → 13.6) on both the `builder` and `prepared` stages. Deliberately
+  stayed on the 3.12 line: `requires-python`, the ruff/mypy targets, and both CI
+  workflows all pin 3.12, and the Dockerfile's hardlink assertion names Debian
+  trixie's `perl5.40.1`.
+
+### Changed
+
+- Bumped the pinned Actions, each SHA verified against upstream tag refs with
+  annotated-tag dereferencing: `actions/checkout` v7.0.0 → v7.0.1,
+  `actions/setup-python` v6 → v7.0.0, `astral-sh/setup-uv` v8.2.0 → v9.0.0.
+  `container-security.yml`'s checkout had drifted a whole major behind
+  (`df4cb1c` / v6) and now matches the rest.
+- Swept 30 locked dependencies (`uv lock --upgrade`), including fastapi
+  0.136.3 → 0.141.1, uvicorn 0.49.0 → 0.52.0, mcp 1.28.1 → 1.29.0,
+  fastmcp 3.4.4 → 3.4.5, typer 0.26.7 → 0.27.0, ruff 0.15.16 → 0.16.0 and
+  mypy 2.1.0 → 2.3.0. Declared floors are unchanged — this repo's convention is a
+  permissive floor plus a major upper cap, not a mirror of the lock.
+- Declared the ruff rule set with `select` instead of `extend-select`. ruff 0.16
+  grows its *implicit default* rule set from 59 to 413 rules, and `extend-select`
+  extends whatever ruff defaults to; the explicit list is already a strict superset
+  of the pre-0.16 default (E4/E7/E9 + F), so lint policy is byte-identical and no
+  longer moves when an upstream default does.
+
+### Fixed
+
+- `services/shaping.py` annotates the `flags` local as `dict[str, Any]`. mypy 2.3
+  infers the comprehension key as `Literal[...]` from the literal tuple it iterates,
+  and `dict` keys are invariant, so the `{**cleaned, **flags}` merge stopped
+  type-checking. No behaviour change.
+
 ## [5.0.0] - 2026-07-15
 
 Security fix for the SPARQL operation-guard bypass (#29) plus the fleet MCP
