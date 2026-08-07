@@ -6,6 +6,32 @@ versioning.
 
 ## [Unreleased]
 
+## [5.1.0] - 2026-08-07
+
+Additive protein-search and variant-filter inputs. Existing numeric taxon calls,
+unfiltered variant calls, response envelopes, and positional Python service calls
+retain their previous behavior.
+
+### Added
+
+- **Protein searches accept organism names as well as positive NCBI taxon ids.**
+  `find_proteins` and `find_proteins_batch` now resolve exact common or scientific
+  names, including curated names such as `human` and exact long-tail taxonomy
+  matches, before building the protein query. Responses disclose the resolved taxon
+  id in `_meta.resolved_organism_taxon`; ambiguous or non-exact names return the
+  existing structured `invalid_input` envelope with `get_taxon` recovery guidance.
+- **`get_protein_variants` accepts optional positive `position_start` and
+  `position_end` residue bounds.** One-sided and two-sided intervals use inclusive
+  overlap semantics, so an annotation is retained when its end is at or after the
+  requested start and its begin is at or before the requested end. Filtered responses
+  disclose the accepted bounds and `inclusive_overlap` semantics in `position_range`.
+
+### Changed
+
+- Truncated range-filtered variant responses compute `truncated.total` with the same
+  explicit FALDO joins and overlap predicate as the data query. Unfiltered counts keep
+  the existing cheap annotation-only query.
+
 ## [5.0.2] - 2026-07-30
 
 Python 3.12 → **3.14** for the shipped container and for the interpreter CI executes.

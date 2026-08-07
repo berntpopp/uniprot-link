@@ -390,11 +390,18 @@ class SparqlService(FindProteinsServiceMixin, TaxonomyServiceMixin):
         limit: int = 200,
         disease_associated_only: bool = False,
         response_mode: str = "standard",
+        *,
+        position_start: int | None = None,
+        position_end: int | None = None,
     ) -> dict[str, Any]:
         """Return natural-variant annotations."""
         limit = Q.clamp_limit(limit, default=200, maximum=2000)
         query = Q.protein_variants(
-            accession, limit=limit, disease_associated_only=disease_associated_only
+            accession,
+            limit=limit,
+            disease_associated_only=disease_associated_only,
+            position_start=position_start,
+            position_end=position_end,
         )
         _, (data_json, qmeta) = await asyncio.gather(
             self.require_entry(accession), self._select_timed(query)
@@ -407,10 +414,23 @@ class SparqlService(FindProteinsServiceMixin, TaxonomyServiceMixin):
             "variants": variants,
             **qmeta,
         }
+        if position_start is not None or position_end is not None:
+            payload["position_range"] = {
+                "start": position_start,
+                "end": position_end,
+                "semantics": "inclusive_overlap",
+            }
         # The SPARQL LIMIT caps pre-merge rows; compare against the raw row count
         # (not the merged variant count) so truncation is never under-reported.
         if len(S.rows(data_json)) >= limit:
-            total = await self._count(Q.protein_variants_count(accession, disease_associated_only))
+            total = await self._count(
+                Q.protein_variants_count(
+                    accession,
+                    disease_associated_only,
+                    position_start=position_start,
+                    position_end=position_end,
+                )
+            )
             payload["truncated"] = {
                 "returned": len(variants),
                 **({"total": total} if total is not None else {}),

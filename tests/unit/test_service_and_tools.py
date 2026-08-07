@@ -523,6 +523,138 @@ async def test_get_variants_truncated_when_limit_reached(service_factory: Any) -
 
 
 @pytest.mark.asyncio
+async def test_get_variants_rejects_reversed_range_before_client_call(
+    service_factory: Any,
+) -> None:
+    service = service_factory([])
+    with pytest.raises(InvalidInputError) as exc:
+        await service.get_variants("P38398", position_start=200, position_end=100)
+    assert exc.value.field == "position_range"
+    assert service.client.calls == []  # type: ignore[attr-defined]
+
+
+@pytest.mark.asyncio
+async def test_get_variants_discloses_and_forwards_inclusive_position_range(
+    service_factory: Any,
+) -> None:
+    rows = [{"begin": 150, "end": 150, "substitution": "A"}]
+    service = service_factory(
+        [
+            ("up:obsolete ?obsolete", _ACTIVE_STATUS),
+            (
+                "Natural_Variant_Annotation",
+                make_select_json(["begin", "end", "substitution"], rows),
+            ),
+        ]
+    )
+    res = await service.get_variants("P38398", position_start=100, position_end=200)
+    assert res["position_range"] == {
+        "start": 100,
+        "end": 200,
+        "semantics": "inclusive_overlap",
+    }
+    data_query = next(
+        query
+        for query in service.client.calls  # type: ignore[attr-defined]
+        if "Natural_Variant_Annotation" in query
+    )
+    assert "FILTER(?end >= 100 && ?begin <= 200)" in data_query
+
+
+@pytest.mark.asyncio
+async def test_get_variants_no_range_preserves_response_shape(service_factory: Any) -> None:
+    service = service_factory(
+        [
+            ("up:obsolete ?obsolete", _ACTIVE_STATUS),
+            ("Natural_Variant_Annotation", make_select_json([], [])),
+        ]
+    )
+    res = await service.get_variants("P38398")
+    assert "position_range" not in res
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("bounds", "expected"),
+    [
+        ({"position_start": 100}, {"start": 100, "end": None}),
+        ({"position_end": 200}, {"start": None, "end": 200}),
+    ],
+)
+async def test_get_variants_discloses_one_sided_position_range(
+    service_factory: Any,
+    bounds: dict[str, int],
+    expected: dict[str, int | None],
+) -> None:
+    service = service_factory(
+        [
+            ("up:obsolete ?obsolete", _ACTIVE_STATUS),
+            ("Natural_Variant_Annotation", make_select_json([], [])),
+        ]
+    )
+    res = await service.get_variants("P38398", **bounds)
+    assert res["position_range"] == {
+        **expected,
+        "semantics": "inclusive_overlap",
+    }
+
+
+@pytest.mark.asyncio
+async def test_get_variants_filtered_truncation_uses_filtered_total(
+    service_factory: Any,
+) -> None:
+    rows = [{"begin": 100 + i, "end": 100 + i, "substitution": "A"} for i in range(2)]
+    service = service_factory(
+        [
+            ("up:obsolete ?obsolete", _ACTIVE_STATUS),
+            ("COUNT(DISTINCT ?a)", make_select_json(["n"], [{"n": 7}])),
+            (
+                "Natural_Variant_Annotation",
+                make_select_json(["begin", "end", "substitution"], rows),
+            ),
+        ]
+    )
+    res = await service.get_variants("P38398", limit=2, position_start=100, position_end=200)
+    assert res["truncated"]["total"] == 7
+    count_query = next(
+        query
+        for query in service.client.calls  # type: ignore[attr-defined]
+        if "COUNT(DISTINCT ?a)" in query
+    )
+    assert "FILTER(?end >= 100 && ?begin <= 200)" in count_query
+
+
+@pytest.mark.asyncio
+async def test_get_protein_variants_tool_forwards_position_range(
+    service_factory: Any,
+) -> None:
+    from uniprot_link.mcp.facade import create_uniprot_mcp
+
+    body = make_select_json(
+        ["begin", "end", "substitution"],
+        [{"begin": 150, "end": 150, "substitution": "A"}],
+    )
+    service = service_factory(
+        [
+            ("up:obsolete ?obsolete", _ACTIVE_STATUS),
+            ("Natural_Variant_Annotation", body),
+        ]
+    )
+    service_adapters.set_sparql_service(service)
+    try:
+        mcp = create_uniprot_mcp()
+        result = await mcp.call_tool(
+            "get_protein_variants",
+            {"accession": "P38398", "position_start": 100, "position_end": 200},
+        )
+        payload = result.structured_content if hasattr(result, "structured_content") else result
+        assert payload["success"] is True
+        assert payload["position_range"]["semantics"] == "inclusive_overlap"
+    finally:
+        service_adapters.set_sparql_service(None)
+
+
+@pytest.mark.asyncio
 async def test_get_variants_truncation_uses_raw_row_count(service_factory: Any) -> None:
     from tests.conftest import make_select_json
 
@@ -1442,6 +1574,234 @@ async def test_get_taxon_uncommon_name_falls_through(service_factory: Any) -> No
     assert out["match_source"] == "endpoint_scan"
     assert svc.client.calls  # the endpoint WAS queried
     assert out["matches"][0]["taxon_id"] == "63221"
+
+
+@pytest.mark.asyncio
+async def test_find_proteins_curated_taxon_name_uses_no_taxonomy_query(
+    service_factory: Any,
+) -> None:
+    """Curated organism names resolve locally before the protein query."""
+    svc = service_factory([])
+    out = await svc.find_proteins(gene="BRCA1", organism_taxon="HuMaN", reviewed=True)
+    assert len(svc.client.calls) == 1
+    assert "taxon:9606" in svc.client.calls[0]
+    assert out["_meta"]["resolved_organism_taxon"] == 9606
+
+
+@pytest.mark.asyncio
+async def test_find_proteins_curated_alias_does_not_bypass_exact_name_rule(
+    service_factory: Any,
+) -> None:
+    """Only curated scientific/common names resolve locally, not extra aliases."""
+    svc = service_factory([])
+    with pytest.raises(InvalidInputError, match="no exact taxonomy match"):
+        await svc.find_proteins(gene="S", organism_taxon="covid", reviewed=True)
+    assert len(svc.client.calls) == 1
+    assert "SELECT DISTINCT ?taxon" in svc.client.calls[0]
+
+
+@pytest.mark.asyncio
+async def test_find_proteins_curated_alias_can_resolve_its_own_exact_taxon(
+    service_factory: Any,
+) -> None:
+    """A curated subspecies alias must not shadow an exact endpoint species."""
+    taxon = make_select_json(
+        ["taxon", "scientificName"],
+        [
+            {
+                "taxon": "http://purl.uniprot.org/taxonomy/4530",
+                "scientificName": "Oryza sativa",
+            }
+        ],
+    )
+    svc = service_factory([("SELECT DISTINCT ?taxon", taxon)])
+    out = await svc.find_proteins(gene="RCA", organism_taxon="Oryza sativa", reviewed=True)
+    assert "SELECT DISTINCT ?taxon" in svc.client.calls[0]
+    assert "taxon:4530" in svc.client.calls[1]
+    assert out["_meta"]["resolved_organism_taxon"] == 4530
+
+
+@pytest.mark.asyncio
+async def test_find_proteins_pathological_digit_taxon_is_invalid_input(
+    service_factory: Any,
+) -> None:
+    """Python's integer digit ceiling cannot turn caller input into internal_error."""
+    svc = service_factory([])
+    with pytest.raises(InvalidInputError, match="positive NCBI taxon id"):
+        await svc.find_proteins(gene="BRCA1", organism_taxon="9" * 5000, reviewed=True)
+    assert svc.client.calls == []
+
+
+@pytest.mark.asyncio
+async def test_find_proteins_long_tail_taxon_requires_one_exact_match(
+    service_factory: Any,
+) -> None:
+    """A unique exact long-tail match is resolved through get_taxon."""
+    taxon = make_select_json(
+        ["taxon", "scientificName", "rank"],
+        [
+            {
+                "taxon": "http://purl.uniprot.org/taxonomy/63221",
+                "scientificName": "Homo sapiens neanderthalensis",
+                "rank": "http://purl.uniprot.org/core/Subspecies",
+            }
+        ],
+    )
+    svc = service_factory([("SELECT DISTINCT ?taxon", taxon)])
+    out = await svc.find_proteins(
+        gene="FOXP2", organism_taxon="homo sapiens NEANDERTHALENSIS", reviewed=True
+    )
+    assert len(svc.client.calls) == 2
+    assert "SELECT DISTINCT ?taxon" in svc.client.calls[0]
+    assert "taxon:63221" in svc.client.calls[1]
+    assert out["_meta"]["resolved_organism_taxon"] == 63221
+
+
+@pytest.mark.asyncio
+async def test_find_proteins_exact_taxon_is_not_hidden_by_ten_fuzzy_rows(
+    service_factory: Any,
+) -> None:
+    """The resolver uses an exact-only path instead of the fuzzy LIMIT 10 page."""
+    fuzzy = make_select_json(
+        ["taxon", "scientificName"],
+        [
+            {
+                "taxon": f"http://purl.uniprot.org/taxonomy/{1000 + i}",
+                "scientificName": f"A fuzzy organism {i} Exactus species",
+            }
+            for i in range(10)
+        ],
+    )
+    exact = make_select_json(
+        ["taxon", "scientificName"],
+        [
+            {
+                "taxon": "http://purl.uniprot.org/taxonomy/9999",
+                "scientificName": "Exactus species",
+            }
+        ],
+    )
+    svc = service_factory([("SELECT DISTINCT ?taxon", exact), ("?taxon a up:Taxon", fuzzy)])
+    out = await svc.find_proteins(gene="GENE", organism_taxon="Exactus species", reviewed=True)
+    assert "SELECT DISTINCT ?taxon" in svc.client.calls[0]
+    assert "taxon:9999" in svc.client.calls[1]
+    assert out["_meta"]["resolved_organism_taxon"] == 9999
+
+
+@pytest.mark.asyncio
+async def test_find_proteins_exact_taxon_ambiguity_survives_fuzzy_limit_and_duplicates(
+    service_factory: Any,
+) -> None:
+    """Two distinct exact IDs remain ambiguous despite duplicates and fuzzy rows."""
+    fuzzy_page = make_select_json(
+        ["taxon", "scientificName", "commonName"],
+        [
+            {
+                "taxon": "http://purl.uniprot.org/taxonomy/111",
+                "scientificName": "Ambigua exacta",
+            },
+            *[
+                {
+                    "taxon": f"http://purl.uniprot.org/taxonomy/{2000 + i}",
+                    "scientificName": f"A fuzzy Ambigua exacta {i}",
+                }
+                for i in range(9)
+            ],
+        ],
+    )
+    complete_exact = make_select_json(
+        ["taxon", "scientificName", "commonName"],
+        [
+            {
+                "taxon": "http://purl.uniprot.org/taxonomy/111",
+                "scientificName": "Ambigua exacta",
+            },
+            {
+                "taxon": "http://purl.uniprot.org/taxonomy/111",
+                "scientificName": "Ambigua exacta",
+            },
+            {
+                "taxon": "http://purl.uniprot.org/taxonomy/222",
+                "scientificName": "Other exacta",
+                "commonName": "Ambigua exacta",
+            },
+        ],
+    )
+    svc = service_factory(
+        [("SELECT DISTINCT ?taxon", complete_exact), ("?taxon a up:Taxon", fuzzy_page)]
+    )
+    with pytest.raises(InvalidInputError, match="ambiguous"):
+        await svc.find_proteins(gene="GENE", organism_taxon="Ambigua exacta", reviewed=True)
+    assert len(svc.client.calls) == 1
+    assert "SELECT DISTINCT ?taxon" in svc.client.calls[0]
+
+
+@pytest.mark.asyncio
+async def test_find_proteins_long_tail_taxon_queries_exact_common_name(
+    service_factory: Any,
+) -> None:
+    """The delegated taxonomy scan can discover a non-curated common name."""
+    taxon = make_select_json(
+        ["taxon", "scientificName", "commonName"],
+        [
+            {
+                "taxon": "http://purl.uniprot.org/taxonomy/9986",
+                "scientificName": "Oryctolagus cuniculus",
+                "commonName": "Rabbit",
+            }
+        ],
+    )
+    svc = service_factory([("SELECT DISTINCT ?taxon", taxon)])
+    out = await svc.find_proteins(gene="ALB", organism_taxon="RABBIT", reviewed=True)
+    assert "up:commonName ?_exactName" in svc.client.calls[0]
+    assert "taxon:9986" in svc.client.calls[1]
+    assert out["_meta"]["resolved_organism_taxon"] == 9986
+
+
+@pytest.mark.asyncio
+async def test_find_proteins_rejects_non_exact_taxon_scan_result(service_factory: Any) -> None:
+    """A fuzzy endpoint result is never silently selected as the organism."""
+    taxon = make_select_json(
+        ["taxon", "scientificName"],
+        [
+            {
+                "taxon": "http://purl.uniprot.org/taxonomy/2506766",
+                "scientificName": "Takifugu chinensis x Takifugu rubripes",
+            }
+        ],
+    )
+    svc = service_factory([("SELECT DISTINCT ?taxon", taxon)])
+    with pytest.raises(InvalidInputError, match="get_taxon"):
+        await svc.find_proteins(gene="GENE", organism_taxon="Takifugu rubripes", reviewed=True)
+    assert len(svc.client.calls) == 1
+
+
+@pytest.mark.asyncio
+async def test_find_proteins_batch_resolves_taxon_once_and_reports_metadata(
+    service_factory: Any,
+) -> None:
+    """Batch resolution happens once before fan-out, not once per gene."""
+    taxon = make_select_json(
+        ["taxon", "scientificName"],
+        [
+            {
+                "taxon": "http://purl.uniprot.org/taxonomy/63221",
+                "scientificName": "Homo sapiens neanderthalensis",
+            }
+        ],
+    )
+    svc = service_factory([("SELECT DISTINCT ?taxon", taxon)])
+    out = await svc.find_proteins_batch(
+        ["FOXP2", "SRGAP2"],
+        organism_taxon="Homo sapiens neanderthalensis",
+        reviewed=True,
+    )
+    taxonomy_calls = [query for query in svc.client.calls if "SELECT DISTINCT ?taxon" in query]
+    protein_calls = [query for query in svc.client.calls if "?protein up:encodedBy" in query]
+    assert len(taxonomy_calls) == 1
+    assert len(protein_calls) == 2
+    assert all("taxon:63221" in query for query in protein_calls)
+    assert out["_meta"]["resolved_organism_taxon"] == 63221
 
 
 def _gene_hit(acc: str, mnem: str) -> dict[str, Any]:

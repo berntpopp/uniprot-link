@@ -25,6 +25,31 @@ _UNAVAILABLE_FEATURE_TYPE_HINTS = {
 }
 
 
+def _variant_position_filter(
+    *, position_start: int | None = None, position_end: int | None = None
+) -> str:
+    """Validate optional residue bounds and return an inclusive-overlap filter."""
+    if position_start is not None and position_start < 1:
+        raise InvalidInputError(
+            "position_start must be a positive residue position.", field="position_start"
+        )
+    if position_end is not None and position_end < 1:
+        raise InvalidInputError(
+            "position_end must be a positive residue position.", field="position_end"
+        )
+    if position_start is not None and position_end is not None and position_start > position_end:
+        raise InvalidInputError(
+            "position_start must be less than or equal to position_end.",
+            field="position_range",
+        )
+    conditions: list[str] = []
+    if position_start is not None:
+        conditions.append(f"?end >= {position_start}")
+    if position_end is not None:
+        conditions.append(f"?begin <= {position_end}")
+    return f"\n  FILTER({' && '.join(conditions)})" if conditions else ""
+
+
 def find_proteins(
     *,
     gene: str | None = None,
@@ -337,7 +362,12 @@ LIMIT {limit}"""
 
 
 def protein_variants(
-    accession: str, limit: int = 200, disease_associated_only: bool = False
+    accession: str,
+    limit: int = 200,
+    disease_associated_only: bool = False,
+    *,
+    position_start: int | None = None,
+    position_end: int | None = None,
 ) -> str:
     """Build a SELECT for natural-variant annotations.
 
@@ -350,8 +380,15 @@ def protein_variants(
     REQUIRED rather than OPTIONAL, returning only disease-linked variants (a small
     set that fits any limit). ``disease_block`` is interpolated once, so it must
     already carry literal single braces, not the doubled f-string form.
+
+    Optional residue bounds use inclusive interval overlap: an annotation is kept
+    when its end is at or after ``position_start`` and its begin is at or before
+    ``position_end``.
     """
     acc = validate_accession(accession).split("-")[0]
+    position_filter = _variant_position_filter(
+        position_start=position_start, position_end=position_end
+    )
     if disease_associated_only:
         disease_block = "  ?a skos:related ?d . ?d skos:prefLabel ?disease ."
     else:
@@ -362,7 +399,7 @@ WHERE {{
   uniprotkb:{acc} up:annotation ?a .
   ?a a up:Natural_Variant_Annotation ; up:range ?r .
   ?r faldo:begin ?b . ?b faldo:position ?begin .
-  ?r faldo:end ?e . ?e faldo:position ?end .
+  ?r faldo:end ?e . ?e faldo:position ?end .{position_filter}
   OPTIONAL {{ ?a up:substitution ?substitution }}
   OPTIONAL {{ ?a rdfs:comment ?comment }}
 {disease_block}
@@ -373,21 +410,39 @@ WHERE {{
 LIMIT {limit}"""
 
 
-def protein_variants_count(accession: str, disease_associated_only: bool = False) -> str:
+def protein_variants_count(
+    accession: str,
+    disease_associated_only: bool = False,
+    *,
+    position_start: int | None = None,
+    position_end: int | None = None,
+) -> str:
     """Build a cheap ``COUNT(DISTINCT ?a)`` of an entry's natural variants.
 
-    Counts the typed annotations directly -- no FALDO range join -- so it is far
-    cheaper than the data query and yields the true total for the standardized
-    truncation envelope (F5). Runs only when the variants page is truncated.
+    Without residue bounds, counts typed annotations directly with no FALDO range
+    join. Filtered counts add the same explicit FALDO joins and inclusive-overlap
+    predicate as the data query, keeping the standardized truncation total truthful.
+    Runs only when the variants page is truncated.
     """
     acc = validate_accession(accession).split("-")[0]
+    position_filter = _variant_position_filter(
+        position_start=position_start, position_end=position_end
+    )
+    range_block = ""
+    if position_filter:
+        range_block = (
+            "  ?a up:range ?r .\n"
+            "  ?r faldo:begin ?b . ?b faldo:position ?begin .\n"
+            "  ?r faldo:end ?e . ?e faldo:position ?end .\n"
+            f"{position_filter.lstrip()}\n"
+        )
     disease = "  ?a skos:related ?d .\n" if disease_associated_only else ""
     return f"""{prefix_block()}
 SELECT (COUNT(DISTINCT ?a) AS ?n)
 WHERE {{
   uniprotkb:{acc} up:annotation ?a .
   ?a a up:Natural_Variant_Annotation .
-{disease}}}"""
+{range_block}{disease}}}"""
 
 
 def protein_diseases(accession: str) -> str:

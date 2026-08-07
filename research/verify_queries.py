@@ -13,6 +13,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from uniprot_link.services import queries as q  # noqa: E402
 
 ENDPOINT = "https://sparql.uniprot.org/sparql"
+RANGE_DATA_CASE = "protein_variants(P38398, range=100-200)"
+RANGE_COUNT_CASE = "protein_variants_count(P38398, range=100-200)"
+RANGE_LIMIT = 2
 
 
 def run(query: str) -> tuple[int, object]:
@@ -68,6 +71,10 @@ CASES = {
     "find_proteins(mnemonic=NAA10_HUMAN) F3": q.find_proteins(mnemonic="NAA10_HUMAN", limit=5),
     "protein_variants(P38398)": q.protein_variants("P38398", limit=10),
     "protein_variants_count(P38398)": q.protein_variants_count("P38398"),  # F5 true total
+    RANGE_DATA_CASE: q.protein_variants(
+        "P38398", limit=RANGE_LIMIT, position_start=100, position_end=200
+    ),
+    RANGE_COUNT_CASE: q.protein_variants_count("P38398", position_start=100, position_end=200),
     "find_proteins(tax=9606, name='polynucleotide kinase')": q.find_proteins(  # F6 per-word
         organism_taxon=9606, name_contains="polynucleotide kinase", limit=5
     ),
@@ -81,10 +88,44 @@ CASES = {
 }
 
 
+def validate_range_results(outcomes: dict[str, tuple[int, object]]) -> list[str]:
+    """Validate only the new required live range probes.
+
+    Legacy cases remain observational because transient upstream failures in
+    unrelated queries must not mask the bounded range gate.
+    """
+    errors: list[str] = []
+    data_status, data_result = outcomes.get(RANGE_DATA_CASE, (0, None))
+    count_status, count_result = outcomes.get(RANGE_COUNT_CASE, (0, None))
+    if data_status != 200:
+        errors.append(f"{RANGE_DATA_CASE} returned HTTP {data_status}")
+    if count_status != 200:
+        errors.append(f"{RANGE_COUNT_CASE} returned HTTP {count_status}")
+    if errors:
+        return errors
+    if not isinstance(data_result, dict) or not isinstance(count_result, dict):
+        return ["range verifier results were not structured dictionaries"]
+    returned = data_result.get("rows")
+    raw_total = (count_result.get("sample") or {}).get("n")
+    try:
+        total = int(raw_total)
+    except (TypeError, ValueError):
+        return ["filtered range count did not return an integer n"]
+    if returned != RANGE_LIMIT:
+        errors.append(
+            f"filtered data returned {returned!r} rows; expected forced page limit {RANGE_LIMIT}"
+        )
+    if not isinstance(returned, int) or total <= returned:
+        errors.append(f"filtered total {total} did not exceed returned page {returned!r}")
+    return errors
+
+
 def main() -> None:
     example_iri = None
+    outcomes: dict[str, tuple[int, object]] = {}
     for name, query in CASES.items():
         status, result = run(query)
+        outcomes[name] = (status, result)
         print(f"[{status}] {name}: {result}")
         if name.startswith("search_example_queries") and isinstance(result, dict):
             sample = result.get("sample", {})
@@ -98,6 +139,9 @@ def main() -> None:
     if example_iri:
         status, result = run(q.get_example_query(example_iri))
         print(f"[{status}] get_example_query({example_iri}): {result}")
+    errors = validate_range_results(outcomes)
+    if errors:
+        raise SystemExit("range verification failed: " + "; ".join(errors))
 
 
 if __name__ == "__main__":

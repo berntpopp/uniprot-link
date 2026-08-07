@@ -194,6 +194,20 @@ async def test_variants_brca1(service: SparqlService) -> None:
     assert all("begin" in v for v in out["variants"])
 
 
+async def test_protein_variants_position_range(service: SparqlService) -> None:
+    out = await service.get_variants("P38398", limit=2, position_start=100, position_end=200)
+    assert out["variants"]
+    assert out["count"] == 2
+    assert out["truncated"]["returned"] == 2
+    assert out["truncated"]["total"] > 2
+    assert out["position_range"] == {
+        "start": 100,
+        "end": 200,
+        "semantics": "inclusive_overlap",
+    }
+    assert all(v["end"] >= 100 and v["begin"] <= 200 for v in out["variants"])
+
+
 async def test_variants_have_populated_diseases(service: SparqlService) -> None:
     res = await service.get_variants("P38398", 200)
     assert any(v.get("diseases") for v in res["variants"])

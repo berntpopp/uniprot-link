@@ -102,7 +102,11 @@ class ArgValidationMiddleware(Middleware):
         exc: PydanticValidationError,
     ) -> ToolResult:
         first = exc.errors(include_url=False)[0]
-        loc = ".".join(str(p) for p in first.get("loc", ())) or "input"
+        # Constrained unions append an implementation-only branch label (for
+        # example ``organism_taxon.constrained-int``). The caller-facing field is
+        # always the top-level tool parameter, never Pydantic's branch name.
+        location = first.get("loc", ())
+        loc = str(location[0]) if location else "input"
         error_type = str(first.get("type", "value_error"))
         # Classify into missing / unknown-name / bad-value so each gets the right
         # allowed_values semantics (F1). A *value* error on a known param surfaces

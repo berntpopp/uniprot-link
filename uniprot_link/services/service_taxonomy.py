@@ -24,7 +24,13 @@ from uniprot_link.services.shaping_taxonomy import (
 class TaxonomyServiceMixin(ServiceBase):
     """The ``get_taxon`` resolver (by id, curated common name, or endpoint scan)."""
 
-    async def get_taxon(self, taxon: str, include_lineage: bool = False) -> dict[str, Any]:
+    async def get_taxon(
+        self,
+        taxon: str,
+        include_lineage: bool = False,
+        *,
+        allow_curated: bool = True,
+    ) -> dict[str, Any]:
         """Resolve a taxon by id (digits) or scientific/common name."""
         taxon = str(taxon).strip()
         if taxon.isdigit():
@@ -52,7 +58,7 @@ class TaxonomyServiceMixin(ServiceBase):
         # Curated fast path: a model-organism name resolves with NO network round
         # trip (the by-name scan is the ~40x latency offender). The long tail and
         # disambiguation (e.g. subspecies) still fall through to the scan.
-        record = lookup_common_taxon(taxon)
+        record = lookup_common_taxon(taxon) if allow_curated else None
         if record is not None:
             return {
                 "query": taxon,
@@ -80,5 +86,20 @@ class TaxonomyServiceMixin(ServiceBase):
             "match_count": len(matches),
             "matches": matches,
             "match_source": "endpoint_scan",
+            **qmeta,
+        }
+
+    async def get_taxon_exact(self, name: str) -> dict[str, Any]:
+        """Return up to two distinct exact scientific/common-name matches."""
+        name = str(name).strip()
+        rows_json, qmeta = await self._select_timed(Q.resolve_taxon_by_exact_name(name))
+        matches = shape_taxon_resolutions(rows_json)
+        if not matches:
+            raise NotFoundError(f"No taxon exactly matched '{name}'.")
+        return {
+            "query": name,
+            "match_count": len(matches),
+            "matches": matches,
+            "match_source": "endpoint_exact",
             **qmeta,
         }
