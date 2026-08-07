@@ -90,6 +90,17 @@ async def test_find_tools_advertise_taxon_id_or_name_union() -> None:
 
 
 @pytest.mark.asyncio
+async def test_variant_tool_advertises_positive_optional_position_bounds() -> None:
+    mcp = create_uniprot_mcp()
+    tool = await mcp.get_tool("get_protein_variants")
+    for name in ("position_start", "position_end"):
+        schema = tool.parameters["properties"][name]
+        integer = next(branch for branch in schema["anyOf"] if branch.get("type") == "integer")
+        assert integer["minimum"] == 1
+        assert name not in tool.parameters.get("required", [])
+
+
+@pytest.mark.asyncio
 async def test_signatures_match_live_schema_no_drift() -> None:
     """Drift guard: hardcoded description signatures match generated ones."""
     mcp = create_uniprot_mcp()

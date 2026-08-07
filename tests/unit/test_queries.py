@@ -470,6 +470,34 @@ class TestProteinQueries:
         assert "faldo:begin ?b" in query
         assert "ORDER BY" not in query
 
+    def test_protein_variants_filters_by_inclusive_overlap(self) -> None:
+        assert "FILTER(?end >= 100 && ?begin <= 200)" in q.protein_variants(
+            "P38398", position_start=100, position_end=200
+        )
+        assert "FILTER(?end >= 100)" in q.protein_variants("P38398", position_start=100)
+        assert "FILTER(?begin <= 200)" in q.protein_variants("P38398", position_end=200)
+
+    def test_filtered_protein_variants_count_reuses_range_and_overlap_filter(self) -> None:
+        query = q.protein_variants_count("P38398", position_start=100, position_end=200)
+        assert "?a up:range ?r ." in query
+        assert "?r faldo:begin ?b . ?b faldo:position ?begin ." in query
+        assert "?r faldo:end ?e . ?e faldo:position ?end ." in query
+        assert "FILTER(?end >= 100 && ?begin <= 200)" in query
+
+    @pytest.mark.parametrize(
+        ("bounds", "field"),
+        [
+            ({"position_start": 0}, "position_start"),
+            ({"position_end": -1}, "position_end"),
+        ],
+    )
+    def test_protein_variants_rejects_non_positive_position_bounds(
+        self, bounds: dict[str, int], field: str
+    ) -> None:
+        with pytest.raises(InvalidInputError) as exc:
+            q.protein_variants("P38398", **bounds)
+        assert exc.value.field == field
+
     def test_protein_variants_disease_only_requires_skos_related(self) -> None:
         q_only = q.protein_variants("P38398", limit=50, disease_associated_only=True)
         # required join (no OPTIONAL wrapper) when disease_associated_only

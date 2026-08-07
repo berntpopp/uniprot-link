@@ -68,6 +68,12 @@ CASES = {
     "find_proteins(mnemonic=NAA10_HUMAN) F3": q.find_proteins(mnemonic="NAA10_HUMAN", limit=5),
     "protein_variants(P38398)": q.protein_variants("P38398", limit=10),
     "protein_variants_count(P38398)": q.protein_variants_count("P38398"),  # F5 true total
+    "protein_variants(P38398, range=100-200)": q.protein_variants(
+        "P38398", limit=200, position_start=100, position_end=200
+    ),
+    "protein_variants_count(P38398, range=100-200)": q.protein_variants_count(
+        "P38398", position_start=100, position_end=200
+    ),
     "find_proteins(tax=9606, name='polynucleotide kinase')": q.find_proteins(  # F6 per-word
         organism_taxon=9606, name_contains="polynucleotide kinase", limit=5
     ),

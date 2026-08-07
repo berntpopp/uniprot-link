@@ -523,6 +523,138 @@ async def test_get_variants_truncated_when_limit_reached(service_factory: Any) -
 
 
 @pytest.mark.asyncio
+async def test_get_variants_rejects_reversed_range_before_client_call(
+    service_factory: Any,
+) -> None:
+    service = service_factory([])
+    with pytest.raises(InvalidInputError) as exc:
+        await service.get_variants("P38398", position_start=200, position_end=100)
+    assert exc.value.field == "position_range"
+    assert service.client.calls == []  # type: ignore[attr-defined]
+
+
+@pytest.mark.asyncio
+async def test_get_variants_discloses_and_forwards_inclusive_position_range(
+    service_factory: Any,
+) -> None:
+    rows = [{"begin": 150, "end": 150, "substitution": "A"}]
+    service = service_factory(
+        [
+            ("up:obsolete ?obsolete", _ACTIVE_STATUS),
+            (
+                "Natural_Variant_Annotation",
+                make_select_json(["begin", "end", "substitution"], rows),
+            ),
+        ]
+    )
+    res = await service.get_variants("P38398", position_start=100, position_end=200)
+    assert res["position_range"] == {
+        "start": 100,
+        "end": 200,
+        "semantics": "inclusive_overlap",
+    }
+    data_query = next(
+        query
+        for query in service.client.calls  # type: ignore[attr-defined]
+        if "Natural_Variant_Annotation" in query
+    )
+    assert "FILTER(?end >= 100 && ?begin <= 200)" in data_query
+
+
+@pytest.mark.asyncio
+async def test_get_variants_no_range_preserves_response_shape(service_factory: Any) -> None:
+    service = service_factory(
+        [
+            ("up:obsolete ?obsolete", _ACTIVE_STATUS),
+            ("Natural_Variant_Annotation", make_select_json([], [])),
+        ]
+    )
+    res = await service.get_variants("P38398")
+    assert "position_range" not in res
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("bounds", "expected"),
+    [
+        ({"position_start": 100}, {"start": 100, "end": None}),
+        ({"position_end": 200}, {"start": None, "end": 200}),
+    ],
+)
+async def test_get_variants_discloses_one_sided_position_range(
+    service_factory: Any,
+    bounds: dict[str, int],
+    expected: dict[str, int | None],
+) -> None:
+    service = service_factory(
+        [
+            ("up:obsolete ?obsolete", _ACTIVE_STATUS),
+            ("Natural_Variant_Annotation", make_select_json([], [])),
+        ]
+    )
+    res = await service.get_variants("P38398", **bounds)
+    assert res["position_range"] == {
+        **expected,
+        "semantics": "inclusive_overlap",
+    }
+
+
+@pytest.mark.asyncio
+async def test_get_variants_filtered_truncation_uses_filtered_total(
+    service_factory: Any,
+) -> None:
+    rows = [{"begin": 100 + i, "end": 100 + i, "substitution": "A"} for i in range(2)]
+    service = service_factory(
+        [
+            ("up:obsolete ?obsolete", _ACTIVE_STATUS),
+            ("COUNT(DISTINCT ?a)", make_select_json(["n"], [{"n": 7}])),
+            (
+                "Natural_Variant_Annotation",
+                make_select_json(["begin", "end", "substitution"], rows),
+            ),
+        ]
+    )
+    res = await service.get_variants("P38398", limit=2, position_start=100, position_end=200)
+    assert res["truncated"]["total"] == 7
+    count_query = next(
+        query
+        for query in service.client.calls  # type: ignore[attr-defined]
+        if "COUNT(DISTINCT ?a)" in query
+    )
+    assert "FILTER(?end >= 100 && ?begin <= 200)" in count_query
+
+
+@pytest.mark.asyncio
+async def test_get_protein_variants_tool_forwards_position_range(
+    service_factory: Any,
+) -> None:
+    from uniprot_link.mcp.facade import create_uniprot_mcp
+
+    body = make_select_json(
+        ["begin", "end", "substitution"],
+        [{"begin": 150, "end": 150, "substitution": "A"}],
+    )
+    service = service_factory(
+        [
+            ("up:obsolete ?obsolete", _ACTIVE_STATUS),
+            ("Natural_Variant_Annotation", body),
+        ]
+    )
+    service_adapters.set_sparql_service(service)
+    try:
+        mcp = create_uniprot_mcp()
+        result = await mcp.call_tool(
+            "get_protein_variants",
+            {"accession": "P38398", "position_start": 100, "position_end": 200},
+        )
+        payload = result.structured_content if hasattr(result, "structured_content") else result
+        assert payload["success"] is True
+        assert payload["position_range"]["semantics"] == "inclusive_overlap"
+    finally:
+        service_adapters.set_sparql_service(None)
+
+
+@pytest.mark.asyncio
 async def test_get_variants_truncation_uses_raw_row_count(service_factory: Any) -> None:
     from tests.conftest import make_select_json
 

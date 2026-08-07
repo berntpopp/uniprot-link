@@ -385,10 +385,12 @@ def _register_annotations(mcp: FastMCP) -> None:
             "`L176F`) for simple substitutions, `variant_type` (substitution|other), "
             "free-text description, structured linked `diseases`, and `dbsnp` rsIDs. "
             "Set disease_associated_only=true to keep only disease-linked variants. "
+            "Set position_start and/or position_end to keep annotations that overlap "
+            "that residue interval (inclusive). "
             "response_mode=compact/minimal drops the repeated free-text provenance; "
             "standard (default) preserves the existing full records. "
             "Signature: get_protein_variants(accession, limit=, disease_associated_only=, "
-            "response_mode=)."
+            "response_mode=, position_start=, position_end=)."
         ),
     )
     async def get_protein_variants(
@@ -398,10 +400,23 @@ def _register_annotations(mcp: FastMCP) -> None:
             bool, Field(description="Return only variants linked to a disease.")
         ] = False,
         response_mode: ResponseMode = "standard",
+        position_start: Annotated[
+            int | None,
+            Field(description="First residue of an inclusive overlap interval.", ge=1),
+        ] = None,
+        position_end: Annotated[
+            int | None,
+            Field(description="Last residue of an inclusive overlap interval.", ge=1),
+        ] = None,
     ) -> dict[str, Any]:
         async def call() -> dict[str, Any]:
             payload = await get_sparql_service().get_variants(
-                accession, limit, disease_associated_only, response_mode
+                accession,
+                limit,
+                disease_associated_only,
+                response_mode,
+                position_start=position_start,
+                position_end=position_end,
             )
             payload["_meta"] = {
                 "next_commands": after_entry_subresource(
