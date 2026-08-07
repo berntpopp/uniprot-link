@@ -15,9 +15,10 @@ from uniprot_link.exceptions import InvalidInputError
 from uniprot_link.services import queries as Q
 from uniprot_link.services import shaping as S
 from uniprot_link.services.service_base import ServiceBase, _sort_by_mnemonic
+from uniprot_link.services.taxon_resolution import TaxonResolutionMixin
 
 
-class FindProteinsServiceMixin(ServiceBase):
+class FindProteinsServiceMixin(TaxonResolutionMixin, ServiceBase):
     """find_proteins / find_proteins_batch and their reviewed-first pagination."""
 
     async def find_proteins(self, **kwargs: Any) -> dict[str, Any]:
@@ -31,6 +32,10 @@ class FindProteinsServiceMixin(ServiceBase):
         limit = Q.clamp_limit(kwargs.pop("limit", 25), default=25, maximum=200)
         offset = max(0, int(kwargs.pop("offset", 0)))
         reviewed = kwargs.pop("reviewed", None)
+        raw_organism_taxon = kwargs.pop("organism_taxon", None)
+        organism_taxon = await self.resolve_organism_taxon(raw_organism_taxon)
+        if organism_taxon is not None:
+            kwargs["organism_taxon"] = organism_taxon
         reviewed_count: int | None = None
         if reviewed is not None:
             query = Q.find_proteins(limit=limit, offset=offset, reviewed=reviewed, **kwargs)
@@ -50,6 +55,8 @@ class FindProteinsServiceMixin(ServiceBase):
         else:
             proteins, qmeta, reviewed_count = await self._find_reviewed_first(kwargs, limit, offset)
         payload: dict[str, Any] = {"count": len(proteins), "proteins": proteins, **qmeta}
+        if isinstance(raw_organism_taxon, str):
+            payload["_meta"] = {"resolved_organism_taxon": organism_taxon}
         if reviewed is None and reviewed_count is not None:
             # F9: disclose how many of the (reviewed-first) results are Swiss-Prot,
             # so a gene page dominated by TrEMBL is never mistaken for "all there is".
@@ -74,7 +81,7 @@ class FindProteinsServiceMixin(ServiceBase):
     async def find_proteins_batch(
         self,
         genes: list[str],
-        organism_taxon: int | None = None,
+        organism_taxon: int | str | None = None,
         reviewed: bool | None = None,
         limit_per_gene: int = 5,
     ) -> dict[str, Any]:
@@ -97,6 +104,8 @@ class FindProteinsServiceMixin(ServiceBase):
                 "find_proteins_batch needs at least one gene symbol.", field="genes"
             )
         per_gene = Q.clamp_limit(limit_per_gene, default=5, maximum=25)
+        raw_organism_taxon = organism_taxon
+        organism_taxon = await self.resolve_organism_taxon(raw_organism_taxon)
         results = await asyncio.gather(
             *(
                 self.find_proteins(
@@ -121,7 +130,7 @@ class FindProteinsServiceMixin(ServiceBase):
             # only fully cached when every leg hit the cache.
             elapsed = max(elapsed, float(result.get("elapsed_ms", 0.0)))
             cached = cached and bool(result.get("cached", False))
-        return {
+        payload: dict[str, Any] = {
             "gene_count": len(unique),
             "count": len(proteins),
             "by_gene": by_gene,
@@ -131,6 +140,9 @@ class FindProteinsServiceMixin(ServiceBase):
             "elapsed_ms": round(elapsed, 1),
             "cached": cached,
         }
+        if isinstance(raw_organism_taxon, str):
+            payload["_meta"] = {"resolved_organism_taxon": organism_taxon}
+        return payload
 
     async def _find_reviewed_first_concurrent(
         self, anchors: dict[str, Any], limit: int

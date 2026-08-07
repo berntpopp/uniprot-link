@@ -49,7 +49,9 @@ WHERE {{
   ?taxon a up:Taxon ; up:scientificName ?scientificName .
   OPTIONAL {{ ?taxon up:commonName ?commonName }}
   OPTIONAL {{ ?taxon up:rank ?rank }}
-  FILTER(LCASE(?scientificName) = LCASE("{n}") || CONTAINS(LCASE(?scientificName), LCASE("{n}")))
+  FILTER(LCASE(?scientificName) = LCASE("{n}") ||
+         LCASE(?commonName) = LCASE("{n}") ||
+         CONTAINS(LCASE(?scientificName), LCASE("{n}")))
 }}
 ORDER BY ?scientificName
 LIMIT {limit}"""

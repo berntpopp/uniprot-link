@@ -73,6 +73,23 @@ async def test_tools_resource_lists_all_with_signatures() -> None:
 
 
 @pytest.mark.asyncio
+async def test_find_tools_advertise_taxon_id_or_name_union() -> None:
+    """Both find tools retain branch-level constraints for ids and names."""
+    mcp = create_uniprot_mcp()
+    for name in ("find_proteins", "find_proteins_batch"):
+        tool = await mcp.get_tool(name)
+        schema = tool.parameters["properties"]["organism_taxon"]
+        branches = schema["anyOf"]
+        assert {branch.get("type") for branch in branches} == {"integer", "string", "null"}
+        integer = next(branch for branch in branches if branch.get("type") == "integer")
+        string = next(branch for branch in branches if branch.get("type") == "string")
+        assert integer["minimum"] == 1
+        assert string["minLength"] == 1
+        assert "scientific" in schema["description"]
+        assert "common" in schema["description"]
+
+
+@pytest.mark.asyncio
 async def test_signatures_match_live_schema_no_drift() -> None:
     """Drift guard: hardcoded description signatures match generated ones."""
     mcp = create_uniprot_mcp()

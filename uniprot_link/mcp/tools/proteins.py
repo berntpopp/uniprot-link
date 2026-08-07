@@ -39,6 +39,8 @@ ResponseMode = Annotated[
     Field(description="Verbosity: minimal | compact | standard | full."),
 ]
 
+TaxonInput = Annotated[int, Field(ge=1)] | Annotated[str, Field(min_length=1)]
+
 
 def register_protein_tools(mcp: FastMCP) -> None:
     """Register UniProtKB protein tools on a FastMCP instance."""
@@ -57,7 +59,8 @@ def _register_find_and_summary(mcp: FastMCP) -> None:
         description=(
             "Search UniProtKB for the entries of a GENE and return matching entries "
             "(accession, mnemonic, recommended name, reviewed flag, organism). "
-            "gene_symbol is REQUIRED; refine the hits with organism_taxon, reviewed, "
+            "gene_symbol is REQUIRED; refine the hits with organism_taxon (a positive "
+            "NCBI taxon id or an exact common/scientific organism name), reviewed, "
             "name_contains (matched per word, in any order, case-insensitive), or the "
             "structured filters mnemonic / ec_number / keyword. "
             "Reviewed (Swiss-Prot) hits are ranked first. UniProt SPARQL has no "
@@ -77,8 +80,14 @@ def _register_find_and_summary(mcp: FastMCP) -> None:
             Field(description="Gene symbol to search for, e.g. BRCA1.", examples=["BRCA1", "TP53"]),
         ],
         organism_taxon: Annotated[
-            int | None,
-            Field(description="NCBI taxon id, e.g. 9606 for human.", ge=1, examples=[9606]),
+            TaxonInput | None,
+            Field(
+                description=(
+                    "Positive NCBI taxon id or exact common/scientific organism name, "
+                    "e.g. 9606, 'human', or 'Homo sapiens'."
+                ),
+                examples=[9606, "human", "Homo sapiens"],
+            ),
         ] = None,
         reviewed: Annotated[
             bool | None, Field(description="True = Swiss-Prot only; False = TrEMBL only.")
@@ -118,7 +127,7 @@ def _register_find_and_summary(mcp: FastMCP) -> None:
                 offset=offset,
             )
             accessions = [p["accession"] for p in payload["proteins"] if p.get("accession")]
-            payload["_meta"] = {"next_commands": after_find_proteins(accessions)}
+            payload.setdefault("_meta", {})["next_commands"] = after_find_proteins(accessions)
             return payload
 
         return await run_mcp_tool(
@@ -144,7 +153,8 @@ def _register_find_and_summary(mcp: FastMCP) -> None:
             "(gene -> accessions, reviewed-first), a flat proteins list tagged "
             "with matched_gene, resolved_genes, and unresolved_genes (a symbol "
             "that matched nothing is disclosed, never silently dropped). Optionally "
-            "scope by organism_taxon and reviewed. next_commands fan out to "
+            "scope by organism_taxon (a positive NCBI taxon id or an exact "
+            "common/scientific organism name) and reviewed. next_commands fan out to "
             "get_protein on each resolved gene's top hit. For a single gene use "
             "find_proteins. "
             "Signature: find_proteins_batch(gene_symbols, organism_taxon=, reviewed=, "
@@ -162,7 +172,13 @@ def _register_find_and_summary(mcp: FastMCP) -> None:
             ),
         ],
         organism_taxon: Annotated[
-            int | None, Field(description="NCBI taxon id, e.g. 9606 for human.", ge=1)
+            TaxonInput | None,
+            Field(
+                description=(
+                    "Positive NCBI taxon id or exact common/scientific organism name, "
+                    "e.g. 9606, 'human', or 'Homo sapiens'."
+                )
+            ),
         ] = None,
         reviewed: Annotated[
             bool | None, Field(description="True = Swiss-Prot only; False = TrEMBL only.")
@@ -175,7 +191,9 @@ def _register_find_and_summary(mcp: FastMCP) -> None:
             payload = await get_sparql_service().find_proteins_batch(
                 gene_symbols, organism_taxon, reviewed, limit_per_gene
             )
-            payload["_meta"] = {"next_commands": after_find_proteins_batch(payload["by_gene"])}
+            payload.setdefault("_meta", {})["next_commands"] = after_find_proteins_batch(
+                payload["by_gene"]
+            )
             return payload
 
         return await run_mcp_tool(
@@ -184,7 +202,8 @@ def _register_find_and_summary(mcp: FastMCP) -> None:
             context=McpErrorContext(
                 "find_proteins_batch",
                 fallback=cmd(
-                    "find_proteins", gene_symbol=gene_symbols[0] if gene_symbols else "protein"
+                    "find_proteins",
+                    gene_symbol=gene_symbols[0] if gene_symbols else "protein",
                 ),
             ),
         )

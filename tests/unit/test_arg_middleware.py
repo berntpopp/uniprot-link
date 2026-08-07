@@ -49,7 +49,7 @@ async def test_non_alias_near_miss_gets_did_you_mean() -> None:
 async def test_wrong_type_routes_through_envelope() -> None:
     mcp = create_uniprot_mcp()
     env = _structured(
-        await mcp.call_tool("find_proteins", {"gene_symbol": "BRCA1", "organism_taxon": "notanint"})
+        await mcp.call_tool("find_proteins", {"gene_symbol": "BRCA1", "organism_taxon": ["human"]})
     )
     assert env["error_code"] == "invalid_input"
     assert env["field"] == "organism_taxon"
@@ -137,7 +137,119 @@ async def test_alias_normalized_and_disclosed() -> None:
         applied = {tuple(pair) for pair in env["_meta"]["argument_aliases_applied"]}
         assert ("taxon", "organism_taxon") in applied
         assert ("gene", "gene_symbol") in applied  # fleet-canon flip
-        assert seen["organism_taxon"] == 9606  # alias landed + coerced str->int
+        assert seen["organism_taxon"] == "9606"  # alias landed; real service resolves it
         assert seen["gene"] == "PNKP"  # gene_symbol param -> service `gene` kwarg
+    finally:
+        service_adapters.set_sparql_service(None)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("arguments", "resolved_from_string", "expected_alias"),
+    [
+        ({"organism_taxon": "human"}, True, None),
+        ({"organism": "Homo sapiens"}, True, ("organism", "organism_taxon")),
+        ({"species": "human"}, True, ("species", "organism_taxon")),
+        ({"organism_taxon": 9606}, False, None),
+        ({"organism_taxon": "9606"}, True, None),
+    ],
+)
+async def test_species_inputs_reach_find_proteins_as_taxon_id(
+    service_factory: Any,
+    arguments: dict[str, Any],
+    resolved_from_string: bool,
+    expected_alias: tuple[str, str] | None,
+) -> None:
+    """Names and ids cross the real facade and service as an integer taxon."""
+    import uniprot_link.mcp.service_adapters as service_adapters
+
+    service = service_factory([])
+    service_adapters.set_sparql_service(service)
+    try:
+        mcp = create_uniprot_mcp()
+        result = await mcp.call_tool(
+            "find_proteins",
+            {"gene_symbol": "BRCA1", "reviewed": True, **arguments},
+        )
+        env = _structured(result)
+        assert env["success"] is True
+        assert len(service.client.calls) == 1
+        assert "taxon:9606" in service.client.calls[0]
+        if resolved_from_string:
+            assert env["_meta"]["resolved_organism_taxon"] == 9606
+        else:
+            assert "resolved_organism_taxon" not in env["_meta"]
+        if expected_alias is not None:
+            applied = {tuple(pair) for pair in env["_meta"]["argument_aliases_applied"]}
+            assert expected_alias in applied
+    finally:
+        service_adapters.set_sparql_service(None)
+
+
+@pytest.mark.asyncio
+async def test_ambiguous_species_is_promoted_to_recoverable_tool_error(
+    service_factory: Any,
+) -> None:
+    """An ambiguous exact name is an MCP error that directs callers to get_taxon."""
+    import uniprot_link.mcp.service_adapters as service_adapters
+    from tests.conftest import make_select_json
+
+    matches = make_select_json(
+        ["taxon", "scientificName", "commonName"],
+        [
+            {
+                "taxon": "http://purl.uniprot.org/taxonomy/111",
+                "scientificName": "Ambigua exacta",
+            },
+            {
+                "taxon": "http://purl.uniprot.org/taxonomy/222",
+                "scientificName": "Other exacta",
+                "commonName": "Ambigua exacta",
+            },
+        ],
+    )
+    service = service_factory([("?taxon a up:Taxon", matches)])
+    service_adapters.set_sparql_service(service)
+    try:
+        mcp = create_uniprot_mcp()
+        result = await mcp.call_tool(
+            "find_proteins",
+            {
+                "gene_symbol": "BRCA1",
+                "organism_taxon": "Ambigua exacta",
+                "reviewed": True,
+            },
+        )
+        env = _structured(result)
+        assert result.is_error is True
+        assert env["success"] is False
+        assert env["error_code"] == "invalid_input"
+        assert env["recovery_action"] == "reformulate_input"
+        assert env["field"] == "organism_taxon"
+        assert "get_taxon" in env["message"]
+        assert "get_taxon" in env["hint"]
+    finally:
+        service_adapters.set_sparql_service(None)
+
+
+@pytest.mark.asyncio
+async def test_named_taxon_does_not_override_unrelated_error_recovery(
+    service_factory: Any,
+) -> None:
+    """A bad gene remains a gene error even when the organism came from a name."""
+    import uniprot_link.mcp.service_adapters as service_adapters
+
+    service = service_factory([])
+    service_adapters.set_sparql_service(service)
+    try:
+        mcp = create_uniprot_mcp()
+        result = await mcp.call_tool(
+            "find_proteins",
+            {"gene_symbol": " ", "organism_taxon": "human", "reviewed": True},
+        )
+        env = _structured(result)
+        assert result.is_error is True
+        assert env["field"] == "gene_symbol"
+        assert env["_meta"]["next_commands"][0]["tool"] == "search_example_queries"
     finally:
         service_adapters.set_sparql_service(None)

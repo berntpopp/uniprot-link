@@ -1444,6 +1444,155 @@ async def test_get_taxon_uncommon_name_falls_through(service_factory: Any) -> No
     assert out["matches"][0]["taxon_id"] == "63221"
 
 
+@pytest.mark.asyncio
+async def test_find_proteins_curated_taxon_name_uses_no_taxonomy_query(
+    service_factory: Any,
+) -> None:
+    """Curated organism names resolve locally before the protein query."""
+    svc = service_factory([])
+    out = await svc.find_proteins(gene="BRCA1", organism_taxon="HuMaN", reviewed=True)
+    assert len(svc.client.calls) == 1
+    assert "taxon:9606" in svc.client.calls[0]
+    assert out["_meta"]["resolved_organism_taxon"] == 9606
+
+
+@pytest.mark.asyncio
+async def test_find_proteins_curated_alias_does_not_bypass_exact_name_rule(
+    service_factory: Any,
+) -> None:
+    """Only curated scientific/common names resolve locally, not extra aliases."""
+    svc = service_factory([])
+    with pytest.raises(InvalidInputError, match="no exact taxonomy match"):
+        await svc.find_proteins(gene="S", organism_taxon="covid", reviewed=True)
+    assert len(svc.client.calls) == 1
+    assert "?taxon a up:Taxon" in svc.client.calls[0]
+
+
+@pytest.mark.asyncio
+async def test_find_proteins_curated_alias_can_resolve_its_own_exact_taxon(
+    service_factory: Any,
+) -> None:
+    """A curated subspecies alias must not shadow an exact endpoint species."""
+    taxon = make_select_json(
+        ["taxon", "scientificName"],
+        [
+            {
+                "taxon": "http://purl.uniprot.org/taxonomy/4530",
+                "scientificName": "Oryza sativa",
+            }
+        ],
+    )
+    svc = service_factory([("?taxon a up:Taxon", taxon)])
+    out = await svc.find_proteins(gene="RCA", organism_taxon="Oryza sativa", reviewed=True)
+    assert "?taxon a up:Taxon" in svc.client.calls[0]
+    assert "taxon:4530" in svc.client.calls[1]
+    assert out["_meta"]["resolved_organism_taxon"] == 4530
+
+
+@pytest.mark.asyncio
+async def test_find_proteins_pathological_digit_taxon_is_invalid_input(
+    service_factory: Any,
+) -> None:
+    """Python's integer digit ceiling cannot turn caller input into internal_error."""
+    svc = service_factory([])
+    with pytest.raises(InvalidInputError, match="positive NCBI taxon id"):
+        await svc.find_proteins(gene="BRCA1", organism_taxon="9" * 5000, reviewed=True)
+    assert svc.client.calls == []
+
+
+@pytest.mark.asyncio
+async def test_find_proteins_long_tail_taxon_requires_one_exact_match(
+    service_factory: Any,
+) -> None:
+    """A unique exact long-tail match is resolved through get_taxon."""
+    taxon = make_select_json(
+        ["taxon", "scientificName", "rank"],
+        [
+            {
+                "taxon": "http://purl.uniprot.org/taxonomy/63221",
+                "scientificName": "Homo sapiens neanderthalensis",
+                "rank": "http://purl.uniprot.org/core/Subspecies",
+            }
+        ],
+    )
+    svc = service_factory([("?taxon a up:Taxon", taxon)])
+    out = await svc.find_proteins(
+        gene="FOXP2", organism_taxon="homo sapiens NEANDERTHALENSIS", reviewed=True
+    )
+    assert len(svc.client.calls) == 2
+    assert "?taxon a up:Taxon" in svc.client.calls[0]
+    assert "taxon:63221" in svc.client.calls[1]
+    assert out["_meta"]["resolved_organism_taxon"] == 63221
+
+
+@pytest.mark.asyncio
+async def test_find_proteins_long_tail_taxon_queries_exact_common_name(
+    service_factory: Any,
+) -> None:
+    """The delegated taxonomy scan can discover a non-curated common name."""
+    taxon = make_select_json(
+        ["taxon", "scientificName", "commonName"],
+        [
+            {
+                "taxon": "http://purl.uniprot.org/taxonomy/9986",
+                "scientificName": "Oryctolagus cuniculus",
+                "commonName": "Rabbit",
+            }
+        ],
+    )
+    svc = service_factory([("?taxon a up:Taxon", taxon)])
+    out = await svc.find_proteins(gene="ALB", organism_taxon="RABBIT", reviewed=True)
+    assert "LCASE(?commonName)" in svc.client.calls[0]
+    assert "taxon:9986" in svc.client.calls[1]
+    assert out["_meta"]["resolved_organism_taxon"] == 9986
+
+
+@pytest.mark.asyncio
+async def test_find_proteins_rejects_non_exact_taxon_scan_result(service_factory: Any) -> None:
+    """A fuzzy endpoint result is never silently selected as the organism."""
+    taxon = make_select_json(
+        ["taxon", "scientificName"],
+        [
+            {
+                "taxon": "http://purl.uniprot.org/taxonomy/2506766",
+                "scientificName": "Takifugu chinensis x Takifugu rubripes",
+            }
+        ],
+    )
+    svc = service_factory([("?taxon a up:Taxon", taxon)])
+    with pytest.raises(InvalidInputError, match="get_taxon"):
+        await svc.find_proteins(gene="GENE", organism_taxon="Takifugu rubripes", reviewed=True)
+    assert len(svc.client.calls) == 1
+
+
+@pytest.mark.asyncio
+async def test_find_proteins_batch_resolves_taxon_once_and_reports_metadata(
+    service_factory: Any,
+) -> None:
+    """Batch resolution happens once before fan-out, not once per gene."""
+    taxon = make_select_json(
+        ["taxon", "scientificName"],
+        [
+            {
+                "taxon": "http://purl.uniprot.org/taxonomy/63221",
+                "scientificName": "Homo sapiens neanderthalensis",
+            }
+        ],
+    )
+    svc = service_factory([("?taxon a up:Taxon", taxon)])
+    out = await svc.find_proteins_batch(
+        ["FOXP2", "SRGAP2"],
+        organism_taxon="Homo sapiens neanderthalensis",
+        reviewed=True,
+    )
+    taxonomy_calls = [query for query in svc.client.calls if "?taxon a up:Taxon" in query]
+    protein_calls = [query for query in svc.client.calls if "?protein up:encodedBy" in query]
+    assert len(taxonomy_calls) == 1
+    assert len(protein_calls) == 2
+    assert all("taxon:63221" in query for query in protein_calls)
+    assert out["_meta"]["resolved_organism_taxon"] == 63221
+
+
 def _gene_hit(acc: str, mnem: str) -> dict[str, Any]:
     return make_select_json(
         ["protein", "mnemonic", "reviewed", "taxid", "organism"],
