@@ -195,8 +195,11 @@ async def test_variants_brca1(service: SparqlService) -> None:
 
 
 async def test_protein_variants_position_range(service: SparqlService) -> None:
-    out = await service.get_variants("P38398", limit=200, position_start=100, position_end=200)
+    out = await service.get_variants("P38398", limit=2, position_start=100, position_end=200)
     assert out["variants"]
+    assert out["count"] == 2
+    assert out["truncated"]["returned"] == 2
+    assert out["truncated"]["total"] > 2
     assert out["position_range"] == {
         "start": 100,
         "end": 200,

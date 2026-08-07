@@ -23,6 +23,8 @@ class _TaxonomyLookup(Protocol):
         allow_curated: bool = True,
     ) -> dict[str, Any]: ...
 
+    async def get_taxon_exact(self, name: str) -> dict[str, Any]: ...
+
 
 class TaxonResolutionMixin:
     """Resolve numeric or named organism inputs to one positive NCBI taxon id."""
@@ -75,7 +77,7 @@ class TaxonResolutionMixin:
 
         taxonomy = cast(_TaxonomyLookup, self)
         try:
-            result = await taxonomy.get_taxon(name, allow_curated=curated is None)
+            result = await taxonomy.get_taxon_exact(name)
         except NotFoundError as exc:
             raise InvalidInputError(
                 "The organism name has no exact taxonomy match. Call get_taxon to inspect "

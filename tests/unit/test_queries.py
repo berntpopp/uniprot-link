@@ -637,3 +637,52 @@ class TestFindProteinsTwoPhase:
         q_ = q.find_proteins(organism_taxon=9606, name_contains="kinase", count=True)
         assert "COUNT(DISTINCT ?protein)" in q_
         assert "CONTAINS(LCASE(?name)" in q_
+
+    def test_exact_taxon_lookup_limits_after_distinct_exact_ids(self) -> None:
+        query = q.resolve_taxon_by_exact_name("Takifugu rubripes")
+        assert "SELECT DISTINCT ?taxon" in query
+        assert "LIMIT 2" in query
+        assert 'LCASE(?_exactName) = LCASE("Takifugu rubripes")' in query
+        assert "up:scientificName ?_exactName" in query
+        assert "up:commonName ?_exactName" in query
+        assert "CONTAINS" not in query
+
+
+class TestLiveVerifierRangeGate:
+    def test_range_gate_accepts_forced_truncation_with_matching_count(self) -> None:
+        from research.verify_queries import validate_range_results
+
+        outcomes = {
+            "protein_variants(P38398, range=100-200)": (200, {"rows": 2}),
+            "protein_variants_count(P38398, range=100-200)": (
+                200,
+                {"sample": {"n": "9"}},
+            ),
+        }
+        assert validate_range_results(outcomes) == []
+
+    @pytest.mark.parametrize(
+        "outcomes",
+        [
+            {
+                "protein_variants(P38398, range=100-200)": (503, "unavailable"),
+                "protein_variants_count(P38398, range=100-200)": (
+                    200,
+                    {"sample": {"n": "9"}},
+                ),
+            },
+            {
+                "protein_variants(P38398, range=100-200)": (200, {"rows": 2}),
+                "protein_variants_count(P38398, range=100-200)": (
+                    200,
+                    {"sample": {"n": "1"}},
+                ),
+            },
+        ],
+    )
+    def test_range_gate_rejects_non_200_or_count_mismatch(
+        self, outcomes: dict[str, tuple[int, object]]
+    ) -> None:
+        from research.verify_queries import validate_range_results
+
+        assert validate_range_results(outcomes)

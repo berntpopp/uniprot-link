@@ -1597,7 +1597,7 @@ async def test_find_proteins_curated_alias_does_not_bypass_exact_name_rule(
     with pytest.raises(InvalidInputError, match="no exact taxonomy match"):
         await svc.find_proteins(gene="S", organism_taxon="covid", reviewed=True)
     assert len(svc.client.calls) == 1
-    assert "?taxon a up:Taxon" in svc.client.calls[0]
+    assert "SELECT DISTINCT ?taxon" in svc.client.calls[0]
 
 
 @pytest.mark.asyncio
@@ -1614,9 +1614,9 @@ async def test_find_proteins_curated_alias_can_resolve_its_own_exact_taxon(
             }
         ],
     )
-    svc = service_factory([("?taxon a up:Taxon", taxon)])
+    svc = service_factory([("SELECT DISTINCT ?taxon", taxon)])
     out = await svc.find_proteins(gene="RCA", organism_taxon="Oryza sativa", reviewed=True)
-    assert "?taxon a up:Taxon" in svc.client.calls[0]
+    assert "SELECT DISTINCT ?taxon" in svc.client.calls[0]
     assert "taxon:4530" in svc.client.calls[1]
     assert out["_meta"]["resolved_organism_taxon"] == 4530
 
@@ -1647,14 +1647,93 @@ async def test_find_proteins_long_tail_taxon_requires_one_exact_match(
             }
         ],
     )
-    svc = service_factory([("?taxon a up:Taxon", taxon)])
+    svc = service_factory([("SELECT DISTINCT ?taxon", taxon)])
     out = await svc.find_proteins(
         gene="FOXP2", organism_taxon="homo sapiens NEANDERTHALENSIS", reviewed=True
     )
     assert len(svc.client.calls) == 2
-    assert "?taxon a up:Taxon" in svc.client.calls[0]
+    assert "SELECT DISTINCT ?taxon" in svc.client.calls[0]
     assert "taxon:63221" in svc.client.calls[1]
     assert out["_meta"]["resolved_organism_taxon"] == 63221
+
+
+@pytest.mark.asyncio
+async def test_find_proteins_exact_taxon_is_not_hidden_by_ten_fuzzy_rows(
+    service_factory: Any,
+) -> None:
+    """The resolver uses an exact-only path instead of the fuzzy LIMIT 10 page."""
+    fuzzy = make_select_json(
+        ["taxon", "scientificName"],
+        [
+            {
+                "taxon": f"http://purl.uniprot.org/taxonomy/{1000 + i}",
+                "scientificName": f"A fuzzy organism {i} Exactus species",
+            }
+            for i in range(10)
+        ],
+    )
+    exact = make_select_json(
+        ["taxon", "scientificName"],
+        [
+            {
+                "taxon": "http://purl.uniprot.org/taxonomy/9999",
+                "scientificName": "Exactus species",
+            }
+        ],
+    )
+    svc = service_factory([("SELECT DISTINCT ?taxon", exact), ("?taxon a up:Taxon", fuzzy)])
+    out = await svc.find_proteins(gene="GENE", organism_taxon="Exactus species", reviewed=True)
+    assert "SELECT DISTINCT ?taxon" in svc.client.calls[0]
+    assert "taxon:9999" in svc.client.calls[1]
+    assert out["_meta"]["resolved_organism_taxon"] == 9999
+
+
+@pytest.mark.asyncio
+async def test_find_proteins_exact_taxon_ambiguity_survives_fuzzy_limit_and_duplicates(
+    service_factory: Any,
+) -> None:
+    """Two distinct exact IDs remain ambiguous despite duplicates and fuzzy rows."""
+    fuzzy_page = make_select_json(
+        ["taxon", "scientificName", "commonName"],
+        [
+            {
+                "taxon": "http://purl.uniprot.org/taxonomy/111",
+                "scientificName": "Ambigua exacta",
+            },
+            *[
+                {
+                    "taxon": f"http://purl.uniprot.org/taxonomy/{2000 + i}",
+                    "scientificName": f"A fuzzy Ambigua exacta {i}",
+                }
+                for i in range(9)
+            ],
+        ],
+    )
+    complete_exact = make_select_json(
+        ["taxon", "scientificName", "commonName"],
+        [
+            {
+                "taxon": "http://purl.uniprot.org/taxonomy/111",
+                "scientificName": "Ambigua exacta",
+            },
+            {
+                "taxon": "http://purl.uniprot.org/taxonomy/111",
+                "scientificName": "Ambigua exacta",
+            },
+            {
+                "taxon": "http://purl.uniprot.org/taxonomy/222",
+                "scientificName": "Other exacta",
+                "commonName": "Ambigua exacta",
+            },
+        ],
+    )
+    svc = service_factory(
+        [("SELECT DISTINCT ?taxon", complete_exact), ("?taxon a up:Taxon", fuzzy_page)]
+    )
+    with pytest.raises(InvalidInputError, match="ambiguous"):
+        await svc.find_proteins(gene="GENE", organism_taxon="Ambigua exacta", reviewed=True)
+    assert len(svc.client.calls) == 1
+    assert "SELECT DISTINCT ?taxon" in svc.client.calls[0]
 
 
 @pytest.mark.asyncio
@@ -1672,9 +1751,9 @@ async def test_find_proteins_long_tail_taxon_queries_exact_common_name(
             }
         ],
     )
-    svc = service_factory([("?taxon a up:Taxon", taxon)])
+    svc = service_factory([("SELECT DISTINCT ?taxon", taxon)])
     out = await svc.find_proteins(gene="ALB", organism_taxon="RABBIT", reviewed=True)
-    assert "LCASE(?commonName)" in svc.client.calls[0]
+    assert "up:commonName ?_exactName" in svc.client.calls[0]
     assert "taxon:9986" in svc.client.calls[1]
     assert out["_meta"]["resolved_organism_taxon"] == 9986
 
@@ -1691,7 +1770,7 @@ async def test_find_proteins_rejects_non_exact_taxon_scan_result(service_factory
             }
         ],
     )
-    svc = service_factory([("?taxon a up:Taxon", taxon)])
+    svc = service_factory([("SELECT DISTINCT ?taxon", taxon)])
     with pytest.raises(InvalidInputError, match="get_taxon"):
         await svc.find_proteins(gene="GENE", organism_taxon="Takifugu rubripes", reviewed=True)
     assert len(svc.client.calls) == 1
@@ -1711,13 +1790,13 @@ async def test_find_proteins_batch_resolves_taxon_once_and_reports_metadata(
             }
         ],
     )
-    svc = service_factory([("?taxon a up:Taxon", taxon)])
+    svc = service_factory([("SELECT DISTINCT ?taxon", taxon)])
     out = await svc.find_proteins_batch(
         ["FOXP2", "SRGAP2"],
         organism_taxon="Homo sapiens neanderthalensis",
         reviewed=True,
     )
-    taxonomy_calls = [query for query in svc.client.calls if "?taxon a up:Taxon" in query]
+    taxonomy_calls = [query for query in svc.client.calls if "SELECT DISTINCT ?taxon" in query]
     protein_calls = [query for query in svc.client.calls if "?protein up:encodedBy" in query]
     assert len(taxonomy_calls) == 1
     assert len(protein_calls) == 2

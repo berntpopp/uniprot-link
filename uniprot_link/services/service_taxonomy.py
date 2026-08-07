@@ -88,3 +88,18 @@ class TaxonomyServiceMixin(ServiceBase):
             "match_source": "endpoint_scan",
             **qmeta,
         }
+
+    async def get_taxon_exact(self, name: str) -> dict[str, Any]:
+        """Return up to two distinct exact scientific/common-name matches."""
+        name = str(name).strip()
+        rows_json, qmeta = await self._select_timed(Q.resolve_taxon_by_exact_name(name))
+        matches = shape_taxon_resolutions(rows_json)
+        if not matches:
+            raise NotFoundError(f"No taxon exactly matched '{name}'.")
+        return {
+            "query": name,
+            "match_count": len(matches),
+            "matches": matches,
+            "match_source": "endpoint_exact",
+            **qmeta,
+        }

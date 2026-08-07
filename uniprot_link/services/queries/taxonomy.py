@@ -55,3 +55,30 @@ WHERE {{
 }}
 ORDER BY ?scientificName
 LIMIT {limit}"""
+
+
+def resolve_taxon_by_exact_name(name: str) -> str:
+    """Build an exact-name lookup capped after two distinct taxon ids.
+
+    Two distinct ids are sufficient to distinguish a unique match from an
+    ambiguity. The inner DISTINCT prevents duplicate scientific/common-name rows
+    from consuming the cap before a second exact taxon can be observed.
+    """
+    n = escape_literal(name.strip())
+    return f"""{prefix_block()}
+SELECT ?taxon ?scientificName ?commonName ?rank
+WHERE {{
+  {{
+    SELECT DISTINCT ?taxon
+    WHERE {{
+      {{ ?taxon up:scientificName ?_exactName }}
+      UNION
+      {{ ?taxon up:commonName ?_exactName }}
+      FILTER(LCASE(?_exactName) = LCASE("{n}"))
+    }}
+    LIMIT 2
+  }}
+  ?taxon up:scientificName ?scientificName .
+  OPTIONAL {{ ?taxon up:commonName ?commonName }}
+  OPTIONAL {{ ?taxon up:rank ?rank }}
+}}"""
