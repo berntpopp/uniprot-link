@@ -6,6 +6,35 @@ versioning.
 
 ## [Unreleased]
 
+## [5.1.1] - 2026-08-10
+
+Consolidated Dependabot maintenance release. No tool contract, schema, or
+response shape changes, so **no router drift-baseline recapture is needed**.
+
+### Changed
+
+- **Both CodeQL phases move together to v4.37.6.** Dependabot split
+  `github/codeql-action/init` (#54) and `github/codeql-action/analyze` (#53) into
+  two PRs, and CodeQL refuses to run a config written by one version against a
+  different version (`Loaded a configuration file for version '4.37.6', but
+  running version '4.37.4'`), so neither PR could ever go green on its own. Both
+  pins move in the same commit: `f205ea1c` (v4.37.4) → `5595ccaf` (v4.37.6),
+  verified by dereferencing the annotated tag object `v4.37.6`.
+- **Both reusable container workflows re-pin to `915356ac`.** `_container-ci.yml`
+  and `_container-release.yml` move off `d3e0296`, which is two commits behind and
+  is no longer what `berntpopp/genefoundry-router`'s `v0.7.4` tag points at — the
+  tag was re-pointed to `915356ac` when the fleet drift baseline was recaptured.
+  The pin is still reviewed router v0.7.4; it is now the revision the tag names.
+- **Runtime and tooling dependencies:** uvicorn 0.52.0 → 0.52.1, typer 0.27.0 →
+  0.27.1, fastmcp 3.4.5 → 3.4.6, ruff 0.16.0 → 0.16.2. Ruff resolves one patch
+  past the 0.16.1 Dependabot asked for because this repo declares a permissive
+  floor with a major cap and `uv lock` takes the newest release inside it; 0.16.2
+  is clean on this tree with no source or rule-set changes.
+- Declared floors for the four swept packages are raised to the versions
+  Dependabot proposed (`uvicorn[standard]>=0.52.1`, `typer>=0.27.1`,
+  `fastmcp>=3.4.6`, `ruff>=0.16.1`), matching what merging those PRs would have
+  done. The major upper caps are unchanged.
+
 ## [5.1.0] - 2026-08-07
 
 Additive protein-search and variant-filter inputs. Existing numeric taxon calls,
