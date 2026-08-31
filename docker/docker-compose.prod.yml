@@ -40,7 +40,7 @@ services:
       - ALL
 
     init: true
-    restart: on-failure
+    restart: unless-stopped
 
     deploy: !override
       resources:
