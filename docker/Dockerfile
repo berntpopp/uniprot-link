@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1
 # Multi-stage Dockerfile for uniprot-link.
 
-FROM python:3.14-slim@sha256:cea0e6040540fb2b965b6e7fb5ffa00871e632eef63719f0ea54bca189ce14a6 AS builder
+FROM python:3.14-slim@sha256:cae66f2ef0ec51a9891263eeee7f987dacf0a9879e8aa9353d5606e0530619a5 AS builder
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
@@ -10,7 +10,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     UV_COMPILE_BYTECODE=1 \
     UV_LINK_MODE=copy
 
-RUN apt-get update && apt-get install -y --no-install-recommends \
+RUN apt-get update && apt-get upgrade -y && apt-get install -y --no-install-recommends \
     build-essential \
     ca-certificates \
     curl \
@@ -30,7 +30,7 @@ COPY --from=ghcr.io/astral-sh/uv:0.8.7@sha256:1e26f9a868360eeb32500a35e05787ffff
 RUN uv sync --frozen --no-dev --active --no-install-project
 
 
-FROM python:3.14-slim@sha256:cea0e6040540fb2b965b6e7fb5ffa00871e632eef63719f0ea54bca189ce14a6 AS prepared
+FROM python:3.14-slim@sha256:cae66f2ef0ec51a9891263eeee7f987dacf0a9879e8aa9353d5606e0530619a5 AS prepared
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
@@ -40,7 +40,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     UNIPROT_LINK_PORT=8000 \
     UNIPROT_LINK_TRANSPORT=unified
 
-RUN apt-get update && apt-get install -y --no-install-recommends \
+RUN apt-get update && apt-get upgrade -y && apt-get install -y --no-install-recommends \
     ca-certificates \
     curl \
     && rm -rf /var/lib/apt/lists/* \
@@ -60,7 +60,18 @@ COPY --chown=app:app ./pyproject.toml ./README.md ./
 # so the `uniprot-link` console script is on PATH.
 RUN pip install --no-deps .
 
-RUN rm -rf /root/.cache/pip /usr/local/lib/python*/ensurepip \
+RUN rm -rf /root/.cache/pip \
+    /usr/local/lib/python*/ensurepip \
+    /usr/local/lib/python*/site-packages/pip \
+    /usr/local/lib/python*/site-packages/pip-*.dist-info \
+    /usr/local/lib/python*/site-packages/setuptools \
+    /usr/local/lib/python*/site-packages/setuptools-*.dist-info \
+    /usr/local/bin/pip /usr/local/bin/pip3 /usr/local/bin/pip3.14 \
+    /opt/venv/lib/python*/site-packages/pip \
+    /opt/venv/lib/python*/site-packages/pip-*.dist-info \
+    /opt/venv/lib/python*/site-packages/setuptools \
+    /opt/venv/lib/python*/site-packages/setuptools-*.dist-info \
+    /opt/venv/bin/pip /opt/venv/bin/pip3 /opt/venv/bin/pip3.14 \
     && find / -xdev -type d -name __pycache__ -prune -exec rm -rf '{}' + \
     && find / -xdev -type f \( -name '*.pyc' -o -name '*.pyo' \) -delete
 RUN find / -xdev -perm /6000 -exec chmod a-s '{}' + \
