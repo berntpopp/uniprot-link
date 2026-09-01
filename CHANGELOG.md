@@ -6,6 +6,13 @@ versioning.
 
 ## [Unreleased]
 
+## [5.1.3] - 2026-09-02
+
+### Changed
+
+- Deploy: declare the image's numeric uid:gid in docker/docker-compose.npm.yml so the fleet
+  controller can deploy the service; a guard test keeps `user` out of the release Compose files.
+
 ## [5.1.2] - 2026-08-31
 
 ### Changed
