@@ -64,6 +64,30 @@ Useful focused commands: `make install`, `make format`, `make lint`,
 `make lint-loc`, `make typecheck`, `make test`, `make test-integration`,
 `make dev`, `make mcp-serve`.
 
+## Fleet Deploy Contract
+
+`docker/docker-compose.npm.yml` is the file the GeneFoundry fleet controller
+(`strato_v6_docker_npm`) deploys and validates. Every service it declares must set
+`user: "<uid>:<gid>"` numerically -- this image's own value, read from
+`docker/Dockerfile` (currently `999:999`), never copied from a sibling `-link` repo.
+
+`user` must NOT appear in the Compose files listed in `container-release.json`
+(`docker/docker-compose.yml`, `docker/docker-compose.prod.yml`) -- the shared
+release gate (`container_release.py validate-compose`) forbids it there.
+
+Guard test: `tests/unit/test_deploy_overlay_user.py` asserts both halves of the
+contract (numeric `user` in the npm overlay, no `user` in the release Compose
+files).
+
+Release checklist this repo enforces: bump `pyproject.toml` `version`, run
+`uv lock`, add a `CHANGELOG.md` heading `## [x.y.z] - YYYY-MM-DD`, bump
+`CITATION.cff` `version:` -- no test here ties `date-released` to the CHANGELOG
+date (it is regenerated externally by genefoundry-router's `make
+citation-write`), so update `version:` only and leave `date-released` as-is --
+tag `vx.y.z`, then approve the `release` environment gate (it can fire twice)
+via `gh api repos/berntpopp/uniprot-link/actions/runs/<id>/pending_deployments`
+(`status: waiting` is the gate).
+
 ## Coding Standards
 
 - Use `uv` for dependency management; never `pip install` directly.
