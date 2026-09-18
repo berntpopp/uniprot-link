@@ -6,6 +6,20 @@ versioning.
 
 ## [Unreleased]
 
+## [5.1.4] - 2026-09-18
+
+### Changed
+
+- Consolidate open Dependabot dependency and GitHub Actions updates:
+  - Bump `pydantic` to `>=2.13.5`
+  - Bump `typer` to `>=0.27.2`
+  - Bump `ruff` to `>=0.16.8`
+  - Bump `mypy` to `>=2.3.1`
+  - Update `berntpopp/genefoundry-router` reusable workflows to v0.9.1 (`adfc1cf`)
+  - Update `astral-sh/setup-uv` to v10.1.0 (`bec219d`)
+  - Update `github/codeql-action/{init,analyze}` to v4.38.0 (`b96794f`)
+  - Group Dependabot Python and GitHub Actions updates
+
 ## [5.1.3] - 2026-09-02
 
 ### Changed
