@@ -6,6 +6,9 @@ versioning.
 
 ## [Unreleased]
 
+## [5.1.6] - 2026-10-03
+
+- Update FastAPI and pytest-mock to the current dependency releases.
 
 ## [5.1.5] - 2026-10-03
 
