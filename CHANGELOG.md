@@ -6,6 +6,11 @@ versioning.
 
 ## [Unreleased]
 
+### Changed
+
+- Refresh the advertised UniProt SPARQL release and named-graph counts to the
+  verified 2026_03 endpoint snapshot.
+
 ## [5.1.6] - 2026-10-03
 
 - Update FastAPI and pytest-mock to the current dependency releases.

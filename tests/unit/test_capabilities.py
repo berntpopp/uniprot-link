@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from uniprot_link.config import ServerSettings, SparqlEndpointConfig
 from uniprot_link.mcp.capabilities import TOOLS, build_capabilities
+from uniprot_link.services.constants import NAMED_GRAPHS, UNIPROT_RELEASE
 
 
 def test_capabilities_structure() -> None:
@@ -14,6 +15,13 @@ def test_capabilities_structure() -> None:
     assert "json" in caps["result_formats"]
     assert "not_found" in caps["error_codes"]
     assert any(g["name"] == "uniprot" for g in caps["named_graphs"])
+
+
+def test_advertised_uniprot_release_matches_verified_current_endpoint_snapshot() -> None:
+    """The release and named-graph counts are a snapshot of the verified endpoint."""
+    assert UNIPROT_RELEASE == "2026_03"
+    assert sum(int(graph["triples"]) for graph in NAMED_GRAPHS) == 244_341_423_708
+    assert build_capabilities()["uniprot_release"] == UNIPROT_RELEASE
 
 
 def test_capabilities_advertises_response_modes_and_contracts() -> None:

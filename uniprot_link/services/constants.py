@@ -1,13 +1,14 @@
 """Static UniProt SPARQL constants: prefixes, named graphs, and release.
 
-Values verified live against ``https://sparql.uniprot.org/sparql`` (release
-2026_01, QLever engine) on 2026-06-11.
+Release and named-graph counts verified against the official UniProt SPARQL
+endpoint's VoID dataset description (release 2026_03, QLever engine) on
+2026-10-03.
 """
 
 from __future__ import annotations
 
 # Release the bundled queries and named-graph counts were validated against.
-UNIPROT_RELEASE = "2026_01"
+UNIPROT_RELEASE = "2026_03"
 SPARQL_EXAMPLES_GRAPH = "https://sparql.uniprot.org/.well-known/sparql-examples"
 
 # Canonical PREFIX block prepended to generated queries and exposed as a
@@ -40,132 +41,132 @@ def prefix_block(*names: str) -> str:
     return "\n".join(f"PREFIX {key}: <{PREFIXES[key]}>" for key in keys)
 
 
-# Named graphs in the default union dataset, with triple counts (2026_01).
+# Named graphs in the default union dataset, with triple counts (2026_03).
 NAMED_GRAPHS: list[dict[str, object]] = [
     {
         "name": "uniprot",
         "iri": "http://sparql.uniprot.org/uniprot",
-        "triples": 48_498_379_324,
+        "triples": 37_329_393_214,
         "description": "UniProtKB protein entries (Swiss-Prot + TrEMBL).",
     },
     {
         "name": "uniparc",
         "iri": "http://sparql.uniprot.org/uniparc",
-        "triples": 170_364_674_135,
+        "triples": 198_735_586_260,
         "description": "UniParc sequence archive (non-redundant).",
     },
     {
         "name": "uniref",
         "iri": "http://sparql.uniprot.org/uniref",
-        "triples": 10_505_042_621,
+        "triples": 5_375_029_833,
         "description": "UniRef sequence-similarity clusters.",
     },
     {
         "name": "taxonomy",
         "iri": "http://sparql.uniprot.org/taxonomy",
-        "triples": 60_528_740,
+        "triples": 70_047_936,
         "description": "NCBI/UniProt taxonomy.",
     },
     {
         "name": "proteomes",
         "iri": "http://sparql.uniprot.org/proteomes",
-        "triples": 34_947_033,
+        "triples": 44_980_518,
         "description": "Proteome sets per organism.",
     },
     {
         "name": "citations",
         "iri": "http://sparql.uniprot.org/citations",
-        "triples": 31_345_087,
+        "triples": 30_730_282,
         "description": "Literature citations.",
     },
     {
         "name": "citationmapping",
         "iri": "http://sparql.uniprot.org/citationmapping",
-        "triples": 625_510_130,
+        "triples": 244_587_074,
         "description": "Computationally mapped citations.",
     },
     {
         "name": "diseases",
         "iri": "http://sparql.uniprot.org/diseases",
-        "triples": 90_113,
+        "triples": 91_009,
         "description": "UniProt disease vocabulary.",
     },
     {
         "name": "keywords",
         "iri": "http://sparql.uniprot.org/keywords",
-        "triples": 13_915,
+        "triples": 11_752,
         "description": "UniProt keyword vocabulary.",
     },
     {
         "name": "locations",
         "iri": "http://sparql.uniprot.org/locations",
-        "triples": 6_781,
+        "triples": 6_314,
         "description": "Subcellular location vocabulary.",
     },
     {
         "name": "tissues",
         "iri": "http://sparql.uniprot.org/tissues",
-        "triples": 4_113,
+        "triples": 4_115,
         "description": "Tissue vocabulary.",
     },
     {
         "name": "go",
         "iri": "http://sparql.uniprot.org/go",
-        "triples": 683_368,
+        "triples": 655_968,
         "description": "Gene Ontology terms.",
     },
     {
         "name": "enzymes",
         "iri": "http://sparql.uniprot.org/enzymes",
-        "triples": 181_758,
+        "triples": 156_569,
         "description": "Enzyme (EC) classification.",
     },
     {
         "name": "pathways",
         "iri": "http://sparql.uniprot.org/pathways",
-        "triples": 17_823,
+        "triples": 12_363,
         "description": "UniPathway metabolic pathways.",
     },
     {
         "name": "chebi",
         "iri": "http://sparql.uniprot.org/chebi",
-        "triples": 3_435_035,
+        "triples": 3_426_039,
         "description": "ChEBI small-molecule ontology.",
     },
     {
         "name": "rhea",
         "iri": "https://sparql.rhea-db.org/rhea",
-        "triples": 2_021_817,
+        "triples": 2_053_334,
         "description": "Rhea biochemical reactions.",
     },
     {
         "name": "journal",
         "iri": "http://sparql.uniprot.org/journal",
-        "triples": 43_537,
+        "triples": 43_700,
         "description": "Journal metadata.",
     },
     {
         "name": "database",
         "iri": "http://sparql.uniprot.org/database",
-        "triples": 2_340,
+        "triples": 2_407,
         "description": "Cross-reference database descriptions.",
     },
     {
         "name": "obsolete",
         "iri": "http://sparql.uniprot.org/obsolete",
-        "triples": 2_102_648_076,
+        "triples": 2_504_600_781,
         "description": "Obsolete / demerged entries.",
     },
     {
         "name": "core",
         "iri": "http://purl.uniprot.org/core",
-        "triples": 2_816,
+        "triples": 2_835,
         "description": "UniProt core ontology (the up: vocabulary).",
     },
     {
         "name": "sparql-examples",
         "iri": SPARQL_EXAMPLES_GRAPH,
-        "triples": 1_349,
+        "triples": 1_405,
         "description": "Curated, executable example queries (SIB).",
     },
 ]
