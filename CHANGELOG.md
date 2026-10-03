@@ -1,15 +1,14 @@
 # Changelog
 
-## [{v}] - 2026-10-03
-
-- Update FastAPI and pytest-mock to the current dependency releases.
-
 All notable changes to uniprot-link are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/) and the project uses semantic
 versioning.
 
 ## [Unreleased]
 
+## [5.1.6] - 2026-10-03
+
+- Update FastAPI and pytest-mock to the current dependency releases.
 
 ## [5.1.5] - 2026-10-03
 
