@@ -105,7 +105,9 @@ splits by responsibility.
 
 - Endpoint: `https://sparql.uniprot.org/sparql` (free, no auth). Provide a contact
   email in the User-Agent (configured via `UNIPROT_LINK_SPARQL__CONTACT_EMAIL`).
-- 21 named graphs (~232B triples); release tag in `services/constants.py`.
+- 21 named graphs (~244B triples in release 2026_03); release tag and graph
+  counts in `services/constants.py` are refreshed from UniProt's official VoID
+  description when the live endpoint release changes.
 - Accession examples: P05067 (APP), P38398 (BRCA1). Gene/organism: BRCA1 + taxon
   9606. Keyword IRIs use the integer id with leading zeros stripped (KW-0007 ->
   `.../keywords/7`). Canonical sequence isoform IRI ends with `-1`.

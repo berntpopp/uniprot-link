@@ -65,7 +65,7 @@ UNIPROT_REFERENCE_NOTES = (
     "Error codes: invalid_input, not_found, rate_limited, upstream_unavailable, "
     "internal (a malformed query or over-broad response is invalid_input; a query "
     "timeout is upstream_unavailable). The endpoint is a "
-    "QLever-backed SPARQL 1.1 service over 21 named graphs (~232B triples). "
+    "QLever-backed SPARQL 1.1 service over 21 named graphs (~244B triples). "
     "Avoid unbounded scans: anchor queries on an accession, gene, organism, or "
     "keyword. Result formats for search_sparql_query: json, xml, csv, tsv (result sets) "
     "only (SELECT/ASK result sets)."
