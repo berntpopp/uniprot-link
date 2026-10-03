@@ -7,7 +7,8 @@
 
 An MCP server (Streamable HTTP) that grounds protein research in the **UniProt SPARQL
 endpoint** (`https://sparql.uniprot.org/sparql`) — a QLever-backed SPARQL 1.1 service
-over ~232 billion triples in 21 named graphs. It exposes intent-named, token-economical
+over ~244 billion triples in 21 named graphs (UniProt release 2026_03). It exposes
+intent-named, token-economical
 tools, a guarded raw-SPARQL escape hatch, and UniProt's curated example queries.
 
 > [!IMPORTANT]

@@ -6,6 +6,8 @@ versioning.
 
 ## [Unreleased]
 
+## [5.1.7] - 2026-10-03
+
 ### Changed
 
 - Refresh the advertised UniProt SPARQL release and named-graph counts to the
