@@ -1686,7 +1686,7 @@ wheels = [
 
 [[package]]
 name = "uniprot-link"
-version = "5.1.6"
+version = "5.1.7"
 source = { editable = "." }
 dependencies = [
     { name = "fastapi" },
