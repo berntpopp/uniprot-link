@@ -1,6 +1,6 @@
 # uniprot-link
 
-[![Python 3.12+](https://img.shields.io/badge/python-3.12%2B-3776AB?logo=python&logoColor=white)](https://www.python.org/)
+[![Python 3.14+](https://img.shields.io/badge/python-3.14%2B-3776AB?logo=python&logoColor=white)](https://www.python.org/)
 [![CI](https://github.com/berntpopp/uniprot-link/actions/workflows/ci.yml/badge.svg)](https://github.com/berntpopp/uniprot-link/actions/workflows/ci.yml)
 [![Conformance](https://github.com/berntpopp/uniprot-link/actions/workflows/conformance.yml/badge.svg)](https://github.com/berntpopp/uniprot-link/actions/workflows/conformance.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
@@ -40,7 +40,7 @@ The GeneFoundry instance is hosted — no install required:
 claude mcp add --transport http uniprot-link https://uniprot-link.genefoundry.org/mcp
 ```
 
-To run your own (Python 3.12+, [uv](https://docs.astral.sh/uv/)):
+To run your own (Python 3.14+, [uv](https://docs.astral.sh/uv/)):
 
 ```bash
 make install    # uv sync --group dev

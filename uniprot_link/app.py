@@ -19,7 +19,7 @@ if TYPE_CHECKING:
 
 
 @asynccontextmanager
-async def lifespan(_app: FastAPI) -> AsyncGenerator[None, None]:
+async def lifespan(_app: FastAPI) -> AsyncGenerator[None]:
     """Application lifespan: configure logging on startup."""
     logger = configure_logging()
     logger.info("uniprot-link starting", host=settings.host, port=settings.port)
