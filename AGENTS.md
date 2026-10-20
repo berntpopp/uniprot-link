@@ -92,7 +92,7 @@ via `gh api repos/berntpopp/uniprot-link/actions/runs/<id>/pending_deployments`
 
 - Use `uv` for dependency management; never `pip install` directly.
 - Modern typing: `list[str]`, `dict[str, int]`, `str | None`.
-- Format and lint with Ruff; type check with mypy (strict, py3.12).
+- Format and lint with Ruff; type check with mypy (strict, py3.14).
 - Mock outbound httpx with `respx` in unit tests.
 
 ## File Size Discipline

@@ -6,6 +6,10 @@ versioning.
 
 ## [Unreleased]
 
+### Changed
+
+- Unify on Python 3.14 (requires-python, tooling, CI single-version matrix, router reusable workflows v0.10.5); Dependabot no longer proposes Python minor jumps.
+
 ## [5.1.8] - 2026-10-20
 
 ### Security
