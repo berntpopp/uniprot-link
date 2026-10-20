@@ -6,6 +6,22 @@ versioning.
 
 ## [Unreleased]
 
+## [5.1.8] - 2026-10-20
+
+### Security
+
+- Fix MCP Python SDK unbounded session accumulation in the StreamableHTTP transport
+  (Dependabot alert: `mcp` < 1.30.0); raise the `mcp[cli]` floor to `>=1.30.0`.
+
+### Changed
+
+- Bump the `mcp` dependency to 1.30.0 and the Python dependency group (fastapi,
+  pydantic, pydantic-core, pydantic-settings, mypy, ruff, typer, orjson, librt,
+  ast-serialize, typing-inspection).
+- Bump GitHub Actions: `astral-sh/setup-uv` v10.3.0, `github/codeql-action` v4.38.3,
+  `actions/upload-artifact` v7.0.2; pin the genefoundry-router reusable container
+  workflows to v0.10.4.
+
 ## [5.1.7] - 2026-10-03
 
 ### Changed
