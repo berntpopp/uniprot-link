@@ -6,6 +6,14 @@ versioning.
 
 ## [Unreleased]
 
+## [5.1.12] - 2026-11-11
+
+### Security
+
+- Fleet dependency sweep: fastmcp / fastmcp-slim 3.4.7 -> 3.4.11 (floor `>=3.4.10`) and
+  opentelemetry-api 1.44.0 -> 1.45.2 (Dependabot alerts 20, 21, 22); full `uv lock --upgrade`;
+  GitHub Actions pins bumped (setup-python v7.1.0, setup-uv v10.3.3, codeql-action v4.39.1).
+
 ## [5.1.11] - 2026-10-28
 
 ### Fixed
