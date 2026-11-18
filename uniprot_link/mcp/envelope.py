@@ -330,7 +330,7 @@ def promote_error_result(result: Any) -> Any:
     FastMCP dependency at import time; a non-ToolResult (or an already-error one)
     is returned unchanged.
     """
-    from fastmcp.tools.tool import ToolResult
+    from fastmcp.tools import ToolResult
 
     if not isinstance(result, ToolResult) or result.is_error:
         return result

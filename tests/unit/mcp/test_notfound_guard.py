@@ -33,7 +33,7 @@ import pytest
 from fastmcp import Client
 from mcp.shared.memory import create_client_server_memory_streams
 from mcp.shared.message import SessionMessage
-from mcp.types import JSONRPCMessage, JSONRPCNotification, JSONRPCRequest
+from mcp.types import JSONRPCNotification, JSONRPCRequest
 
 from uniprot_link.mcp.facade import create_uniprot_mcp
 from uniprot_link.mcp.untrusted_content import FORBIDDEN_CODEPOINTS
@@ -158,18 +158,19 @@ async def _raw_request(method: str, params: dict[str, Any]) -> tuple[str, str]:
                         server_read,
                         server_write,
                         srv.create_initialization_options(),
-                        stateless=False,
                         raise_exceptions=False,
                     )
                 )
 
                 async def send(obj: Any) -> None:
-                    await client_write.send(SessionMessage(JSONRPCMessage(obj)))
+                    await client_write.send(SessionMessage(message=obj))
 
                 async def recv(req_id: int) -> str:
                     with anyio.move_on_after(3.0):
                         async for msg in client_read:
-                            root = msg.message.root if not isinstance(msg, Exception) else None
+                            root = (
+                                msg.message if not isinstance(msg, Exception) else None
+                            )  # SDK 2: plain union
                             if root is not None and getattr(root, "id", None) == req_id:
                                 return str(root.model_dump_json())
                     return "<timeout>"
@@ -245,6 +246,7 @@ async def test_unknown_prompt_name_not_reflected_via_client() -> None:
     finally:
         detach()
     _assert_no_leak(str(excinfo.value))
+    assert getattr(excinfo.value, "code", None) == -32602
     _assert_no_leak(buf.getvalue())
 
 
@@ -254,6 +256,7 @@ async def test_unknown_prompt_name_not_reflected_via_raw() -> None:
         "prompts/get", {"name": HOSTILE_PROMPT_NAME, "arguments": {}}
     )
     _assert_no_leak(response)
+    assert json.loads(response)["error"]["code"] == -32602
     _assert_no_leak(logs)
 
 
@@ -345,17 +348,30 @@ async def test_known_tool_dispatch_error_is_internal_not_masked_as_not_found() -
     exist, so it strikes it from its list and never calls it again (#30 review HIGH /
     the litvar misclassification). An UNKNOWN name still gets not_found. Neither frame
     echoes the caller-supplied name."""
-    from mcp.types import CallToolRequest, CallToolRequestParams
+    from types import SimpleNamespace
+
+    from mcp.types import CallToolRequestParams
 
     from uniprot_link.mcp.notfound_guard import install_protocol_error_handler
 
-    async def raising_handler(_request: Any) -> Any:
+    async def raising_handler(_ctx: Any, _params: Any) -> Any:
         raise RuntimeError("serialization boom for a registered tool")
 
     known = {"get_protein"}
 
     class _FakeServer:
-        request_handlers: ClassVar[dict] = {CallToolRequest: raising_handler}
+        middleware: ClassVar[list] = []
+        handlers: ClassVar[dict] = {
+            "tools/call": SimpleNamespace(
+                handler=raising_handler, params_type=CallToolRequestParams
+            )
+        }
+
+        def get_request_handler(self, method: str) -> Any:
+            return self.handlers.get(method)
+
+        def add_request_handler(self, method: str, params_type: Any, handler: Any) -> None:
+            self.handlers[method] = SimpleNamespace(handler=handler, params_type=params_type)
 
     class _FakeMCP:
         _mcp_server = _FakeServer()
@@ -367,15 +383,13 @@ async def test_known_tool_dispatch_error_is_internal_not_masked_as_not_found() -
 
     mcp = _FakeMCP()
     install_protocol_error_handler(mcp)
-    wrapped = _FakeServer.request_handlers[CallToolRequest]
+    wrapped = _FakeServer.handlers["tools/call"].handler
 
-    def _req(name: str) -> CallToolRequest:
-        return CallToolRequest(
-            method="tools/call", params=CallToolRequestParams(name=name, arguments={})
-        )
+    def _req(name: str) -> CallToolRequestParams:
+        return CallToolRequestParams(name=name, arguments={})
 
-    known_env = (await wrapped(_req("get_protein"))).root.structuredContent
-    unknown_env = (await wrapped(_req("__no_such_tool__"))).root.structuredContent
+    known_env = (await wrapped(None, _req("get_protein"))).structured_content
+    unknown_env = (await wrapped(None, _req("__no_such_tool__"))).structured_content
     assert known_env["error_code"] == "internal"  # a real tool's real fault
     assert unknown_env["error_code"] == "not_found"  # a genuinely absent tool
     assert "get_protein" not in json.dumps(known_env)  # name never reflected

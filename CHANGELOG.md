@@ -6,6 +6,23 @@ versioning.
 
 ## [Unreleased]
 
+## [5.2.0] - 2026-11-18
+
+### Changed
+
+- Upgrade FastMCP 3.4 → 4.2.2 and MCP SDK 1.x → 2.x; supports the 2026-07-28 sessionless
+  protocol era alongside the legacy handshake.
+- Not-found reflection guard Layer 3 ported to the SDK 2 low-level handler API
+  (`get_request_handler` / `add_request_handler`); resource/prompt dispatch failures now
+  raise `MCPError(INVALID_PARAMS)` so callers keep getting `-32602` (SDK 2 maps a plain
+  exception to code 0).
+
+### Security
+
+- Strip the caller-supplied method name SDK 2 echoes in the `METHOD_NOT_FOUND` error `data`
+  (both protocol eras); scrub `mcp.server.runner` dropped-frame / unknown-notification log
+  lines that would echo caller input.
+
 ## [5.1.13] - 2026-11-13
 
 ### Changed

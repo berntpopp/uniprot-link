@@ -17,11 +17,11 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import Any
+from typing import Any, cast
 
 from fastmcp.exceptions import ValidationError as FastMCPValidationError
 from fastmcp.server.middleware.middleware import CallNext, Middleware, MiddlewareContext
-from fastmcp.tools.tool import ToolResult
+from fastmcp.tools import ToolResult
 from mcp.types import CallToolRequestParams, TextContent
 from pydantic import ValidationError as PydanticValidationError
 
@@ -92,7 +92,7 @@ class ArgValidationMiddleware(Middleware):
         # FastMCP wraps with isError:false; promote it so a client branching on
         # isError sees the failure (Response-Envelope v1). This middleware is the
         # innermost wrapper on the tool body, so it is the first to see the result.
-        return promote_error_result(result)
+        return cast(ToolResult, promote_error_result(result))
 
     def _error_result(
         self,
