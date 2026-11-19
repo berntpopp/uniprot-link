@@ -6,6 +6,20 @@ versioning.
 
 ## [Unreleased]
 
+## [5.4.0] - 2026-11-19
+
+### Added
+
+- Accession-taking tools (`get_protein`, `get_protein_sequence`, `get_protein_features`,
+  `get_protein_variants`, `get_protein_diseases`, `get_protein_cross_references`,
+  `get_protein_go_terms`, `resolve_identifiers`) also accept a human gene symbol (e.g.
+  `TP53`). The symbol is shape-validated, resolved through the existing `find_proteins`
+  search (exact gene name, reviewed Swiss-Prot, taxon 9606) and echoed as
+  `resolved_from: {input, form: "symbol", resolved_to}`. Several reviewed matches return
+  `ambiguous_query` with typed `candidates` (accession, mnemonic, name) and
+  `next_commands`; none returns `not_found` pointing at `find_proteins`. Accession input
+  is unchanged (Envelope Standard 2b, genefoundry-router#319).
+
 ## [5.3.1] - 2026-11-19
 
 - Tool descriptions lead with what each tool returns (D1, Tool-Schema Documentation v1.1).
