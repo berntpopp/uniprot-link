@@ -212,6 +212,25 @@ MAP_IDENTIFIER_DATABASES = [
     "InterPro",
 ]
 
+# Protein-family/domain signature databases whose xrefs carry an entry label
+# (rdfs:comment, e.g. InterPro IPR024310 "NUT family"); surfaced as entry_names.
+SIGNATURE_XREF_DATABASES = [
+    "CDD",
+    "FunFam",
+    "Gene3D",
+    "HAMAP",
+    "InterPro",
+    "NCBIfam",
+    "PANTHER",
+    "PIRSF",
+    "PRINTS",
+    "PROSITE",
+    "Pfam",
+    "SFLD",
+    "SMART",
+    "SUPFAM",
+]
+
 # Feature annotation classes commonly requested via get_protein_features.
 FEATURE_TYPES: dict[str, str] = {
     "domain": "Domain_Extent_Annotation",

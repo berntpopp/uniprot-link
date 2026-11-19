@@ -309,7 +309,9 @@ def _register_sequence_and_features(mcp: FastMCP) -> None:
             "Return sequence features with begin/end coordinates (FALDO) for an "
             "entry: domains, regions, transmembrane segments, binding/active sites, "
             "PTMs, signal peptides, secondary structure, mutagenesis sites, and more. "
-            "feature_types=['domain'] returns positional domain extents; each "
+            "feature_types=['domain'] returns curated positional domain extents; "
+            "signature-database domains/families (InterPro/Pfam) are cross-references, "
+            "pointed to by signature_domain_hint when no domain feature exists. Each "
             "returned `type` round-trips to the filter vocabulary. Filter keys come "
             "from capabilities (feature_types); a zero-match filter echoes the "
             "accepted keys as a filter_hint. Secondary-structure features "
@@ -360,10 +362,9 @@ def _register_sequence_and_features(mcp: FastMCP) -> None:
             nxt = after_entry_subresource(
                 payload["accession"], "get_protein_features", count=payload.get("count")
             )
-            hint = payload.get("domain_region_hint")
-            if hint and hint.get("suggestion"):
-                # Surface the region re-query as the first ready-to-call step.
-                nxt = [hint["suggestion"], *nxt][:2]
+            # Surface hint re-queries (region / InterPro-Pfam) as the first steps.
+            hints = (payload.get("domain_region_hint"), payload.get("signature_domain_hint"))
+            nxt = [*(h["suggestion"] for h in hints if h and h.get("suggestion")), *nxt][:2]
             payload["_meta"] = {"next_commands": nxt}
             return payload
 

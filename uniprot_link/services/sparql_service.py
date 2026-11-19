@@ -38,11 +38,14 @@ from uniprot_link.services.service_taxonomy import TaxonomyServiceMixin
 # S. alias) so mypy strict's implicit_reexport=False does not flag S.shape_features
 # et al. as an unexported attribute (mirrors service_taxonomy.py's direct import).
 from uniprot_link.services.shaping_annotations import (
+    SIGNATURE_HINT_DATABASES,
     enforce_emitted_feature_limits,
     project_annotation_records,
     shape_diseases,
     shape_features,
     shape_variants,
+    signature_domain_hint,
+    wants_signature_domain_hint,
 )
 
 _UNTRUSTED_SOURCE = "uniprot"
@@ -373,6 +376,11 @@ class SparqlService(FindProteinsServiceMixin, TaxonomyServiceMixin):
                     "arguments": {"accession": acc, "feature_types": ["domain", "region"]},
                 },
             }
+        if wants_signature_domain_hint(all_features, requested):
+            xj = await self._select(Q.protein_cross_references(acc, SIGNATURE_HINT_DATABASES))
+            grouped, names = S.shape_cross_references(xj), S.shape_xref_names(xj)
+            if sig_hint := signature_domain_hint(acc, grouped, names):
+                payload["signature_domain_hint"] = sig_hint
         return attach_isoform_context(
             {
                 **payload,
@@ -481,8 +489,10 @@ class SparqlService(FindProteinsServiceMixin, TaxonomyServiceMixin):
         _, (data_json, qmeta) = await asyncio.gather(
             self.require_entry(accession), self._select_timed(query)
         )
-        grouped = S.shape_cross_references(data_json, short=response_mode != "full")
-        projected = S.project_cross_references(grouped, mode=response_mode)
+        short = response_mode != "full"
+        grouped = S.shape_cross_references(data_json, short=short)
+        names = S.shape_xref_names(data_json, short=short)
+        projected = S.project_cross_references(grouped, mode=response_mode, names=names)
         acc = Q.validate_accession(accession).split("-")[0]
         payload: dict[str, Any] = {"accession": acc, **projected, **qmeta}
         # F2: an explicit `databases` filter must never silently read as "no data".

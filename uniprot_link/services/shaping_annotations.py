@@ -254,3 +254,41 @@ def _fence_comment(raw: Any, record_id: str, sink: list[UntrustedText]) -> dict[
     fenced = fence_untrusted_text(raw, source=_UNTRUSTED_SOURCE, record_id=record_id)
     sink.append(fenced)
     return fenced.model_dump(mode="json")
+
+
+# Curated positional feature types that answer "which domain does it have?".
+DOMAIN_FEATURE_KEYS = frozenset({"domain", "repeat", "zinc_finger"})
+SIGNATURE_HINT_DATABASES = ["InterPro", "Pfam"]
+
+
+def wants_signature_domain_hint(features: list[dict[str, Any]], requested: set[str]) -> bool:
+    """True when domain-type features were in scope but none came back."""
+    in_scope = not requested or bool(requested & DOMAIN_FEATURE_KEYS)
+    return in_scope and not any(f.get("type") in DOMAIN_FEATURE_KEYS for f in features)
+
+
+def signature_domain_hint(
+    accession: str, grouped: dict[str, list[str]], names: dict[str, dict[str, str]]
+) -> dict[str, Any] | None:
+    """Point an empty curated-domain result at the InterPro/Pfam signatures, so
+    "no Domain feature" is never read as "no domain" (#126)."""
+    signatures = [
+        {"database": db, "id": xid, "name": names.get(db, {}).get(xid)}
+        for db in SIGNATURE_HINT_DATABASES
+        for xid in grouped.get(db, [])
+    ]
+    if not signatures:
+        return None
+    return {
+        "message": (
+            "No curated positional domain/repeat/zinc_finger feature for this entry, "
+            "but it matches family/domain signatures (InterPro/Pfam cross-references, "
+            "listed here). Absence of a UniProt Domain feature does not mean the "
+            "protein has no domain."
+        ),
+        "signatures": signatures,
+        "suggestion": {
+            "tool": "get_protein_cross_references",
+            "arguments": {"accession": accession, "databases": SIGNATURE_HINT_DATABASES},
+        },
+    }

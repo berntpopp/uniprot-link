@@ -486,12 +486,16 @@ def protein_cross_references(accession: str, databases: list[str] | None = None)
             f"<http://purl.uniprot.org/database/{validate_database_name(d)}>" for d in databases
         )
         db_filter = f"  VALUES ?db {{ {values} }}\n"
+    # Family/domain signature xrefs carry their entry label as rdfs:comment; the
+    # OPTIONAL is unfiltered (a FILTER/VALUES on ?db inside it is slow or empty
+    # on QLever) -- shaping keeps labels for SIGNATURE_XREF_DATABASES only.
     return f"""{prefix_block()}
-SELECT ?db ?database ?xref
+SELECT ?db ?database ?xref ?name
 WHERE {{
   uniprotkb:{acc} rdfs:seeAlso ?xref .
   ?xref up:database ?db .
-{db_filter}  BIND(REPLACE(STR(?db), "^.*/", "") AS ?database)
+{db_filter}  OPTIONAL {{ ?xref rdfs:comment ?name }}
+  BIND(REPLACE(STR(?db), "^.*/", "") AS ?database)
 }}
 ORDER BY ?database
 LIMIT 2000"""
