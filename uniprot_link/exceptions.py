@@ -120,3 +120,24 @@ class ObsoleteEntryError(NotFoundError):
                     "and has no replacement entry."
                 )
         super().__init__(message)
+
+
+class GeneSymbolResolutionError(SparqlClientError):
+    """A gene symbol in an accession slot did not name exactly one reviewed entry.
+
+    ``candidates`` empty -> no reviewed human entry carries the symbol (not_found);
+    several -> ambiguous (never a guess): the caller picks an accession.
+    """
+
+    def __init__(self, symbol: str, candidates: list[dict[str, str | None]]) -> None:
+        """Store the (shape-validated) symbol and the reviewed candidate entries."""
+        self.symbol = symbol
+        self.candidates = candidates
+        # Fixed, server-authored text: the caller's symbol is never echoed here.
+        super().__init__(
+            "The gene symbol matches several reviewed human UniProtKB entries; "
+            "call again with one accession from candidates."
+            if candidates
+            else "No reviewed human UniProtKB entry has this exact gene symbol; "
+            "pass an accession or search with find_proteins."
+        )

@@ -1185,14 +1185,14 @@ async def test_default_feature_and_variant_tools_complete_through_facade(
 
 @pytest.mark.asyncio
 async def test_short_accession_returns_invalid_input_envelope(service_factory: Any) -> None:
-    """A too-short/garbage accession flows through the polished envelope, not raw pydantic."""
+    """A too-short/garbage (non-symbol) accession flows through the polished envelope."""
     from uniprot_link.mcp.facade import create_uniprot_mcp
 
     svc = service_factory([])
     service_adapters.set_sparql_service(svc)
     try:
         mcp = create_uniprot_mcp()
-        result = await mcp.call_tool("get_protein", {"accession": "ABC"})
+        result = await mcp.call_tool("get_protein", {"accession": "1AB"})
         payload = result.structured_content if hasattr(result, "structured_content") else result
         assert payload["success"] is False
         assert payload["error_code"] == "invalid_input"

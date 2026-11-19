@@ -17,6 +17,7 @@ from typing import Any
 from pydantic import ValidationError as PydanticValidationError
 
 from uniprot_link.exceptions import (
+    GeneSymbolResolutionError,
     InvalidInputError,
     NotFoundError,
     ObsoleteEntryError,
@@ -104,6 +105,8 @@ def _classify(exc: BaseException) -> tuple[str, str]:
     # before the ValueError fallthrough (UntrustedTextLimitError subclasses it).
     if isinstance(exc, UntrustedTextLimitError):
         return "invalid_input", _safe_message(exc)
+    if isinstance(exc, GeneSymbolResolutionError):
+        return ("ambiguous_query" if exc.candidates else "not_found"), _safe_message(exc)
     if isinstance(exc, NotFoundError):
         return "not_found", _safe_message(exc)
     if isinstance(exc, InvalidInputError):
@@ -175,6 +178,15 @@ def _error_envelope(exc: BaseException, context: McpErrorContext) -> dict[str, A
                 cmd("get_protein", accession=acc) for acc in exc.replaced_by[:2]
             ]
             return envelope  # explicit replacement chain wins over the defaults
+    # A gene symbol in the accession slot that named zero / several reviewed entries
+    # (Envelope 2b): typed candidates, then get_* on the top ones, then the search.
+    if isinstance(exc, GeneSymbolResolutionError):
+        envelope["field"] = "accession"
+        envelope["candidates"] = exc.candidates
+        envelope["_meta"]["next_commands"] = [
+            cmd(context.tool_name, accession=c["accession"]) for c in exc.candidates[:2]
+        ] + [cmd("find_proteins", gene_symbol=exc.symbol)]
+        return envelope
     # next_commands on EVERY error: explicit fallback, else a sensible default.
     if context.fallback is not None:
         envelope["_meta"]["next_commands"] = [context.fallback]

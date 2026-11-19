@@ -29,7 +29,8 @@ _ACC = Annotated[
     # query builder raise InvalidInputError (field="accession") so a bad value
     # flows through the polished error envelope with a helpful example + recovery.
     Field(
-        description="UniProtKB accession, e.g. P05067 (isoforms like P05067-2 accepted).",
+        description="UniProtKB accession, e.g. P05067 (isoforms like P05067-2 accepted), "
+        "or a human gene symbol, e.g. TP53 (resolved to its reviewed entry; see resolved_from).",
         examples=["P05067", "P38398"],
     ),
 ]

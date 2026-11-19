@@ -47,6 +47,7 @@ from uniprot_link.services.shaping_annotations import (
     signature_domain_hint,
     wants_signature_domain_hint,
 )
+from uniprot_link.services.symbol_resolution import accepts_gene_symbol
 
 _UNTRUSTED_SOURCE = "uniprot"
 
@@ -173,6 +174,7 @@ class SparqlService(FindProteinsServiceMixin, TaxonomyServiceMixin):
     # find_proteins / find_proteins_batch live in FindProteinsServiceMixin
     # (services/service_find.py) for the 600-line cap.
 
+    @accepts_gene_symbol
     async def get_protein(self, accession: str, response_mode: str = "compact") -> dict[str, Any]:
         """Return the core summary for a single entry (obsolete/isoform aware).
 
@@ -218,6 +220,7 @@ class SparqlService(FindProteinsServiceMixin, TaxonomyServiceMixin):
             )
         return S.apply_response_mode(payload, response_mode, kind="protein")
 
+    @accepts_gene_symbol
     async def get_sequence(
         self, accession: str, response_mode: str = "compact", canonical_only: bool = False
     ) -> dict[str, Any]:
@@ -298,6 +301,7 @@ class SparqlService(FindProteinsServiceMixin, TaxonomyServiceMixin):
             )
         return status
 
+    @accepts_gene_symbol
     async def get_features(
         self,
         accession: str,
@@ -392,6 +396,7 @@ class SparqlService(FindProteinsServiceMixin, TaxonomyServiceMixin):
             acc,
         )
 
+    @accepts_gene_symbol
     async def get_variants(
         self,
         accession: str,
@@ -457,6 +462,7 @@ class SparqlService(FindProteinsServiceMixin, TaxonomyServiceMixin):
             acc,
         )
 
+    @accepts_gene_symbol
     async def get_diseases(self, accession: str, response_mode: str = "standard") -> dict[str, Any]:
         """Return disease annotations."""
         query = Q.protein_diseases(accession)
@@ -478,6 +484,7 @@ class SparqlService(FindProteinsServiceMixin, TaxonomyServiceMixin):
             acc,
         )
 
+    @accepts_gene_symbol
     async def get_cross_references(
         self,
         accession: str,
@@ -522,6 +529,7 @@ class SparqlService(FindProteinsServiceMixin, TaxonomyServiceMixin):
                 payload["database_hint"] = hint
         return attach_isoform_context(payload, accession, acc)
 
+    @accepts_gene_symbol
     async def get_go_terms(
         self, accession: str, aspect: str | None = None, limit: int = 0
     ) -> dict[str, Any]:
