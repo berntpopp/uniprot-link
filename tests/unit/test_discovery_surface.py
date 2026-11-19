@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 from typing import Any
 
 import pytest
@@ -107,3 +108,36 @@ async def test_signatures_match_live_schema_no_drift() -> None:
     for tool in await mcp.list_tools():
         sig = tool_signature(tool.name, tool.parameters)
         assert sig in (tool.description or ""), f"{tool.name}: '{sig}' not in description"
+
+
+# ponytail: copy of genefoundry-router scripts/surface.py `lead_states_return` (D1, Tool-Schema
+# Documentation v1.1); re-vendor if the router's rule changes.
+_LEAD_VERBS = (  # noqa: SIM905 - byte-for-byte copy of the router rule
+    "get fetch retrieve list look lookup search find resolve report read predict annotate "
+    "compute calculate count summarize summarise map translate convert describe show check "
+    "validate classify score rank query browse discover explain compare diff normalize normalise "
+    "expand evaluate assess enumerate identify locate export download match suggest recommend "
+    "inspect generate render estimate"
+).split()
+_VERB_LEAD = re.compile(
+    rf"^(?:use this (?:tool )?to )?(?:{'|'.join(_LEAD_VERBS)})(?:s|es|ies)?\b", re.IGNORECASE
+)
+_RETURNS = re.compile(
+    r"(?<!not )(?<!n't )(?<!n\u2019t )(?<!never )\breturn(?:s|ed|ing)?\b(?!\s*[~<\d])|→|->",
+    re.IGNORECASE,
+)
+_FIELD_LIST = re.compile(r"\w+\W+\w+[^:]*:\s+[^.;:]+,")
+_SENTENCE_END = re.compile(r"(?<!e\.g\.)(?<!i\.e\.)(?<=[.!?])\s+")
+
+
+def _lead_states_return(description: str | None) -> bool:
+    lead = _SENTENCE_END.split(" ".join((description or "").split()), maxsplit=1)[0][:300]
+    return bool(_VERB_LEAD.match(lead) or _RETURNS.search(lead) or _FIELD_LIST.search(lead))
+
+
+@pytest.mark.asyncio
+async def test_every_description_lead_states_what_it_returns() -> None:
+    """D1: each tool's first sentence says what the tool returns."""
+    tools = await create_uniprot_mcp().list_tools()
+    failing = [t.name for t in tools if not _lead_states_return(t.description)]
+    assert failing == []

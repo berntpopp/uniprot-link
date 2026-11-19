@@ -25,11 +25,10 @@ def register_query_tools(mcp: FastMCP) -> None:
         annotations=READ_ONLY_OPEN_WORLD,
         tags={"sparql", "power"},
         description=(
-            "Execute a bounded SPARQL SELECT/ASK query against the UniProt endpoint "
-            "(bounded SELECT / ASK only). SERVICE federation and graph-returning "
-            "CONSTRUCT/DESCRIBE forms are rejected. SELECT results come back as "
-            "columns+rows JSON; ASK as a boolean. A "
-            "LIMIT is auto-injected into unbounded SELECTs (see `_meta`/`truncated`). "
+            "Run a bounded SPARQL SELECT/ASK query against the UniProt endpoint; "
+            "returns SELECT results as columns+rows JSON, ASK as a boolean. SERVICE "
+            "federation and graph-returning CONSTRUCT/DESCRIBE forms are rejected. "
+            "A LIMIT is auto-injected into unbounded SELECTs (see `_meta`/`truncated`). "
             "This is the escape hatch for anything the typed tools do not cover -- "
             "seed queries from search_example_queries. Use uniprot://prefixes for the "
             "standard PREFIX block. Broad, unanchored queries can take 10-60 s; "
