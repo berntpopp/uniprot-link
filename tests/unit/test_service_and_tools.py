@@ -1995,3 +1995,56 @@ async def test_find_proteins_reviewed_first_then_spill(service_factory: Any) -> 
     assert accs[0] == "P38398"  # reviewed first
     assert "A0A1" in accs  # then the TrEMBL spill
     assert out["proteins"][0]["reviewed"] is True
+
+
+_SIG_XREFS = make_select_json(
+    ["db", "database", "xref", "name"],
+    [
+        {
+            "db": "http://purl.uniprot.org/database/InterPro",
+            "database": "InterPro",
+            "xref": "http://purl.uniprot.org/interpro/IPR024310",
+            "name": name,
+        }
+        for name in ("NUT", "NUT family")
+    ]
+    + [
+        {
+            "db": "http://purl.uniprot.org/database/PDB",
+            "database": "PDB",
+            "xref": "http://rdf.wwpdb.org/pdb/1AAP",
+            "name": "X-ray",
+        }
+    ],
+)
+
+
+@pytest.mark.asyncio
+async def test_cross_references_name_signature_entries(service_factory: Any) -> None:
+    """#126: InterPro/Pfam ids carry their entry name; ids stay deduplicated."""
+    routes = [("up:obsolete ?obsolete", _ACTIVE_STATUS), ("rdfs:seeAlso", _SIG_XREFS)]
+    svc = service_factory(routes)
+    res = await svc.get_cross_references("Q5VZR2")
+    assert res["by_database"]["InterPro"] == ["IPR024310"]
+    assert res["entry_names"] == {"InterPro": {"IPR024310": "NUT family"}}
+    assert "entry_names" not in await svc.get_cross_references("Q5VZR2", response_mode="minimal")
+
+
+@pytest.mark.asyncio
+async def test_features_without_domain_point_to_signatures(service_factory: Any) -> None:
+    """#126: no curated Domain feature must not read as 'no domain'."""
+    chain = make_select_json(
+        ["type", "begin", "end"],
+        [{"type": "http://purl.uniprot.org/core/Chain_Annotation", "begin": 1, "end": 50}],
+    )
+    routes = [
+        ("up:obsolete ?obsolete", _ACTIVE_STATUS),
+        ("up:range", chain),
+        ("rdfs:seeAlso", _SIG_XREFS),
+    ]
+    svc = service_factory(routes)
+    hint = (await svc.get_features("Q5VZR2"))["signature_domain_hint"]
+    assert hint["signatures"] == [{"database": "InterPro", "id": "IPR024310", "name": "NUT family"}]
+    assert hint["suggestion"]["tool"] == "get_protein_cross_references"
+    # Out of scope for a non-domain filter.
+    assert "signature_domain_hint" not in await svc.get_features("Q5VZR2", ["chain"])

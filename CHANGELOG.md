@@ -6,6 +6,21 @@ versioning.
 
 ## [Unreleased]
 
+## [5.3.0] - 2026-11-19
+
+### Added
+
+- `get_protein_cross_references` / `map_identifiers` return `entry_names`
+  (`{db: {id: name}}`) for protein-family/domain signature databases (InterPro, Pfam,
+  PANTHER, SMART, PROSITE, CDD, Gene3D, SUPFAM, ...), read from the same SPARQL query, so
+  an id such as `IPR024310` arrives as "NUT family" instead of a bare code (omitted in
+  `minimal`). Ids are now deduplicated (#126).
+- `get_protein_features` adds `signature_domain_hint` (InterPro/Pfam signatures with names
+  plus a ready-to-call `get_protein_cross_references` suggestion, also surfaced as the
+  first `next_commands` step) when domain-type features were in scope but no curated
+  `domain`/`repeat`/`zinc_finger` feature exists, so "no Domain feature" no longer reads
+  as "no domain" (#126).
+
 ## [5.2.0] - 2026-11-18
 
 ### Changed

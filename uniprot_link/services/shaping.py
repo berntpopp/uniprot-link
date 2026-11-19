@@ -17,6 +17,7 @@ from uniprot_link.services.constants import (
     ECO_TO_GO_CODE,
     GO_ASPECT_ROOTS,
     PREFIXES,
+    SIGNATURE_XREF_DATABASES,
     WATER_MASS,
 )
 from uniprot_link.services.queries.validation import is_valid_accession
@@ -296,21 +297,43 @@ def shape_cross_references(
 
     ``short=True`` returns the local id (e.g. ``1AAP``); ``short=False`` keeps the
     full xref IRI (use response_mode='full' for the raw IRIs)."""
-    grouped: dict[str, list[str]] = {}
+    grouped: dict[str, set[str]] = {}
     for row in rows(result_json):
         db = row.get("database") or local_name(row.get("db", ""))
         xref = row.get("xref", "")
-        grouped.setdefault(db, []).append(local_name(xref) if short else xref)
+        # A set: the entry-label OPTIONAL emits one row per rdfs:comment.
+        grouped.setdefault(db, set()).add(local_name(xref) if short else xref)
     # Sort ids and database keys: QLever row order is not stable, so an unsorted
     # payload hurt diffing/caching and differed between cross_references and
     # map_identifiers for the same accession (F-SORT).
     return {db: sorted(ids) for db, ids in sorted(grouped.items())}
 
 
+def shape_xref_names(
+    result_json: dict[str, Any] | None, *, short: bool = True
+) -> dict[str, dict[str, str]]:
+    """Map signature-database xrefs (InterPro, Pfam, ...) to their entry name.
+
+    UniProt RDF carries one or two labels per signature xref (e.g. ``NUT`` and
+    ``NUT family``); the longest is the descriptive name."""
+    names: dict[str, dict[str, str]] = {}
+    for row in rows(result_json):
+        db = row.get("database") or local_name(row.get("db", ""))
+        name = row.get("name")
+        if db not in SIGNATURE_XREF_DATABASES or not isinstance(name, str):
+            continue
+        xid = local_name(row.get("xref", "")) if short else row.get("xref", "")
+        if len(name) > len(names.setdefault(db, {}).get(xid, "")):
+            names[db][xid] = name
+    return names
+
+
 _XREF_COMPACT_ID_CAP = 25
 
 
-def project_cross_references(grouped: dict[str, list[str]], *, mode: str) -> dict[str, Any]:
+def project_cross_references(
+    grouped: dict[str, list[str]], *, mode: str, names: dict[str, dict[str, str]] | None = None
+) -> dict[str, Any]:
     """Project sorted, grouped xrefs for a response_mode (token economy, F-VERB).
 
     ``counts``/``total``/``database_count`` are always present. ``by_database`` (the
@@ -330,6 +353,7 @@ def project_cross_references(grouped: dict[str, list[str]], *, mode: str) -> dic
     if mode in ("standard", "full"):
         out["by_database"] = grouped
         out["has_more"] = False  # every id is returned uncapped
+        _attach_entry_names(out, names, mode)
         return out
     # minimal / compact: cap each database. compact additionally flags the cap.
     capped: dict[str, list[str]] = {}
@@ -347,7 +371,23 @@ def project_cross_references(grouped: dict[str, list[str]], *, mode: str) -> dic
     out["has_more"] = bool(truncated)
     if truncated and mode != "minimal":
         out["truncated_databases"] = truncated
+    _attach_entry_names(out, names, mode)
     return out
+
+
+def _attach_entry_names(
+    out: dict[str, Any], names: dict[str, dict[str, str]] | None, mode: str
+) -> None:
+    """Add ``entry_names`` ({db: {id: name}}) for the returned signature ids, so an
+    InterPro/Pfam id is never a bare, unreadable code (omitted in minimal)."""
+    if mode == "minimal" or not names:
+        return
+    shown = {
+        db: {i: n for i, n in m.items() if i in set(out["by_database"].get(db, ()))}
+        for db, m in names.items()
+    }
+    if shown := {db: m for db, m in shown.items() if m}:
+        out["entry_names"] = shown
 
 
 def shape_go_terms(result_json: dict[str, Any] | None) -> dict[str, list[dict[str, Any]]]:
