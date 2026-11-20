@@ -55,6 +55,24 @@ class FindProteinsServiceMixin(TaxonResolutionMixin, ServiceBase):
         else:
             proteins, qmeta, reviewed_count = await self._find_reviewed_first(kwargs, limit, offset)
         payload: dict[str, Any] = {"count": len(proteins), "proteins": proteins, **qmeta}
+        gene = str(kwargs.get("gene") or "").strip()
+        form = (Q.foreign_gene_form(gene) or ("symbol",))[0]
+        ambiguous = form == "bare_number" or (form == "symbol" and Q.is_valid_accession(gene))
+        if ambiguous and not proteins and offset == 0:
+            # Searched as a gene name (phage genes are numbered; P2RY10 has the accession
+            # shape) and matched nothing: most likely an id, so never a silent empty.
+            raise Q.unsupported_gene_identifier(gene, "gene_symbol")
+        if form == "bare_number":
+            payload["hint"] = (
+                "The number was read as a gene name; for an NCBI Gene id pass NCBIGene:<n>."
+            )
+        elif form != "symbol":
+            payload["resolved_from"] = {"input": gene, "form": form}
+            revs = [p["accession"] for p in proteins if p.get("reviewed")]
+            complete = reviewed_count is not None or len(proteins) < limit
+            if len(revs) == 1 and complete and reviewed_count in (None, 1):
+                # Only an id naming exactly one reviewed entry resolves to an accession.
+                payload["resolved_from"]["resolved_to"] = revs[0]
         if isinstance(raw_organism_taxon, str):
             payload["_meta"] = {"resolved_organism_taxon": organism_taxon}
         if reviewed is None and reviewed_count is not None:
@@ -106,18 +124,26 @@ class FindProteinsServiceMixin(TaxonResolutionMixin, ServiceBase):
         per_gene = Q.clamp_limit(limit_per_gene, default=5, maximum=25)
         raw_organism_taxon = organism_taxon
         organism_taxon = await self.resolve_organism_taxon(raw_organism_taxon)
-        results = await asyncio.gather(
-            *(
-                self.find_proteins(
+
+        async def one(g: str) -> dict[str, Any]:
+            try:
+                return await self.find_proteins(
                     gene=g, organism_taxon=organism_taxon, reviewed=reviewed, limit=per_gene
                 )
-                for g in unique
-            )
-        )
+            except InvalidInputError as exc:
+                if exc.converters is None:
+                    raise
+                # Per-item outcome: an id form this tool cannot take never fails the batch.
+                return {"cached": True, "converter": next(iter(exc.converters), None)}
+
+        results = await asyncio.gather(*(one(g) for g in unique))
         by_gene: dict[str, list[str]] = {}
         proteins: list[dict[str, Any]] = []
         resolved: list[str] = []
         unresolved: list[str] = []
+        reasons: dict[str, str] = {}
+        converters: list[dict[str, Any]] = []
+        resolved_from: list[dict[str, Any]] = []
         elapsed = 0.0
         cached = True
         for gene, result in zip(unique, results, strict=True):
@@ -125,6 +151,14 @@ class FindProteinsServiceMixin(TaxonResolutionMixin, ServiceBase):
             accessions = [p["accession"] for p in hits if p.get("accession")]
             by_gene[gene] = accessions
             (resolved if accessions else unresolved).append(gene)
+            if "converter" in result:
+                reasons[gene] = "unsupported_identifier"
+                if result["converter"]:
+                    converters.append(result["converter"])
+            elif not accessions:
+                reasons[gene] = "not_found"
+            if accessions and "resolved_from" in result:
+                resolved_from.append(result["resolved_from"])
             proteins.extend({**p, "matched_gene": gene} for p in hits)
             # Legs run concurrently: wall-clock is the slowest leg; the batch is
             # only fully cached when every leg hit the cache.
@@ -137,9 +171,14 @@ class FindProteinsServiceMixin(TaxonResolutionMixin, ServiceBase):
             "proteins": proteins,
             "resolved_genes": resolved,
             "unresolved_genes": unresolved,
+            "unresolved_reasons": reasons,
             "elapsed_ms": round(elapsed, 1),
             "cached": cached,
         }
+        if resolved_from:
+            payload["resolved_from"] = resolved_from
+        if converters:
+            payload["converters"] = converters
         if isinstance(raw_organism_taxon, str):
             payload["_meta"] = {"resolved_organism_taxon": organism_taxon}
         return payload

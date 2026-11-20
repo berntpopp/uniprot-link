@@ -165,6 +165,91 @@ def looks_like_accession(value: str) -> bool:
     return bool(_ACCESSION_RE.match(v.upper()) or _ACCESSION_LIKE_RE.match(v))
 
 
+# Well-formed gene identifiers from another namespace (router #343, Envelope 2b).
+# HGNC / NCBI Gene ids are UniProt cross-references (one bound join); the rest have
+# no usable anchor here (Ensembl / RefSeq IRIs are version-pinned). ASCII digits only:
+# ``\d`` would also take full-width digits, which no id namespace uses.
+_VER = r"(\.[0-9]+)?"
+_FOREIGN_GENE_FORMS: tuple[tuple[str, re.Pattern[str]], ...] = (
+    ("hgnc_id", re.compile(r"HGNC:([0-9]+)", re.IGNORECASE)),
+    ("ncbi_gene_id", re.compile(r"NCBIGene:([0-9]+)", re.IGNORECASE)),
+    ("malformed_id", re.compile(r"(HGNC|NCBIGene):.*", re.IGNORECASE | re.DOTALL)),
+    ("ensembl_gene_id", re.compile(rf"ENSG[0-9]{{11}}{_VER}", re.IGNORECASE)),
+    # Transcript / protein ids and every non-human Ensembl id.
+    ("ensembl_other_id", re.compile(rf"ENS[A-Z]*[GTP][0-9]{{11}}{_VER}", re.IGNORECASE)),
+    ("refseq_accession", re.compile(rf"N[MRP]_[0-9]+{_VER}", re.IGNORECASE)),
+    ("refseq_other_accession", re.compile(rf"(NG|X[MRP])_[0-9]+{_VER}", re.IGNORECASE)),
+    # Ambiguous on its own (NCBI Gene id? HGNC id? a phage gene named "1"): never guessed.
+    ("bare_number", re.compile(r"([0-9]+)")),
+)
+GENE_XREF_DATABASES = {"hgnc_id": "hgnc", "ncbi_gene_id": "geneid"}
+# hgnc_resolve_symbol is only guaranteed for these (human ENSG, RefSeq NM_/NR_/NP_).
+_HGNC_CONVERTIBLE = ("ensembl_gene_id", "refseq_accession")
+_ACCEPTED_GENE_FORMS = ["gene symbol, e.g. KRAS", "HGNC:6407", "NCBIGene:3845"]
+
+
+def foreign_gene_form(value: str) -> tuple[str, str] | None:
+    """Return ``(form, id)`` when ``value`` is a gene id from another namespace.
+
+    ``id`` is the canonical number (no leading zeros) for ``hgnc_id`` /
+    ``ncbi_gene_id`` / ``bare_number``, else the stripped input. ``None`` for
+    anything else (a symbol, an accession).
+    """
+    v = (value or "").strip()
+    for form, pattern in _FOREIGN_GENE_FORMS:
+        match = pattern.fullmatch(v)
+        if match:
+            numeric = form in (*GENE_XREF_DATABASES, "bare_number")
+            return form, (str(int(match.group(1))) if numeric else v)
+    return None
+
+
+def unsupported_gene_identifier(value: str, field: str) -> InvalidInputError:
+    """``invalid_input`` for a gene id this tool cannot take, with its converter if any.
+
+    Fixed, server-authored text (the input is never echoed into the message); the
+    converter arguments carry only the shape-validated id. A form with no guaranteed
+    converter names none.
+    """
+    form, ident = foreign_gene_form(value) or ("uniprot_accession", value.strip().upper())
+    message = f"{field} got an identifier form ({form}) this tool does not take."
+    converters: list[dict[str, object]] = []
+    hint = "This id is not a gene form this tool takes (see allowed_values)."
+    if form == "bare_number":
+        message = f"{field} is a bare number, which names nothing here and is not read as an id."
+        converters = [
+            _call("hgnc_resolve_gene_by_xref", source="entrez_id", value=ident),
+            _call("find_proteins", gene_symbol=f"NCBIGene:{ident}"),
+        ]
+        hint = "A bare number is not read as an id; if it is an NCBI Gene id, pass NCBIGene:<n>."
+    elif form == "uniprot_accession":
+        message = f"{field} matched no gene name and has the shape of a UniProtKB accession."
+        converters = [_call("get_protein", accession=ident)]
+        hint = "If this is a UniProtKB accession, call get_protein with it."
+    elif form in _HGNC_CONVERTIBLE:
+        converters = [_call("hgnc_resolve_symbol", query=ident)]
+        hint = "Convert the id to a gene symbol with hgnc_resolve_symbol, then call again."
+    elif form == "malformed_id":
+        hint = "Write the id as HGNC:<digits> or NCBIGene:<digits>."
+    elif form == "ensembl_other_id":
+        hint = (
+            "This is an Ensembl transcript id, protein id or non-human gene id; "
+            "this tool takes a gene (see allowed_values)."
+        )
+    accession_slot = ["UniProtKB accession, e.g. P01116"] if field == "accession" else []
+    return InvalidInputError(
+        message,
+        field=field,
+        allowed=[*accession_slot, *_ACCEPTED_GENE_FORMS],
+        hint=hint,
+        converters=converters,
+    )
+
+
+def _call(tool: str, **arguments: str) -> dict[str, object]:
+    return {"tool": tool, "arguments": arguments}
+
+
 def validate_taxon(taxon_id: str | int) -> str:
     """Validate an NCBI taxon id (digits only)."""
     tid = str(taxon_id).strip()

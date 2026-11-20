@@ -77,17 +77,22 @@ def after_find_proteins(accessions: list[str]) -> list[dict[str, Any]]:
     ]
 
 
-def after_find_proteins_batch(by_gene: dict[str, list[str]]) -> list[dict[str, Any]]:
+def after_find_proteins_batch(
+    by_gene: dict[str, list[str]], converters: list[dict[str, Any]] | None = None
+) -> list[dict[str, Any]]:
     """After a batch resolve: pull each resolved gene's top entry (cap 3).
 
     Fans out to get_protein on the first (reviewed-first) accession per gene so a
     "domains for GENE1 and GENE2" task chains straight into the entries; if
-    nothing resolved, point at the example catalog.
+    nothing resolved, point at the example catalog. ``converters`` (one per gene given
+    as an id this tool cannot take) lead, so the unsupported items are recoverable.
     """
-    firsts = [accs[0] for accs in by_gene.values() if accs]
-    if not firsts:
+    # Two inputs naming one gene (KRAS, HGNC:6407) share a top hit: suggest it once.
+    firsts = list(dict.fromkeys(accs[0] for accs in by_gene.values() if accs))
+    lead = converters or []
+    if not firsts and not lead:
         return [cmd("search_example_queries", text="protein")]
-    return [cmd("get_protein", accession=acc) for acc in firsts[:3]]
+    return [*lead, *(cmd("get_protein", accession=acc) for acc in firsts[:3])]
 
 
 def after_get_protein(

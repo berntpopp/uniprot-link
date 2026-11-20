@@ -11,7 +11,10 @@ import re
 from uniprot_link.exceptions import InvalidInputError
 from uniprot_link.services.constants import FEATURE_TYPES, prefix_block
 from uniprot_link.services.queries.validation import (
+    GENE_XREF_DATABASES,
     escape_literal,
+    foreign_gene_form,
+    unsupported_gene_identifier,
     validate_accession,
     validate_database_name,
     validate_taxon,
@@ -92,11 +95,21 @@ def find_proteins(
             raise InvalidInputError(
                 "gene_symbol must not be blank (e.g. BRCA1).", field="gene_symbol"
             )
-        g = escape_literal(gene_stripped)
-        filters.append(
-            f"  ?protein up:encodedBy ?_gene .\n"
-            f'  {{ ?_gene skos:prefLabel "{g}" }} UNION {{ ?_gene skos:altLabel "{g}" }}'
-        )
+        form, ident = foreign_gene_form(gene_stripped) or ("symbol", "")
+        if form in GENE_XREF_DATABASES:
+            # HGNC / NCBI Gene id: UniProt's own cross-reference, one bound join.
+            filters.append(
+                "  ?protein rdfs:seeAlso "
+                f"<http://purl.uniprot.org/{GENE_XREF_DATABASES[form]}/{ident}> ."
+            )
+        elif form not in ("symbol", "bare_number"):
+            raise unsupported_gene_identifier(gene_stripped, "gene_symbol")
+        else:
+            g = escape_literal(gene_stripped)
+            filters.append(
+                f"  ?protein up:encodedBy ?_gene .\n"
+                f'  {{ ?_gene skos:prefLabel "{g}" }} UNION {{ ?_gene skos:altLabel "{g}" }}'
+            )
         strong = True
     if mnemonic:
         # A UniProtKB entry name is ``NAME_SPECIES`` (e.g. BRCA1_HUMAN). Reject a

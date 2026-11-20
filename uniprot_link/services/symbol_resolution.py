@@ -1,4 +1,6 @@
-"""Gene symbol in an accession slot -> reviewed human accession (router #319, Envelope 2b).
+"""Gene symbol or HGNC / NCBI Gene id in an accession slot -> reviewed human accession.
+
+Router #319 / #343, Envelope 2b.
 
 Accession-shaped input takes the unchanged path. A strictly symbol-shaped value is
 resolved through the existing find_proteins search (exact prefLabel/altLabel
@@ -14,6 +16,11 @@ from typing import Any, Concatenate
 
 from uniprot_link.exceptions import GeneSymbolResolutionError
 from uniprot_link.mcp.next_commands import looks_like_gene_symbol
+from uniprot_link.services.queries.validation import (
+    GENE_XREF_DATABASES,
+    foreign_gene_form,
+    unsupported_gene_identifier,
+)
 from uniprot_link.services.service_find import FindProteinsServiceMixin
 
 _HUMAN_TAXON = 9606
@@ -27,7 +34,11 @@ def accepts_gene_symbol[S: FindProteinsServiceMixin, **P](method: _Method[S, P])
 
     @functools.wraps(method)
     async def wrapper(self: S, accession: str, /, *args: P.args, **kwargs: P.kwargs) -> Any:
-        if not looks_like_gene_symbol(accession):
+        form = (foreign_gene_form(accession) or ("symbol",))[0]
+        if form not in ("symbol", *GENE_XREF_DATABASES):
+            # A gene id this backend cannot anchor on (router #343): name the converter.
+            raise unsupported_gene_identifier(accession, "accession")
+        if form == "symbol" and not looks_like_gene_symbol(accession):
             return await method(self, accession, *args, **kwargs)
         symbol = accession.strip()
         found = await self.find_proteins(
@@ -44,7 +55,7 @@ def accepts_gene_symbol[S: FindProteinsServiceMixin, **P](method: _Method[S, P])
             )
         (resolved,) = hits
         payload = await method(self, resolved, *args, **kwargs)
-        payload["resolved_from"] = {"input": symbol, "form": "symbol", "resolved_to": resolved}
+        payload["resolved_from"] = {"input": symbol, "form": form, "resolved_to": resolved}
         return payload
 
     return wrapper
