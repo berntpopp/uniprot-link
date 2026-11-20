@@ -29,8 +29,8 @@ _ACC = Annotated[
     # query builder raise InvalidInputError (field="accession") so a bad value
     # flows through the polished error envelope with a helpful example + recovery.
     Field(
-        description="UniProtKB accession, e.g. P05067 (isoforms like P05067-2 accepted), "
-        "or a human gene symbol, e.g. TP53 (resolved to its reviewed entry; see resolved_from).",
+        description="UniProtKB accession, e.g. P05067 (isoforms like P05067-2 accepted), or a "
+        "human gene symbol / HGNC:<n> / NCBIGene:<n> (resolved to its reviewed entry: resolved_from).",
         examples=["P05067", "P38398"],
     ),
 ]
@@ -60,8 +60,10 @@ def _register_find_and_summary(mcp: FastMCP) -> None:
         description=(
             "Search UniProtKB for the entries of a GENE and return matching entries "
             "(accession, mnemonic, recommended name, reviewed flag, organism). "
-            "gene_symbol is REQUIRED; refine the hits with organism_taxon (a positive "
-            "NCBI taxon id or an exact common/scientific organism name), reviewed, "
+            "For 2 or more genes, call find_proteins_batch once instead of calling this "
+            "tool per item. gene_symbol is REQUIRED (a symbol, HGNC:<n> or NCBIGene:<n>; "
+            "see resolved_from); refine the hits with organism_taxon (a positive NCBI "
+            "taxon id or an exact common/scientific organism name), reviewed, "
             "name_contains (matched per word, in any order, case-insensitive), or the "
             "structured filters mnemonic / ec_number / keyword. "
             "Reviewed (Swiss-Prot) hits are ranked first. UniProt SPARQL has no "
@@ -78,7 +80,7 @@ def _register_find_and_summary(mcp: FastMCP) -> None:
     async def find_proteins(
         gene_symbol: Annotated[
             str,
-            Field(description="Gene symbol to search for, e.g. BRCA1.", examples=["BRCA1", "TP53"]),
+            Field(description="Gene symbol, HGNC:<n> or NCBIGene:<n>.", examples=["BRCA1", "TP53"]),
         ],
         organism_taxon: Annotated[
             TaxonInput | None,
@@ -152,8 +154,9 @@ def _register_find_and_summary(mcp: FastMCP) -> None:
             "round-trip instead of N sequential ones. Use this for multi-gene "
             "tasks (e.g. 'get domains for PNKP and NAA10'). Returns by_gene "
             "(gene -> accessions, reviewed-first), a flat proteins list tagged "
-            "with matched_gene, resolved_genes, and unresolved_genes (a symbol "
-            "that matched nothing is disclosed, never silently dropped). Optionally "
+            "with matched_gene, resolved_genes, unresolved_genes and unresolved_reasons "
+            "(not_found, or unsupported_identifier with its converter in next_commands; "
+            "HGNC:<n> and NCBIGene:<n> are accepted). Optionally "
             "scope by organism_taxon (a positive NCBI taxon id or an exact "
             "common/scientific organism name) and reviewed. next_commands fan out to "
             "get_protein on each resolved gene's top hit. For a single gene use "
@@ -193,7 +196,7 @@ def _register_find_and_summary(mcp: FastMCP) -> None:
                 gene_symbols, organism_taxon, reviewed, limit_per_gene
             )
             payload.setdefault("_meta", {})["next_commands"] = after_find_proteins_batch(
-                payload["by_gene"]
+                payload["by_gene"], payload.pop("converters", None)
             )
             return payload
 

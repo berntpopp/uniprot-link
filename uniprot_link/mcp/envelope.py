@@ -187,6 +187,11 @@ def _error_envelope(exc: BaseException, context: McpErrorContext) -> dict[str, A
             cmd(context.tool_name, accession=c["accession"]) for c in exc.candidates[:2]
         ] + [cmd("find_proteins", gene_symbol=exc.symbol)]
         return envelope
+    # An identifier from another namespace (Envelope 2b): the converter call leads,
+    # and neither the same call nor an unrelated fallback follows it.
+    if isinstance(exc, InvalidInputError) and exc.converters:
+        envelope["_meta"]["next_commands"] = exc.converters
+        return envelope
     # next_commands on EVERY error: explicit fallback, else a sensible default.
     if context.fallback is not None:
         envelope["_meta"]["next_commands"] = [context.fallback]

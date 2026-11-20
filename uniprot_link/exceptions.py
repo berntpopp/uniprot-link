@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 
 class SparqlClientError(Exception):
     """Base exception for SPARQL client/endpoint errors."""
@@ -61,17 +63,21 @@ class InvalidInputError(SparqlClientError):
         *,
         allowed: list[str] | None = None,
         hint: str | None = None,
+        converters: list[dict[str, Any]] | None = None,
     ) -> None:
         """Initialise with the offending field and optional recovery data.
 
         ``allowed`` and ``hint`` are surfaced as structured top-level keys on the
         error envelope (``allowed_values``/``hint``) so a consumer never has to
-        parse them out of a (length-capped) message.
+        parse them out of a (length-capped) message. ``converters`` are ready-to-send
+        ``{tool, arguments}`` calls that turn an identifier from another namespace into
+        an accepted one; they lead the envelope's ``next_commands`` (Envelope 2b).
         """
         super().__init__(message)
         self.field = field
         self.allowed = allowed
         self.hint = hint
+        self.converters = converters
 
 
 class NotFoundError(SparqlClientError):
@@ -138,6 +144,6 @@ class GeneSymbolResolutionError(SparqlClientError):
             "The gene symbol matches several reviewed human UniProtKB entries; "
             "call again with one accession from candidates."
             if candidates
-            else "No reviewed human UniProtKB entry has this exact gene symbol; "
+            else "No reviewed human UniProtKB entry has this exact gene symbol or gene id; "
             "pass an accession or search with find_proteins."
         )

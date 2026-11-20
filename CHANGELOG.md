@@ -6,6 +6,28 @@ versioning.
 
 ## [Unreleased]
 
+## [5.5.0] - 2026-11-20
+
+### Added
+
+- `find_proteins`, `find_proteins_batch` and the accession-taking tools accept `HGNC:<n>` and
+  `NCBIGene:<n>`: both are UniProt cross-references, so they resolve in the same single query
+  and are echoed as `resolved_from: {input, form: "hgnc_id" | "ncbi_gene_id", resolved_to}`
+  (a list on the batch tool).
+- `find_proteins_batch` returns `unresolved_reasons` (`not_found` or `unsupported_identifier`
+  per unresolved item); the converter call for each unsupported item leads `next_commands`.
+- `find_proteins` names `find_proteins_batch` right after its lead sentence.
+
+### Fixed
+
+- A gene given as an Ensembl gene or transcript id, a RefSeq accession, or a bare number that
+  names no gene no longer returns an empty success from `find_proteins`, nor an
+  `invalid_input` without a converter from the accession-taking tools. The answer is
+  `invalid_input` with `field`, `allowed_values`, `hint` and a ready-to-send converter
+  (`hgnc_resolve_symbol` / `hgnc_resolve_gene_by_xref`) first in `_meta.next_commands`
+  (Envelope Standard 2b, genefoundry-router#343). Ensembl and RefSeq ids are not resolved
+  here because UniProt's cross-reference IRIs for them are version-pinned.
+
 ## [5.4.0] - 2026-11-19
 
 ### Added
