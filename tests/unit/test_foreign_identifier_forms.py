@@ -72,6 +72,41 @@ async def test_find_proteins_ensembl_id_names_the_converter(service_factory: Any
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("tool", "args", "field"),
+    [
+        ("find_proteins", {"gene_symbol": "ENST00000311936"}, "gene_symbol"),
+        ("get_protein", {"accession": "ENST00000311936.8"}, "accession"),
+    ],
+)
+async def test_transcript_id_names_no_converter(
+    service_factory: Any, tool: str, args: dict[str, str], field: str
+) -> None:
+    """No fleet converter is guaranteed for a transcript id: say what it is, name none."""
+    svc = service_factory([])
+    out = await _call(svc, tool, args)
+    assert out["error_code"] == "invalid_input" and out["field"] == field
+    assert "transcript id" in out["hint"] and "HGNC:6407" in out["allowed_values"]
+    assert out["_meta"]["next_commands"] == [{"tool": "get_server_capabilities", "arguments": {}}]
+    assert svc.client.calls == []
+
+
+@pytest.mark.asyncio
+async def test_batch_transcript_id_is_unsupported_without_converter(service_factory: Any) -> None:
+    svc = service_factory([(_HGNC_XREF, _KRAS)])
+    out = await _call(
+        svc,
+        "find_proteins_batch",
+        {"gene_symbols": ["ENST00000311936", "HGNC:6407"], "reviewed": True},
+    )
+    assert out["success"] is True
+    assert out["unresolved_reasons"] == {"ENST00000311936": "unsupported_identifier"}
+    assert out["_meta"]["next_commands"] == [
+        {"tool": "get_protein", "arguments": {"accession": "P01116"}}
+    ]
+
+
+@pytest.mark.asyncio
 async def test_find_proteins_bare_number_without_hits_is_not_a_silent_empty(
     service_factory: Any,
 ) -> None:

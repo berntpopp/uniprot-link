@@ -189,8 +189,9 @@ def _error_envelope(exc: BaseException, context: McpErrorContext) -> dict[str, A
         return envelope
     # An identifier from another namespace (Envelope 2b): the converter call leads,
     # and neither the same call nor an unrelated fallback follows it.
-    if isinstance(exc, InvalidInputError) and exc.converters:
-        envelope["_meta"]["next_commands"] = exc.converters
+    # A form with no guaranteed converter (a transcript id) names none.
+    if isinstance(exc, InvalidInputError) and exc.converters is not None:
+        envelope["_meta"]["next_commands"] = exc.converters or [cmd("get_server_capabilities")]
         return envelope
     # next_commands on EVERY error: explicit fallback, else a sensible default.
     if context.fallback is not None:

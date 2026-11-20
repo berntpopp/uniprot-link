@@ -26,7 +26,8 @@ versioning.
   `invalid_input` with `field`, `allowed_values`, `hint` and a ready-to-send converter
   (`hgnc_resolve_symbol` / `hgnc_resolve_gene_by_xref`) first in `_meta.next_commands`
   (Envelope Standard 2b, genefoundry-router#343). Ensembl and RefSeq ids are not resolved
-  here because UniProt's cross-reference IRIs for them are version-pinned.
+  here because UniProt's cross-reference IRIs for them are version-pinned. A transcript id
+  (`ENST...`) is named as such with the accepted gene forms and no converter call.
 
 ## [5.4.0] - 2026-11-19
 

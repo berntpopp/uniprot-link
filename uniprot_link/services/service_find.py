@@ -122,10 +122,10 @@ class FindProteinsServiceMixin(TaxonResolutionMixin, ServiceBase):
                     gene=g, organism_taxon=organism_taxon, reviewed=reviewed, limit=per_gene
                 )
             except InvalidInputError as exc:
-                if not exc.converters:
+                if exc.converters is None:
                     raise
                 # Per-item outcome: an id form this tool cannot take never fails the batch.
-                return {"cached": True, "converter": exc.converters[0]}
+                return {"cached": True, "converter": next(iter(exc.converters), None)}
 
         results = await asyncio.gather(*(one(g) for g in unique))
         by_gene: dict[str, list[str]] = {}
@@ -144,7 +144,8 @@ class FindProteinsServiceMixin(TaxonResolutionMixin, ServiceBase):
             (resolved if accessions else unresolved).append(gene)
             if "converter" in result:
                 reasons[gene] = "unsupported_identifier"
-                converters.append(result["converter"])
+                if result["converter"]:
+                    converters.append(result["converter"])
             elif not accessions:
                 reasons[gene] = "not_found"
             if accessions and "resolved_from" in result:

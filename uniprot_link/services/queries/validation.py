@@ -205,14 +205,15 @@ def unsupported_gene_identifier(value: str, field: str) -> InvalidInputError:
     message = f"{field} got an identifier form ({form}) this tool does not take."
     if form == "bare_number":
         message = f"{field} is a bare number, which names nothing here and is not read as an id."
-        converters = [
+        converters: list[dict[str, object]] = [
             _call("hgnc_resolve_gene_by_xref", source="entrez_id", value=ident),
             _call("find_proteins", gene_symbol=f"NCBIGene:{ident}"),
         ]
         hint = "A bare number is not read as an id; if it is an NCBI Gene id, pass NCBIGene:<n>."
     elif form == "ensembl_transcript_id":
-        converters = [_call("hgnc_resolve_gene_by_xref", source="mane_select", value=ident)]
-        hint = "Convert the transcript to its gene symbol first (MANE Select transcripts only)."
+        # No fleet converter is guaranteed for a transcript id: name none.
+        converters = []
+        hint = "This is a transcript id; this tool takes a gene (see allowed_values)."
     else:
         converters = [_call("hgnc_resolve_symbol", query=ident)]
         hint = "Convert the id to a gene symbol with hgnc_resolve_symbol, then call again."
