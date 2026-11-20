@@ -141,7 +141,7 @@ class GeneSymbolResolutionError(SparqlClientError):
         self.candidates = candidates
         # Fixed, server-authored text: the caller's symbol is never echoed here.
         super().__init__(
-            "The gene symbol matches several reviewed human UniProtKB entries; "
+            "The gene symbol or gene id matches several reviewed human UniProtKB entries; "
             "call again with one accession from candidates."
             if candidates
             else "No reviewed human UniProtKB entry has this exact gene symbol or gene id; "

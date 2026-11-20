@@ -87,8 +87,9 @@ def after_find_proteins_batch(
     nothing resolved, point at the example catalog. ``converters`` (one per gene given
     as an id this tool cannot take) lead, so the unsupported items are recoverable.
     """
-    firsts = [accs[0] for accs in by_gene.values() if accs]
-    lead = (converters or [])[:3]
+    # Two inputs naming one gene (KRAS, HGNC:6407) share a top hit: suggest it once.
+    firsts = list(dict.fromkeys(accs[0] for accs in by_gene.values() if accs))
+    lead = converters or []
     if not firsts and not lead:
         return [cmd("search_example_queries", text="protein")]
     return [*lead, *(cmd("get_protein", accession=acc) for acc in firsts[:3])]

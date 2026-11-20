@@ -26,8 +26,15 @@ versioning.
   `invalid_input` with `field`, `allowed_values`, `hint` and a ready-to-send converter
   (`hgnc_resolve_symbol` / `hgnc_resolve_gene_by_xref`) first in `_meta.next_commands`
   (Envelope Standard 2b, genefoundry-router#343). Ensembl and RefSeq ids are not resolved
-  here because UniProt's cross-reference IRIs for them are version-pinned. A transcript id
-  (`ENST...`) is named as such with the accepted gene forms and no converter call.
+  here because UniProt's cross-reference IRIs for them are version-pinned. Forms with no
+  guaranteed converter (Ensembl transcript, protein and non-human ids, RefSeq `NG_`/`X?_`,
+  a malformed `HGNC:`/`NCBIGene:` id) get the accepted gene forms and no converter call.
+- `find_proteins` with a UniProtKB accession that matches no gene name returns
+  `invalid_input` pointing at `get_protein` instead of an empty success.
+- `resolved_from.resolved_to` is set only when the id names exactly one reviewed entry.
+- A bare number that matches a gene name carries a `hint` that it was read as a gene name.
+- `HGNC:`/`NCBIGene:` ids take ASCII digits only and leading zeros are dropped.
+- `find_proteins_batch` `next_commands` no longer repeat a call or cap the converter calls.
 
 ## [5.4.0] - 2026-11-19
 

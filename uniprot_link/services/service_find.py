@@ -57,13 +57,22 @@ class FindProteinsServiceMixin(TaxonResolutionMixin, ServiceBase):
         payload: dict[str, Any] = {"count": len(proteins), "proteins": proteins, **qmeta}
         gene = str(kwargs.get("gene") or "").strip()
         form = (Q.foreign_gene_form(gene) or ("symbol",))[0]
-        if form == "bare_number" and not proteins and offset == 0:
-            # Searched as a gene name (phage genes are numbered) and matched nothing:
-            # most likely an id from another namespace, so never a silent empty.
+        ambiguous = form == "bare_number" or (form == "symbol" and Q.is_valid_accession(gene))
+        if ambiguous and not proteins and offset == 0:
+            # Searched as a gene name (phage genes are numbered; P2RY10 has the accession
+            # shape) and matched nothing: most likely an id, so never a silent empty.
             raise Q.unsupported_gene_identifier(gene, "gene_symbol")
-        if form not in ("symbol", "bare_number"):
-            top = proteins[0]["accession"] if proteins else None
-            payload["resolved_from"] = {"input": gene, "form": form, "resolved_to": top}
+        if form == "bare_number":
+            payload["hint"] = (
+                "The number was read as a gene name; for an NCBI Gene id pass NCBIGene:<n>."
+            )
+        elif form != "symbol":
+            payload["resolved_from"] = {"input": gene, "form": form}
+            revs = [p["accession"] for p in proteins if p.get("reviewed")]
+            complete = reviewed_count is not None or len(proteins) < limit
+            if len(revs) == 1 and complete and reviewed_count in (None, 1):
+                # Only an id naming exactly one reviewed entry resolves to an accession.
+                payload["resolved_from"]["resolved_to"] = revs[0]
         if isinstance(raw_organism_taxon, str):
             payload["_meta"] = {"resolved_organism_taxon": organism_taxon}
         if reviewed is None and reviewed_count is not None:

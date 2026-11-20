@@ -35,12 +35,20 @@ _ACCESSION_TOOLS = [
         ("HGNC:6407", ("hgnc_id", "6407")),
         ("ncbigene:3845", ("ncbi_gene_id", "3845")),
         ("ENSG00000133703.15", ("ensembl_gene_id", "ENSG00000133703.15")),
-        ("ENST00000311936", ("ensembl_transcript_id", "ENST00000311936")),
+        ("ENST00000311936", ("ensembl_other_id", "ENST00000311936")),
+        ("ENSP00000256078", ("ensembl_other_id", "ENSP00000256078")),
+        ("ENSMUSG00000030265", ("ensembl_other_id", "ENSMUSG00000030265")),
         ("NM_004985.5", ("refseq_accession", "NM_004985.5")),
+        ("NG_007524", ("refseq_other_accession", "NG_007524")),
+        ("XM_011520653.2", ("refseq_other_accession", "XM_011520653.2")),
         ("3845", ("bare_number", "3845")),
+        # Leading zeros never reach the IRI; non-ASCII digits are not an id.
+        ("HGNC:06407", ("hgnc_id", "6407")),
+        ("HGNC:\uff16\uff14\uff10\uff17", ("malformed_id", "HGNC:\uff16\uff14\uff10\uff17")),
+        ("\uff13\uff18\uff14\uff15", None),
         ("KRAS", None),
         ("P01116", None),
-        ('HGNC:6407" } #', None),
+        ('HGNC:6407" } #', ("malformed_id", 'HGNC:6407" } #')),
     ],
 )
 def test_foreign_gene_form(value: str, expected: tuple[str, str] | None) -> None:
@@ -52,7 +60,8 @@ async def test_find_proteins_resolves_hgnc_and_ncbi_ids(service_factory: Any) ->
     """Rule 1: UniProt carries these cross-references, so they resolve in the same query."""
     svc = service_factory([(_HGNC_XREF, _KRAS), (_GENEID_XREF, _KRAS)])
     for given, form in (("HGNC:6407", "hgnc_id"), ("NCBIGene:3845", "ncbi_gene_id")):
-        out = await _call(svc, "find_proteins", {"gene_symbol": given, "organism_taxon": 9606})
+        args = {"gene_symbol": given, "organism_taxon": 9606, "reviewed": True}
+        out = await _call(svc, "find_proteins", args)
         assert out["success"] is True and out["proteins"][0]["accession"] == "P01116"
         assert out["resolved_from"] == {"input": given, "form": form, "resolved_to": "P01116"}
     assert not any("skos:prefLabel" in q for q in svc.client.calls)
@@ -76,6 +85,10 @@ async def test_find_proteins_ensembl_id_names_the_converter(service_factory: Any
     ("tool", "args", "field"),
     [
         ("find_proteins", {"gene_symbol": "ENST00000311936"}, "gene_symbol"),
+        ("find_proteins", {"gene_symbol": "ENSP00000256078"}, "gene_symbol"),
+        ("find_proteins", {"gene_symbol": "ENSMUSG00000030265"}, "gene_symbol"),
+        ("find_proteins", {"gene_symbol": "NG_007524"}, "gene_symbol"),
+        ("find_proteins", {"gene_symbol": "HGNC:\uff16\uff14\uff10\uff17"}, "gene_symbol"),
         ("get_protein", {"accession": "ENST00000311936.8"}, "accession"),
     ],
 )
@@ -86,7 +99,7 @@ async def test_transcript_id_names_no_converter(
     svc = service_factory([])
     out = await _call(svc, tool, args)
     assert out["error_code"] == "invalid_input" and out["field"] == field
-    assert "transcript id" in out["hint"] and "HGNC:6407" in out["allowed_values"]
+    assert out["hint"] and "HGNC:6407" in out["allowed_values"]
     assert out["_meta"]["next_commands"] == [{"tool": "get_server_capabilities", "arguments": {}}]
     assert svc.client.calls == []
 
@@ -124,6 +137,67 @@ async def test_bare_number_that_is_a_gene_name_still_matches(service_factory: An
     svc = service_factory([('skos:prefLabel "1"', _hits(("P00573", "RPOL_BPT7", "T7 RNAP")))])
     out = await _call(svc, "find_proteins", {"gene_symbol": "1", "reviewed": True})
     assert out["success"] is True and out["count"] == 1 and "resolved_from" not in out
+    assert "NCBIGene:<n>" in out["hint"]
+
+
+@pytest.mark.asyncio
+async def test_id_naming_several_reviewed_entries_resolves_to_none(service_factory: Any) -> None:
+    """GNAS has four reviewed entries: no single resolved_to, in find and in the batch."""
+    gnas = _hits(("P84996", "ALEX_HUMAN", "ALEX"), ("P63092", "GNAS2_HUMAN", "Gs alpha"))
+    svc = service_factory([("rdfs:seeAlso <http://purl.uniprot.org/hgnc/4392>", gnas)])
+    out = await _call(svc, "find_proteins", {"gene_symbol": "HGNC:4392", "reviewed": True})
+    assert out["count"] == 2
+    assert out["resolved_from"] == {"input": "HGNC:4392", "form": "hgnc_id"}
+    out = await _call(svc, "find_proteins_batch", {"gene_symbols": ["HGNC:4392"], "reviewed": True})
+    assert out["resolved_from"] == [{"input": "HGNC:4392", "form": "hgnc_id"}]
+
+
+@pytest.mark.asyncio
+async def test_leading_zeros_do_not_reach_the_query(service_factory: Any) -> None:
+    svc = service_factory([(_HGNC_XREF, _KRAS)])
+    out = await _call(svc, "find_proteins", {"gene_symbol": "HGNC:06407", "reviewed": True})
+    assert out["count"] == 1 and out["resolved_from"]["resolved_to"] == "P01116"
+
+
+@pytest.mark.asyncio
+async def test_accession_in_gene_slot_without_hits_points_at_get_protein(
+    service_factory: Any,
+) -> None:
+    out = await _call(service_factory([]), "find_proteins", {"gene_symbol": "p01116"})
+    assert out["error_code"] == "invalid_input" and out["field"] == "gene_symbol"
+    assert out["_meta"]["next_commands"] == [
+        {"tool": "get_protein", "arguments": {"accession": "P01116"}}
+    ]
+
+
+@pytest.mark.asyncio
+async def test_accession_shaped_symbol_with_hits_is_a_normal_result(service_factory: Any) -> None:
+    svc = service_factory([('skos:prefLabel "P2RY10"', _hits(("O00398", "P2Y10_HUMAN", "P2Y10")))])
+    out = await _call(svc, "find_proteins", {"gene_symbol": "P2RY10", "reviewed": True})
+    assert out["success"] is True and out["count"] == 1 and "hint" not in out
+
+
+@pytest.mark.asyncio
+async def test_batch_next_commands_are_deduplicated_and_uncapped(service_factory: Any) -> None:
+    svc = service_factory([(_HGNC_XREF, _KRAS), ('skos:prefLabel "KRAS"', _KRAS)])
+    ensg = [f"ENSG{n:011d}" for n in range(1, 6)]
+    out = await _call(
+        svc,
+        "find_proteins_batch",
+        {"gene_symbols": ["KRAS", "HGNC:6407", *ensg], "reviewed": True},
+    )
+    nxt = out["_meta"]["next_commands"]
+    assert [c["arguments"]["query"] for c in nxt[:5]] == ensg
+    assert nxt[5:] == [{"tool": "get_protein", "arguments": {"accession": "P01116"}}]
+
+
+@pytest.mark.asyncio
+async def test_ambiguous_id_message_names_the_id(service_factory: Any) -> None:
+    gnas = _hits(("P84996", "ALEX_HUMAN", "ALEX"), ("P63092", "GNAS2_HUMAN", "Gs alpha"))
+    svc = service_factory([("rdfs:seeAlso <http://purl.uniprot.org/hgnc/4392>", gnas)])
+    out = await _call(svc, "get_protein", {"accession": "HGNC:4392"})
+    assert out["error_code"] == "ambiguous_query"
+    assert out["message"].startswith("The gene symbol or gene id matches several")
 
 
 @pytest.mark.asyncio
