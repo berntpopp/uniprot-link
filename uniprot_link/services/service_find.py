@@ -137,6 +137,12 @@ class FindProteinsServiceMixin(TaxonResolutionMixin, ServiceBase):
                 return {"cached": True, "converter": next(iter(exc.converters), None)}
 
         results = await asyncio.gather(*(one(g) for g in unique))
+        if all("converter" in result for result in results):
+            # No item was looked up, so an empty success would read as "no such proteins":
+            # answer as the single-gene tool does (Response-Envelope v1 section 2b).
+            error = Q.unsupported_gene_identifier(unique[0], "gene_symbols")
+            error.converters = [r["converter"] for r in results if r["converter"]]
+            raise error
         by_gene: dict[str, list[str]] = {}
         proteins: list[dict[str, Any]] = []
         resolved: list[str] = []

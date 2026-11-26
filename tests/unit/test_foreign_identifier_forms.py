@@ -283,3 +283,20 @@ async def test_find_proteins_description_names_the_batch_tool() -> None:
     assert rest.startswith(
         "For 2 or more genes, call find_proteins_batch once instead of calling this tool per item."
     )
+
+
+@pytest.mark.asyncio
+async def test_batch_of_only_unsupported_ids_is_invalid_input_not_an_empty_success(
+    service_factory: Any,
+) -> None:
+    """Nothing was looked up, so the batch answers as the single-gene tool does."""
+    svc = service_factory([])
+    out = await _call(
+        svc, "find_proteins_batch", {"gene_symbols": ["ENSG00000133703", "ENST00000311936"]}
+    )
+    assert out["error_code"] == "invalid_input" and out["field"] == "gene_symbols"
+    assert "HGNC:6407" in out["allowed_values"]
+    assert out["_meta"]["next_commands"] == [
+        {"tool": "hgnc_resolve_symbol", "arguments": {"query": "ENSG00000133703"}}
+    ]
+    assert svc.client.calls == []
