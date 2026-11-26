@@ -71,7 +71,9 @@ class TaxonomyServiceMixin(ServiceBase):
         rows_json, qmeta = await self._select_timed(Q.resolve_taxon_by_name(taxon))
         matches = rank_taxon_matches(shape_taxon_resolutions(rows_json), taxon)
         if not matches:
-            raise NotFoundError(f"No taxon matched '{taxon}'.")
+            raise NotFoundError(
+                "taxon: no taxon matched this name (pass an NCBI taxon id or a scientific/common name)."
+            )
         # Tag the best hit when it is an exact name match so a consumer (and the
         # next_command that chains off matches[0]) lands on the right organism.
         q = taxon.strip().lower()
@@ -95,7 +97,7 @@ class TaxonomyServiceMixin(ServiceBase):
         rows_json, qmeta = await self._select_timed(Q.resolve_taxon_by_exact_name(name))
         matches = shape_taxon_resolutions(rows_json)
         if not matches:
-            raise NotFoundError(f"No taxon exactly matched '{name}'.")
+            raise NotFoundError("taxon: no taxon exactly matched this name.")
         return {
             "query": name,
             "match_count": len(matches),

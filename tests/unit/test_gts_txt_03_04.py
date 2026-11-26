@@ -104,3 +104,21 @@ async def test_variants_over_object_ceiling_are_cut_and_flagged(service_factory:
     res = await service_factory(routes).get_variants("P38398", limit=200)
     assert res["count"] == DEFAULT_MAX_OBJECTS
     assert res["untrusted_text_limit"]["truncated"] is True
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("tool", "args"),
+    [
+        ("get_taxon", {"taxon": HOSTILE}),
+        ("get_example_query", {"example_id": "https://example.org/x" + HOSTILE[:6]}),
+    ],
+)
+async def test_not_found_message_does_not_echo_input(
+    service_factory: Any, tool: str, args: dict[str, Any]
+) -> None:
+    empty = make_select_json(["taxon"], [])
+    result = await _call(service_factory, [("", empty)], tool, args)
+    assert result.is_error is True
+    message = result.structured_content["message"]
+    assert "delete_everything" not in message and "example.org" not in message

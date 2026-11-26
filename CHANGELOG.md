@@ -6,6 +6,12 @@ versioning.
 
 ## [Unreleased]
 
+## [6.0.3] - 2026-11-26
+
+### Fixed
+
+- `get_taxon` no longer echoes the caller's `taxon` value in its not-found message (GTS-CORE-TXT-04); the message is fixed text naming the parameter. The same applies to the exact-name taxon lookup and to `get_example_query`'s not-found message, and the unavailable-feature-type message now names only the normalized known key.
+
 ## [6.0.2] - 2026-11-26
 
 ### Fixed
