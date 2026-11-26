@@ -92,7 +92,7 @@ def validate_database_name(name: str) -> str:
     db = name.strip()
     if not _DATABASE_NAME_RE.match(db):
         raise InvalidInputError(
-            f"'{name}' is not a valid cross-reference database name "
+            "databases: not a valid cross-reference database name "
             "(letters/digits then '.', '_' or '-'; e.g. PDB, HGNC, Ensembl).",
             field="databases",
         )
@@ -134,7 +134,7 @@ def validate_accession(accession: str) -> str:
     acc = accession.strip().upper()
     if not _ACCESSION_RE.match(acc):
         raise InvalidInputError(
-            f"'{accession}' is not a valid UniProtKB accession "
+            "accession: not a valid UniProtKB accession "
             "(e.g. P05067, P38398, or an isoform like P05067-2).",
             field="accession",
         )
@@ -255,7 +255,7 @@ def validate_taxon(taxon_id: str | int) -> str:
     tid = str(taxon_id).strip()
     if not _TAXON_RE.match(tid):
         raise InvalidInputError(
-            f"'{taxon_id}' is not a valid NCBI taxon id (digits only, e.g. 9606).",
+            "taxon_id: not a valid NCBI taxon id (digits only, e.g. 9606).",
             field="taxon_id",
         )
     return tid

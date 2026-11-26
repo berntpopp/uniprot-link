@@ -210,7 +210,9 @@ def build_capabilities() -> dict[str, Any]:
             "filter). search_sparql_query omits `total` (an arbitrary query's full "
             "count is not computable without re-running it). Cross-reference "
             "compact mode reports per-database {returned, total} under "
-            "truncated_databases."
+            "truncated_databases. Features, variants and diseases also stop at 128 "
+            "fenced untrusted_text objects per result (standard/full mode); a cut "
+            "adds `untrusted_text_limit: {truncated: true, ...}`."
         ),
         "result_ordering": {
             "find_proteins": (

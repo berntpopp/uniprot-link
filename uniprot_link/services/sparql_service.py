@@ -40,7 +40,7 @@ from uniprot_link.services.service_taxonomy import TaxonomyServiceMixin
 from uniprot_link.services.shaping_annotations import (
     SIGNATURE_HINT_DATABASES,
     enforce_emitted_feature_limits,
-    project_annotation_records,
+    project_capped,
     shape_diseases,
     shape_features,
     shape_variants,
@@ -106,8 +106,7 @@ class SparqlService(FindProteinsServiceMixin, TaxonomyServiceMixin):
         """Execute an arbitrary SPARQL query (the power tool)."""
         if result_format not in RESULT_FORMATS:
             raise InvalidInputError(
-                f"Unknown result_format '{result_format}'. "
-                f"Choose one of: {', '.join(RESULT_FORMATS)}.",
+                f"result_format: unknown value. Choose one of: {', '.join(RESULT_FORMATS)}.",
                 field="result_format",
             )
         op = Q.classify_sparql_operation(query)  # raises InvalidInputError on writes
@@ -334,10 +333,14 @@ class SparqlService(FindProteinsServiceMixin, TaxonomyServiceMixin):
         # that are never returned, so enforcing over the full fetched set could raise
         # limit_exceeded on content the caller never sees.
         enforce_emitted_feature_limits(features)
+        features, projected, fence_cut = project_capped(
+            features, kind="features", mode=response_mode
+        )
         payload: dict[str, Any] = {
             "accession": acc,
             "count": len(features),
             "features": features,
+            **({"untrusted_text_limit": fence_cut} if fence_cut else {}),
             **qmeta,
         }
         if excluded_ss:
@@ -350,11 +353,11 @@ class SparqlService(FindProteinsServiceMixin, TaxonomyServiceMixin):
                     "in feature_types, to include them."
                 ),
             }
-        if len(all_features) > display_limit:
+        if len(all_features) > len(features):
             payload["truncated"] = {
                 "returned": len(features),
                 "total": len(all_features),
-                "reason": f"limit {display_limit} reached",
+                "reason": fence_cut["reason"] if fence_cut else f"limit {display_limit} reached",
                 "recovery": "raise `limit` or pass feature_types to narrow.",
             }
         if feature_types and not features:
@@ -386,12 +389,7 @@ class SparqlService(FindProteinsServiceMixin, TaxonomyServiceMixin):
             if sig_hint := signature_domain_hint(acc, grouped, names):
                 payload["signature_domain_hint"] = sig_hint
         return attach_isoform_context(
-            {
-                **payload,
-                "features": project_annotation_records(
-                    features, kind="features", mode=response_mode
-                ),
-            },
+            {**payload, "features": projected},
             accession,
             acc,
         )
@@ -420,11 +418,15 @@ class SparqlService(FindProteinsServiceMixin, TaxonomyServiceMixin):
             self.require_entry(accession), self._select_timed(query)
         )
         acc = Q.validate_accession(accession).split("-")[0]
-        variants = shape_variants(data_json, acc)
+        all_variants = shape_variants(data_json, acc)
+        variants, projected, fence_cut = project_capped(
+            all_variants, kind="variants", mode=response_mode
+        )
         payload: dict[str, Any] = {
             "accession": acc,
             "count": len(variants),
             "variants": variants,
+            **({"untrusted_text_limit": fence_cut} if fence_cut else {}),
             **qmeta,
         }
         if position_start is not None or position_end is not None:
@@ -435,29 +437,27 @@ class SparqlService(FindProteinsServiceMixin, TaxonomyServiceMixin):
             }
         # The SPARQL LIMIT caps pre-merge rows; compare against the raw row count
         # (not the merged variant count) so truncation is never under-reported.
-        if len(S.rows(data_json)) >= limit:
-            total = await self._count(
-                Q.protein_variants_count(
-                    accession,
-                    disease_associated_only,
-                    position_start=position_start,
-                    position_end=position_end,
+        page_full = len(S.rows(data_json)) >= limit
+        if fence_cut or page_full:
+            total: int | None = len(all_variants)
+            if page_full:
+                total = await self._count(
+                    Q.protein_variants_count(
+                        accession,
+                        disease_associated_only,
+                        position_start=position_start,
+                        position_end=position_end,
+                    )
                 )
-            )
             payload["truncated"] = {
                 "returned": len(variants),
                 **({"total": total} if total is not None else {}),
-                "reason": f"limit {limit} reached",
+                "reason": fence_cut["reason"] if fence_cut else f"limit {limit} reached",
                 "recovery": "raise `limit`, or set disease_associated_only=true to focus on "
                 "disease-linked variants.",
             }
         return attach_isoform_context(
-            {
-                **payload,
-                "variants": project_annotation_records(
-                    variants, kind="variants", mode=response_mode
-                ),
-            },
+            {**payload, "variants": projected},
             accession,
             acc,
         )
@@ -470,14 +470,15 @@ class SparqlService(FindProteinsServiceMixin, TaxonomyServiceMixin):
             self.require_entry(accession), self._select_timed(query)
         )
         acc = Q.validate_accession(accession).split("-")[0]
-        diseases = shape_diseases(data_json, acc)
+        _, diseases, fence_cut = project_capped(
+            shape_diseases(data_json, acc), kind="diseases", mode=response_mode
+        )
         return attach_isoform_context(
             {
                 "accession": acc,
                 "count": len(diseases),
-                "diseases": project_annotation_records(
-                    diseases, kind="diseases", mode=response_mode
-                ),
+                "diseases": diseases,
+                **({"untrusted_text_limit": fence_cut} if fence_cut else {}),
                 **qmeta,
             },
             accession,
