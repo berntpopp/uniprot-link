@@ -114,18 +114,23 @@ def build_capabilities() -> dict[str, Any]:
             "resolve_identifiers": "compact",
         },
         "provenance_policy": (
-            "Static provenance (research-use restriction, citation, UniProt "
-            "release) is declared here and applies to ALL tool outputs; it is "
-            "not repeated per-call to conserve context tokens. The "
-            "clinical-safety disclaimer itself is the exception: per the fleet "
-            "Response-Envelope Standard v1, every tool response also stamps "
+            "The research-use restriction and citation are declared here and "
+            "apply to ALL tool outputs; they are not repeated per-call to "
+            "conserve context tokens. Every successful result names its "
+            "provenance in _meta (Response-Envelope Standard v1.2): source, "
+            "data_version (`live`: the SPARQL endpoint is queried live) and "
+            "retrieved_at (UTC time of the upstream fetch; a cached result "
+            "keeps its original time). Every tool response also stamps "
             "_meta.unsafe_for_clinical_use: true (success and error, all "
-            "response_modes) so it survives even if this capabilities call was "
-            "never made."
+            "response_modes)."
         ),
         "per_call_meta": [
             "tool",
             "request_id",
+            "elapsed_ms",
+            "source",
+            "data_version",
+            "retrieved_at",
             "next_commands",
             "unsafe_for_clinical_use",
         ],

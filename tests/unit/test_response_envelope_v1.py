@@ -9,7 +9,7 @@ plus a private ``_error_envelope`` builder and a public
 
 Ratified contract under test:
 
-- SUCCESS: ``{"success": True, <payload>, "_meta": {...}}``.
+- SUCCESS: ``{"success": True, "result": {<payload>}, "_meta": {...}}``.
 - FAILURE: a FLAT in-band dict -- ``{"success": False, "error_code": <str>,
   "message": <str>, "retryable": <bool>, "recovery_action": <str>,
   "_meta": {...}}`` -- NEVER a bare exception, NEVER a nested ``error: {}``
@@ -29,15 +29,8 @@ pre-existing ``test_per_call_meta_is_lean`` / ``test_success_meta_is_lean``
 tests in ``test_service_and_tools.py``, updated alongside this file rather
 than duplicated here.
 
-Other ground-truth drift vs the fleet-wide contract text (asserted here, not
-papered over):
-
-- Success payloads are NOT wrapped in a ``"results": [...]`` or
-  ``"result": {...}`` envelope key. ``run_mcp_tool`` merges the tool's
-  returned dict keys directly into the top-level envelope alongside
-  ``success``/``_meta`` (see ``run_mcp_tool``'s ``result.setdefault(...)`` /
-  ``result["_meta"] = ...`` mutation-in-place). This file asserts that
-  ground truth rather than the wrapped shape.
+Success payloads sit under the ``result`` key (v1 section 1): ``run_mcp_tool``
+wraps the tool's returned dict and moves its ``_meta`` to the envelope.
 """
 
 from __future__ import annotations
@@ -56,12 +49,8 @@ from uniprot_link.mcp.envelope import (
 
 
 @pytest.mark.asyncio
-async def test_success_envelope_is_flat_banner_no_wrapper_key() -> None:
-    """Success: {"success": True, <payload merged flat>, "_meta": {...}}.
-
-    No "results"/"result" wrapper key -- the tool's own payload keys land at
-    the top level next to "success" and "_meta".
-    """
+async def test_success_envelope_wraps_payload_under_result() -> None:
+    """Success: {"success": True, "result": {<payload>}, "_meta": {...}}."""
 
     async def call() -> dict[str, Any]:
         return {"accession": "P05067", "mnemonic": "A4_HUMAN"}
@@ -69,11 +58,8 @@ async def test_success_envelope_is_flat_banner_no_wrapper_key() -> None:
     out = await run_mcp_tool("get_protein", call, context=McpErrorContext("get_protein"))
 
     assert out["success"] is True
-    assert out["accession"] == "P05067"
-    assert out["mnemonic"] == "A4_HUMAN"
-    assert "results" not in out
-    assert "result" not in out
-    assert "error" not in out
+    assert out["result"] == {"accession": "P05067", "mnemonic": "A4_HUMAN"}
+    assert set(out) == {"success", "result", "_meta"}
 
 
 @pytest.mark.asyncio
@@ -92,7 +78,16 @@ async def test_success_meta_guarantees_and_documented_drift() -> None:
 
     assert meta["tool"] == "get_protein"
     assert isinstance(meta["request_id"], str) and meta["request_id"]
-    assert set(meta) <= {"tool", "request_id", "next_commands", "unsafe_for_clinical_use"}
+    assert set(meta) <= {
+        "tool",
+        "request_id",
+        "elapsed_ms",
+        "source",
+        "data_version",
+        "retrieved_at",
+        "next_commands",
+        "unsafe_for_clinical_use",
+    }
     assert meta["unsafe_for_clinical_use"] is True
 
 

@@ -10,8 +10,10 @@ Split out of :mod:`sparql_service` to keep each module within the repo's
 from __future__ import annotations
 
 import time
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
+from uniprot_link.provenance import note_fetch
 from uniprot_link.services import shaping as S
 
 if TYPE_CHECKING:
@@ -86,7 +88,7 @@ class _TTLCache:
     def __init__(self, maxsize: int, ttl: int) -> None:
         self._maxsize = maxsize
         self._ttl = ttl
-        self._store: dict[str, tuple[float, Any]] = {}
+        self._store: dict[str, tuple[float, Any, datetime]] = {}
 
     def get(self, key: str) -> Any | None:
         if self._maxsize <= 0:
@@ -94,10 +96,11 @@ class _TTLCache:
         item = self._store.get(key)
         if item is None:
             return None
-        expires_at, value = item
+        expires_at, value, fetched_at = item
         if expires_at < time.monotonic():
             self._store.pop(key, None)
             return None
+        note_fetch(fetched_at)  # a hit keeps the time of the fetch that filled it
         return value
 
     def put(self, key: str, value: Any) -> None:
@@ -105,7 +108,7 @@ class _TTLCache:
             return
         if len(self._store) >= self._maxsize:
             self._store.pop(next(iter(self._store)), None)
-        self._store[key] = (time.monotonic() + self._ttl, value)
+        self._store[key] = (time.monotonic() + self._ttl, value, datetime.now(UTC))
 
 
 class ServiceBase:

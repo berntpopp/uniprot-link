@@ -63,8 +63,12 @@ async def test_get_protein_accepts_gene_symbol(service_factory: Any) -> None:
     )
     out = await _call(svc, "get_protein", {"accession": "TP53"})
     assert out["success"] is True
-    assert out["accession"] == "P04637"
-    assert out["resolved_from"] == {"input": "TP53", "form": "symbol", "resolved_to": "P04637"}
+    assert out["result"]["accession"] == "P04637"
+    assert out["result"]["resolved_from"] == {
+        "input": "TP53",
+        "form": "symbol",
+        "resolved_to": "P04637",
+    }
     # The resolution search is reviewed-only and human-scoped.
     search = next(q for q in svc.client.calls if 'prefLabel "TP53"' in q)
     assert "up:reviewed true" in search and "taxon:9606" in search
@@ -74,7 +78,7 @@ async def test_get_protein_accepts_gene_symbol(service_factory: Any) -> None:
 async def test_accession_input_has_no_resolved_from(service_factory: Any) -> None:
     svc = service_factory([("up:obsolete ?obsolete", _ACTIVE), ("up:recommendedName", _SUMMARY)])
     out = await _call(svc, "get_protein", {"accession": "P04637"})
-    assert out["success"] is True and "resolved_from" not in out
+    assert out["success"] is True and "resolved_from" not in out["result"]
     assert not any("skos:altLabel" in q for q in svc.client.calls)
 
 

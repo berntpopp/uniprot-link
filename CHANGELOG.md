@@ -6,6 +6,24 @@ versioning.
 
 ## [Unreleased]
 
+## [6.0.0] - 2026-11-26
+
+### Changed
+
+- **Breaking:** a successful result carries its payload under `result`
+  (`{success, result, _meta}`, Response-Envelope Standard v1) instead of flat next to
+  `success`. Error results are unchanged.
+
+### Added
+
+- Provenance on every successful result (Response-Envelope Standard v1.2): `_meta.source`
+  (`uniprot`), `_meta.data_version` (`live`: the SPARQL endpoint is queried live) and
+  `_meta.retrieved_at` (UTC time of the upstream fetch; a cached result keeps the time of the
+  fetch that filled the cache entry).
+- `_meta.elapsed_ms` on every result.
+- The vendored envelope JSON Schema (genefoundry-envelope v1.2.0) validates every data tool's
+  result in the test suite.
+
 ## [5.5.0] - 2026-11-20
 
 ### Added

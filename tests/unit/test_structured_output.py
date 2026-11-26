@@ -19,7 +19,7 @@ async def test_capabilities_emits_structured_content() -> None:
     res = await mcp.call_tool("get_server_capabilities", {})
     # structuredContent present...
     assert res.structured_content is not None
-    assert res.structured_content["server"] == "uniprot-link"
+    assert res.structured_content["result"]["server"] == "uniprot-link"
     # ...and a back-compat serialized TextContent block.
     assert res.content and res.content[0].text
 

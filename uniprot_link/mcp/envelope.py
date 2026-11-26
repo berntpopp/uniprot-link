@@ -1,7 +1,7 @@
 """MCP envelope boundary: success/_meta injection and structured errors.
 
-Tools return a plain dict; :func:`run_mcp_tool` injects ``success`` and
-``_meta`` on success, and converts any exception into a structured error dict
+Tools return a plain dict; :func:`run_mcp_tool` wraps it as ``result`` with
+``success`` and ``_meta`` (provenance included) on success, and converts any exception into a structured error dict
 (returned, never raised) so the LLM sees a typed failure rather than an opaque
 masked message.
 """
@@ -9,8 +9,10 @@ masked message.
 from __future__ import annotations
 
 import logging
+import time
 import uuid
 from collections.abc import Awaitable, Callable
+from contextvars import ContextVar
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -28,15 +30,14 @@ from uniprot_link.exceptions import (
 )
 from uniprot_link.mcp.next_commands import cmd, default_error_next_commands
 from uniprot_link.mcp.untrusted_content import UntrustedTextLimitError, sanitize_message
+from uniprot_link.provenance import begin_fetch_log, retrieved_at
 
 logger = logging.getLogger(__name__)
 
-# Per-call _meta carries dynamic fields (tool, request_id, next_commands) plus
-# the fleet-standard unsafe_for_clinical_use disclaimer, which per the
-# GeneFoundry Response-Envelope Standard v1 (2026-07-03 fleet decision) must be
-# stamped on EVERY tool response -- success and error, at all response_modes --
-# not declared once via get_server_capabilities. Static provenance (research-use
-# restriction, citation DOI, UniProt release) still lives only in
+# Per-call _meta carries dynamic fields (tool, request_id, elapsed_ms,
+# next_commands), the provenance of the Response-Envelope Standard v1.2 on a
+# success, and the fleet-standard unsafe_for_clinical_use disclaimer on EVERY
+# response. The research-use restriction and citation live only in
 # get_server_capabilities to conserve context tokens.
 # The closed fleet error_code enum (Response-Envelope Standard v1). Nothing outside
 # this set may reach the wire: _error_envelope clamps any stray code to `internal`,
@@ -54,6 +55,15 @@ ERROR_CODES = frozenset(
 )
 _RETRYABLE = {"rate_limited", "upstream_unavailable"}
 _UNSAFE_FOR_CLINICAL_USE = True
+# Provenance (Response-Envelope Standard v1.2). The SPARQL endpoint is queried
+# live and reports no release per response, so data_version is the literal
+# `live` and retrieved_at dates the data.
+# ponytail: get_server_capabilities.uniprot_release is the release the bundled
+# queries were validated against; read the endpoint's release at runtime to
+# report it here.
+_SOURCE = "uniprot"
+_DATA_VERSION = "live"
+_STARTED: ContextVar[float | None] = ContextVar("uniprot_tool_started", default=None)
 
 
 @dataclass
@@ -73,6 +83,12 @@ class McpToolError(Exception):
         super().__init__(message)
         self.error_code = error_code
         self.message = message
+
+
+def _elapsed_ms() -> float:
+    """Milliseconds since run_mcp_tool started this call (0 outside one)."""
+    started = _STARTED.get()
+    return 0.0 if started is None else round((time.monotonic() - started) * 1000.0, 1)
 
 
 def _request_id() -> str:
@@ -155,6 +171,7 @@ def _error_envelope(exc: BaseException, context: McpErrorContext) -> dict[str, A
         "_meta": {
             "tool": context.tool_name,
             "request_id": _request_id(),
+            "elapsed_ms": _elapsed_ms(),
             "unsafe_for_clinical_use": _UNSAFE_FOR_CLINICAL_USE,
         },
     }
@@ -228,6 +245,7 @@ def build_unknown_tool_envelope() -> dict[str, Any]:
         "_meta": {
             "tool": None,
             "request_id": _request_id(),
+            "elapsed_ms": _elapsed_ms(),
             "next_commands": [cmd("get_server_capabilities")],
             "unsafe_for_clinical_use": _UNSAFE_FOR_CLINICAL_USE,
         },
@@ -259,6 +277,7 @@ def build_internal_tool_envelope() -> dict[str, Any]:
         "_meta": {
             "tool": None,
             "request_id": _request_id(),
+            "elapsed_ms": _elapsed_ms(),
             "next_commands": [cmd("get_server_capabilities")],
             "unsafe_for_clinical_use": _UNSAFE_FOR_CLINICAL_USE,
         },
@@ -327,6 +346,7 @@ def build_arg_error_envelope(
         "_meta": {
             "tool": tool_name,
             "request_id": _request_id(),
+            "elapsed_ms": _elapsed_ms(),
             "next_commands": [cmd("get_server_capabilities")],
             "unsafe_for_clinical_use": _UNSAFE_FOR_CLINICAL_USE,
         },
@@ -369,15 +389,25 @@ async def run_mcp_tool(
     """Execute a tool body, returning the result dict or a structured error dict."""
     ctx = context or McpErrorContext(tool_name=tool_name)
     try:
+        _STARTED.set(time.monotonic())
+        fetches = begin_fetch_log()
         result = await call()
         if isinstance(result, dict):
-            result.setdefault("success", True)
-            existing_meta: dict[str, Any] = result.get("_meta") or {}
-            result["_meta"] = {
-                **existing_meta,
-                "tool": tool_name,
-                "request_id": _request_id(),
-                "unsafe_for_clinical_use": _UNSAFE_FOR_CLINICAL_USE,
+            existing_meta: dict[str, Any] = result.pop("_meta", None) or {}
+            result.pop("success", None)
+            result = {
+                "success": True,
+                "result": result,
+                "_meta": {
+                    **existing_meta,
+                    "tool": tool_name,
+                    "request_id": _request_id(),
+                    "elapsed_ms": _elapsed_ms(),
+                    "source": _SOURCE,
+                    "data_version": _DATA_VERSION,
+                    "retrieved_at": retrieved_at(fetches),
+                    "unsafe_for_clinical_use": _UNSAFE_FOR_CLINICAL_USE,
+                },
             }
         return result
     except Exception as exc:  # broad catch is the error-boundary contract

@@ -56,7 +56,9 @@ These rules are encoded throughout `queries.py` and documented in `AGENTS.md`.
 
 ## Response contract
 
-Every tool returns a dict with `success` and `_meta`. `_meta.next_commands` is a
-ready-to-run list of `{tool, arguments}` so an agent can advance without guessing.
+Every tool returns `{success: true, result: {...}, _meta}` (Response-Envelope Standard
+v1.2). `_meta` names the provenance (`source`, `data_version`, `retrieved_at`) and
+`_meta.next_commands` is a ready-to-run list of `{tool, arguments}` so an agent can
+advance without guessing.
 Errors are returned (not raised) as `{success: false, error_code, message,
 retryable, recovery_action}`.

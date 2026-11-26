@@ -25,7 +25,7 @@ async def _read(mcp: Any, uri: str) -> str:
 @pytest.mark.asyncio
 async def test_capabilities_summary_is_default_and_light() -> None:
     mcp = create_uniprot_mcp()
-    env = _structured(await mcp.call_tool("get_server_capabilities", {}))
+    env = _structured(await mcp.call_tool("get_server_capabilities", {}))["result"]
     assert env["detail"] == "summary"
     assert "tool_signatures" in env
     assert env["tool_signatures"]["find_proteins"].startswith("find_proteins(")
@@ -39,7 +39,7 @@ async def test_capabilities_summary_is_default_and_light() -> None:
 async def test_capabilities_exposes_argument_value_sets() -> None:
     """F1: enum value sets are discoverable BEFORE a failed call."""
     mcp = create_uniprot_mcp()
-    env = _structured(await mcp.call_tool("get_server_capabilities", {}))
+    env = _structured(await mcp.call_tool("get_server_capabilities", {}))["result"]
     avs = env["argument_value_sets"]
     assert avs["get_protein_go_terms"]["aspect"] == [
         "biological_process",
@@ -54,7 +54,7 @@ async def test_capabilities_exposes_argument_value_sets() -> None:
 @pytest.mark.asyncio
 async def test_capabilities_full_restores_heavy_blocks() -> None:
     mcp = create_uniprot_mcp()
-    env = _structured(await mcp.call_tool("get_server_capabilities", {"detail": "full"}))
+    env = _structured(await mcp.call_tool("get_server_capabilities", {"detail": "full"}))["result"]
     assert env["detail"] == "full"
     assert env["named_graph_count"] == 21
     assert env["prefixes"]["up"] == "http://purl.uniprot.org/core/"

@@ -284,7 +284,7 @@ async def test_get_protein_sequence_tool_accepts_canonical_only(service_factory:
         )
         payload = result.structured_content if hasattr(result, "structured_content") else result
         assert payload["success"] is True
-        assert payload["isoforms"] == []
+        assert payload["result"]["isoforms"] == []
     finally:
         service_adapters.set_sparql_service(None)
 
@@ -649,7 +649,7 @@ async def test_get_protein_variants_tool_forwards_position_range(
         )
         payload = result.structured_content if hasattr(result, "structured_content") else result
         assert payload["success"] is True
-        assert payload["position_range"]["semantics"] == "inclusive_overlap"
+        assert payload["result"]["position_range"]["semantics"] == "inclusive_overlap"
     finally:
         service_adapters.set_sparql_service(None)
 
@@ -1075,7 +1075,16 @@ async def test_per_call_meta_is_lean() -> None:
 
     out = await run_mcp_tool("demo", call, context=McpErrorContext("demo"))
     meta = out["_meta"]
-    assert set(meta) <= {"tool", "request_id", "next_commands", "unsafe_for_clinical_use"}
+    assert set(meta) <= {
+        "tool",
+        "request_id",
+        "elapsed_ms",
+        "source",
+        "data_version",
+        "retrieved_at",
+        "next_commands",
+        "unsafe_for_clinical_use",
+    }
     assert meta["unsafe_for_clinical_use"] is True
     assert "uniprot_release" not in meta
     assert "citation" not in meta
@@ -1088,6 +1097,10 @@ async def test_per_call_meta_is_lean() -> None:
     assert cap["per_call_meta"] == [
         "tool",
         "request_id",
+        "elapsed_ms",
+        "source",
+        "data_version",
+        "retrieved_at",
         "next_commands",
         "unsafe_for_clinical_use",
     ]
@@ -1127,7 +1140,7 @@ async def test_tool_call_through_facade(service_factory: Any) -> None:
         result = await mcp.call_tool("get_protein", {"accession": "P05067"})
         payload = result.structured_content if hasattr(result, "structured_content") else result
         assert payload["success"] is True
-        assert payload["mnemonic"] == "A4_HUMAN"
+        assert payload["result"]["mnemonic"] == "A4_HUMAN"
         assert payload["_meta"]["next_commands"][0]["tool"] == "get_protein_sequence"
     finally:
         service_adapters.set_sparql_service(None)
@@ -1177,7 +1190,7 @@ async def test_default_feature_and_variant_tools_complete_through_facade(
             result = await mcp.call_tool(name, {"accession": "P05067"})
             payload = result.structured_content if hasattr(result, "structured_content") else result
             assert payload["success"] is True
-            assert payload["count"] == 1
+            assert payload["result"]["count"] == 1
             assert payload["_meta"]["tool"] == name
     finally:
         service_adapters.set_sparql_service(None)
