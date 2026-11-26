@@ -347,7 +347,7 @@ def protein_features(
                 # never the (length-capped) message — so it can never truncate.
                 raise InvalidInputError(
                     (
-                        f"Feature type '{ft}' is unavailable from this source."
+                        f"Feature type '{normalized}' is unavailable from this source."
                         if hint
                         else "feature_types: unknown feature type. See allowed_values "
                         "or call get_server_capabilities (feature_types)."

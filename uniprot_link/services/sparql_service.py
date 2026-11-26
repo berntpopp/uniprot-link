@@ -586,7 +586,7 @@ class SparqlService(FindProteinsServiceMixin, TaxonomyServiceMixin):
         )
         if detail is None:
             raise NotFoundError(
-                f"No example found for '{example_iri}'. "
+                "example_id: no example found for this id. "
                 "Use search_example_queries to list valid example ids."
             )
         return {"example_id": example_iri, **detail}
