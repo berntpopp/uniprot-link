@@ -347,11 +347,11 @@ async def test_large_variant_list_over_128_descriptions_does_not_raise() -> None
 
 
 @pytest.mark.asyncio
-async def test_large_feature_list_over_128_descriptions_does_not_raise(
+async def test_large_feature_list_over_128_descriptions_is_cut_and_flagged(
     service_factory: Any,
 ) -> None:
-    """The full get_protein_features path emits a 200-feature list (> the default
-    128 ceiling) without raising -- the emitted-subset enforcement uses 10000."""
+    """A 200-feature list (> the default 128 ceiling) does not raise: it is cut at 128
+    fenced objects with a typed truncation flag (GTS-CORE-TXT-03)."""
     rows_over_ceiling = [
         {
             "type": "http://purl.uniprot.org/core/Domain_Extent_Annotation",
@@ -366,7 +366,14 @@ async def test_large_feature_list_over_128_descriptions_does_not_raise(
         [("up:obsolete ?obsolete", _ACTIVE_STATUS), ("up:annotation", features_body)]
     )
     out = await svc.get_features("P38398", limit=1000)
-    assert out["count"] == 200
+    assert out["count"] == 128
+    assert out["untrusted_text_limit"]["truncated"] is True
+    assert out["truncated"] == {
+        "returned": 128,
+        "total": 200,
+        "reason": "untrusted-text object ceiling reached",
+        "recovery": out["truncated"]["recovery"],
+    }
     assert all(f["description"]["kind"] == "untrusted_text" for f in out["features"])
 
 

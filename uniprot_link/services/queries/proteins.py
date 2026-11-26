@@ -118,8 +118,7 @@ def find_proteins(
         raw_mnemonic = mnemonic.strip().upper()
         if not re.match(r"^[0-9A-Z]+_[0-9A-Z]+$", raw_mnemonic):
             raise InvalidInputError(
-                f"'{mnemonic}' is not a valid UniProtKB entry mnemonic "
-                "(NAME_SPECIES, e.g. BRCA1_HUMAN).",
+                "mnemonic: not a valid UniProtKB entry mnemonic (NAME_SPECIES, e.g. BRCA1_HUMAN).",
                 field="mnemonic",
             )
         filters.append(f'  ?protein up:mnemonic "{escape_literal(raw_mnemonic)}" .')
@@ -127,7 +126,9 @@ def find_proteins(
     if ec_number:
         ec = ec_number.strip()
         if not re.match(r"^\d+(\.\d+){0,3}(\.-)*$", ec):
-            raise InvalidInputError(f"'{ec_number}' is not a valid EC number.", field="ec_number")
+            raise InvalidInputError(
+                "ec_number: not a valid EC number (e.g. 3.4.21.4).", field="ec_number"
+            )
         filters.append(f"  ?protein up:enzyme <http://purl.uniprot.org/enzyme/{ec}> .")
         strong = True
     if keyword:
@@ -149,7 +150,7 @@ def find_proteins(
             )
         else:
             raise InvalidInputError(
-                f"'{keyword}' is not a valid UniProt keyword "
+                "keyword: not a valid UniProt keyword "
                 "(a KW-id like KW-0007, or a keyword label like 'Acetylation').",
                 field="keyword",
             )
@@ -348,7 +349,7 @@ def protein_features(
                     (
                         f"Feature type '{ft}' is unavailable from this source."
                         if hint
-                        else f"Unknown feature type '{ft}'. See allowed_values "
+                        else "feature_types: unknown feature type. See allowed_values "
                         "or call get_server_capabilities (feature_types)."
                     ),
                     field="feature_types",

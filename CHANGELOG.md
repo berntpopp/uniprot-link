@@ -6,6 +6,13 @@ versioning.
 
 ## [Unreleased]
 
+## [6.0.2] - 2026-11-26
+
+### Fixed
+
+- `get_protein_features`, `get_protein_variants` and `get_protein_diseases` no longer return more than the default 128 fenced `untrusted_text` objects per result without saying so (GTS-CORE-TXT-03): the emitted list is cut at the ceiling and the response carries `untrusted_text_limit: {truncated: true, ...}` plus the standard `truncated` block. `compact`/`minimal` modes, which drop the fenced prose, are not cut.
+- Invalid-input error messages no longer interpolate the caller's value (GTS-CORE-TXT-04): `accession` (all accession tools and `resolve_identifiers`), `databases`, `taxon_id`, `mnemonic`, `ec_number`, `keyword`, `feature_types` and `result_format` now use fixed text naming the parameter and the expected format.
+
 ## [6.0.1] - 2026-11-26
 
 ### Fixed

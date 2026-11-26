@@ -19,6 +19,7 @@ from typing import Any
 
 from uniprot_link.mcp.untrusted_content import (
     UntrustedText,
+    cap_fenced_records,
     enforce_untrusted_text_limits,
     fence_untrusted_text,
 )
@@ -27,12 +28,9 @@ from uniprot_link.services.shaping import local_name, rows
 
 _UNTRUSTED_SOURCE = "uniprot"
 
-# These three shapers return uncapped embedded lists: a large protein (TTN, TP53,
-# BRCA1) legitimately carries well over the v1.1 default 128-object ceiling of
-# description-bearing feature/variant/disease annotations. Enforcing the default
-# max_objects here would raise UntrustedTextLimitError on a real query, so we lift
-# the count ceiling to a generous 10000; the per-object 2 MiB and 8 MiB total byte
-# limits remain the real DoS backstop (10000 real descriptions hit 8 MiB first).
+# Shape time fences every FETCHED annotation, so only the byte ceilings are enforced here
+# (count lifted to 10000); the service cuts the EMITTED list at the v1.1 default 128-object
+# ceiling with a typed truncation flag (cap_fenced_records, GTS-CORE-TXT-03).
 _MAX_UNTRUSTED_OBJECTS = 10_000
 
 _ANNOTATION_FIELDS: dict[str, dict[str, tuple[str, ...]]] = {
@@ -76,6 +74,14 @@ def project_annotation_records(
     return [
         {field: value for field, value in record.items() if field in fields} for record in records
     ]
+
+
+def project_capped(
+    records: list[dict[str, Any]], *, kind: str, mode: str
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]], dict[str, Any] | None]:
+    """Project, then cut at the untrusted-text object ceiling: (raw prefix, projected, flag)."""
+    projected, flag = cap_fenced_records(project_annotation_records(records, kind=kind, mode=mode))
+    return records[: len(projected)], projected, flag
 
 
 def shape_features(result_json: dict[str, Any] | None, accession: str) -> list[dict[str, Any]]:

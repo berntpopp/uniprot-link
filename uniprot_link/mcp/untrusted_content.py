@@ -15,7 +15,7 @@ from __future__ import annotations
 import hashlib
 import unicodedata
 from datetime import UTC, datetime
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
@@ -110,6 +110,32 @@ def enforce_untrusted_text_limits(
         raise UntrustedTextLimitError(
             f"untrusted total {total} bytes exceeds ceiling {max_total_text_bytes}"
         )
+
+
+def cap_fenced_records(
+    records: list[dict[str, Any]], *, max_objects: int = DEFAULT_MAX_OBJECTS
+) -> tuple[list[dict[str, Any]], dict[str, Any] | None]:
+    """Keep the longest record prefix carrying at most ``max_objects`` fenced values.
+
+    Returns ``(kept, flag)``; ``flag`` is a typed ``{"truncated": True, ...}`` marker when
+    the ceiling cut records (GTS-CORE-TXT-03: never a silent omission), else ``None``.
+    """
+    seen = 0
+    for i, record in enumerate(records):
+        seen += sum(
+            1 for v in record.values() if isinstance(v, dict) and v.get("kind") == "untrusted_text"
+        )
+        if seen > max_objects:
+            return records[:i], {
+                "truncated": True,
+                "reason": "untrusted-text object ceiling reached",
+                "max_objects": max_objects,
+                "returned": i,
+                "total": len(records),
+                "recovery": "narrow the request (filters, position range or a smaller "
+                "limit), or use response_mode=compact to drop the fenced prose.",
+            }
+    return records, None
 
 
 #: Length cap for caller-visible free-text message/error strings.
