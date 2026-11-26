@@ -62,8 +62,12 @@ async def test_find_proteins_resolves_hgnc_and_ncbi_ids(service_factory: Any) ->
     for given, form in (("HGNC:6407", "hgnc_id"), ("NCBIGene:3845", "ncbi_gene_id")):
         args = {"gene_symbol": given, "organism_taxon": 9606, "reviewed": True}
         out = await _call(svc, "find_proteins", args)
-        assert out["success"] is True and out["proteins"][0]["accession"] == "P01116"
-        assert out["resolved_from"] == {"input": given, "form": form, "resolved_to": "P01116"}
+        assert out["success"] is True and out["result"]["proteins"][0]["accession"] == "P01116"
+        assert out["result"]["resolved_from"] == {
+            "input": given,
+            "form": form,
+            "resolved_to": "P01116",
+        }
     assert not any("skos:prefLabel" in q for q in svc.client.calls)
 
 
@@ -113,7 +117,7 @@ async def test_batch_transcript_id_is_unsupported_without_converter(service_fact
         {"gene_symbols": ["ENST00000311936", "HGNC:6407"], "reviewed": True},
     )
     assert out["success"] is True
-    assert out["unresolved_reasons"] == {"ENST00000311936": "unsupported_identifier"}
+    assert out["result"]["unresolved_reasons"] == {"ENST00000311936": "unsupported_identifier"}
     assert out["_meta"]["next_commands"] == [
         {"tool": "get_protein", "arguments": {"accession": "P01116"}}
     ]
@@ -136,8 +140,12 @@ async def test_bare_number_that_is_a_gene_name_still_matches(service_factory: An
     """Phage genes are numbered: a bare number that names a gene keeps working."""
     svc = service_factory([('skos:prefLabel "1"', _hits(("P00573", "RPOL_BPT7", "T7 RNAP")))])
     out = await _call(svc, "find_proteins", {"gene_symbol": "1", "reviewed": True})
-    assert out["success"] is True and out["count"] == 1 and "resolved_from" not in out
-    assert "NCBIGene:<n>" in out["hint"]
+    assert (
+        out["success"] is True
+        and out["result"]["count"] == 1
+        and "resolved_from" not in out["result"]
+    )
+    assert "NCBIGene:<n>" in out["result"]["hint"]
 
 
 @pytest.mark.asyncio
@@ -146,17 +154,17 @@ async def test_id_naming_several_reviewed_entries_resolves_to_none(service_facto
     gnas = _hits(("P84996", "ALEX_HUMAN", "ALEX"), ("P63092", "GNAS2_HUMAN", "Gs alpha"))
     svc = service_factory([("rdfs:seeAlso <http://purl.uniprot.org/hgnc/4392>", gnas)])
     out = await _call(svc, "find_proteins", {"gene_symbol": "HGNC:4392", "reviewed": True})
-    assert out["count"] == 2
-    assert out["resolved_from"] == {"input": "HGNC:4392", "form": "hgnc_id"}
+    assert out["result"]["count"] == 2
+    assert out["result"]["resolved_from"] == {"input": "HGNC:4392", "form": "hgnc_id"}
     out = await _call(svc, "find_proteins_batch", {"gene_symbols": ["HGNC:4392"], "reviewed": True})
-    assert out["resolved_from"] == [{"input": "HGNC:4392", "form": "hgnc_id"}]
+    assert out["result"]["resolved_from"] == [{"input": "HGNC:4392", "form": "hgnc_id"}]
 
 
 @pytest.mark.asyncio
 async def test_leading_zeros_do_not_reach_the_query(service_factory: Any) -> None:
     svc = service_factory([(_HGNC_XREF, _KRAS)])
     out = await _call(svc, "find_proteins", {"gene_symbol": "HGNC:06407", "reviewed": True})
-    assert out["count"] == 1 and out["resolved_from"]["resolved_to"] == "P01116"
+    assert out["result"]["count"] == 1 and out["result"]["resolved_from"]["resolved_to"] == "P01116"
 
 
 @pytest.mark.asyncio
@@ -174,7 +182,7 @@ async def test_accession_in_gene_slot_without_hits_points_at_get_protein(
 async def test_accession_shaped_symbol_with_hits_is_a_normal_result(service_factory: Any) -> None:
     svc = service_factory([('skos:prefLabel "P2RY10"', _hits(("O00398", "P2Y10_HUMAN", "P2Y10")))])
     out = await _call(svc, "find_proteins", {"gene_symbol": "P2RY10", "reviewed": True})
-    assert out["success"] is True and out["count"] == 1 and "hint" not in out
+    assert out["success"] is True and out["result"]["count"] == 1 and "hint" not in out["result"]
 
 
 @pytest.mark.asyncio
@@ -203,7 +211,11 @@ async def test_ambiguous_id_message_names_the_id(service_factory: Any) -> None:
 @pytest.mark.asyncio
 async def test_real_symbol_without_data_keeps_the_honest_empty(service_factory: Any) -> None:
     out = await _call(service_factory([]), "find_proteins", {"gene_symbol": "NOTAGENE1"})
-    assert out["success"] is True and out["count"] == 0 and "resolved_from" not in out
+    assert (
+        out["success"] is True
+        and out["result"]["count"] == 0
+        and "resolved_from" not in out["result"]
+    )
 
 
 @pytest.mark.asyncio
@@ -216,17 +228,17 @@ async def test_batch_reports_a_reason_per_unresolved_item(service_factory: Any) 
         {"gene_symbols": ["ENSG00000133703", "HGNC:6407", "3845", "NOTAGENE1"], "reviewed": True},
     )
     assert out["success"] is True
-    assert out["resolved_genes"] == ["HGNC:6407"]
-    assert out["by_gene"]["HGNC:6407"] == ["P01116"]
-    assert out["resolved_from"] == [
+    assert out["result"]["resolved_genes"] == ["HGNC:6407"]
+    assert out["result"]["by_gene"]["HGNC:6407"] == ["P01116"]
+    assert out["result"]["resolved_from"] == [
         {"input": "HGNC:6407", "form": "hgnc_id", "resolved_to": "P01116"}
     ]
-    assert out["unresolved_reasons"] == {
+    assert out["result"]["unresolved_reasons"] == {
         "ENSG00000133703": "unsupported_identifier",
         "3845": "unsupported_identifier",
         "NOTAGENE1": "not_found",
     }
-    assert "converters" not in out
+    assert "converters" not in out["result"]
     assert out["_meta"]["next_commands"] == [
         _SYMBOL_CALL,
         _ENTREZ_CALL,
@@ -254,8 +266,8 @@ async def test_accession_slot_resolves_an_hgnc_id(service_factory: Any) -> None:
         [(_HGNC_XREF, _KRAS), ("up:obsolete ?obsolete", _ACTIVE), ("up:recommendedName", _SUMMARY)]
     )
     out = await _call(svc, "get_protein", {"accession": "HGNC:6407"})
-    assert out["success"] is True and out["accession"] == "P01116"
-    assert out["resolved_from"] == {
+    assert out["success"] is True and out["result"]["accession"] == "P01116"
+    assert out["result"]["resolved_from"] == {
         "input": "HGNC:6407",
         "form": "hgnc_id",
         "resolved_to": "P01116",

@@ -94,7 +94,7 @@ async def test_get_protein_function_is_fenced_typed_object(service_factory: Any)
     )
     routes = [("up:obsolete ?obsolete", _ACTIVE_STATUS), ("up:recommendedName", summary)]
     for payload in await _call(routes, "get_protein", {"accession": "P38398"}, service_factory):
-        _assert_fenced(payload["function"], record_id="P38398")
+        _assert_fenced(payload["result"]["function"], record_id="P38398")
         _assert_no_synthesized_sibling(payload)
 
 
@@ -118,7 +118,7 @@ async def test_get_protein_features_description_is_fenced_typed_object(
         routes, "get_protein_features", {"accession": "P38398"}, service_factory
     )
     for payload in (structured, mirror):
-        item = payload["features"][0]
+        item = payload["result"]["features"][0]
         _assert_fenced(item["description"], record_id="P38398#feature:0")
         _assert_no_synthesized_sibling(item)
 
@@ -136,7 +136,7 @@ async def test_get_protein_variants_description_is_fenced_typed_object(
         routes, "get_protein_variants", {"accession": "P38398"}, service_factory
     )
     for payload in (structured, mirror):
-        item = payload["variants"][0]
+        item = payload["result"]["variants"][0]
         _assert_fenced(item["description"], record_id="P38398#variant:0")
         _assert_no_synthesized_sibling(item)
 
@@ -163,7 +163,7 @@ async def test_get_protein_diseases_involvement_and_definition_are_fenced(
         routes, "get_protein_diseases", {"accession": "P38398"}, service_factory
     )
     for payload in (structured, mirror):
-        item = payload["diseases"][0]
+        item = payload["result"]["diseases"][0]
         # both rdfs:comment surfaces on the record are fenced
         _assert_fenced(item["involvement"], record_id="P38398#disease:0")
         _assert_fenced(item["definition"], record_id="P38398#disease:0")
@@ -179,7 +179,7 @@ async def test_search_example_queries_description_is_fenced(service_factory: Any
     routes = [("sh:SPARQLExecutable", examples)]
     structured, mirror = await _call(routes, "search_example_queries", {}, service_factory)
     for payload in (structured, mirror):
-        item = payload["examples"][0]
+        item = payload["result"]["examples"][0]
         _assert_fenced(item["description"], record_id=_EXAMPLE_IRI)
         _assert_no_synthesized_sibling(item)
 
@@ -203,10 +203,10 @@ async def test_get_example_query_description_is_fenced(service_factory: Any) -> 
         routes, "get_example_query", {"example_id": _EXAMPLE_IRI}, service_factory
     )
     for payload in (structured, mirror):
-        _assert_fenced(payload["description"], record_id=_EXAMPLE_IRI)
+        _assert_fenced(payload["result"]["description"], record_id=_EXAMPLE_IRI)
         _assert_no_synthesized_sibling(payload)
         # the executable query text is NOT fenced (stays runnable) -- it is not prose
-        assert payload["query"] == "SELECT ?x WHERE {}"
+        assert payload["result"]["query"] == "SELECT ?x WHERE {}"
 
 
 @pytest.mark.asyncio
@@ -223,7 +223,7 @@ async def test_search_sparql_select_cell_is_fenced(service_factory: Any) -> None
         service_factory,
     )
     for payload in (structured, mirror):
-        row = payload["rows"][0]
+        row = payload["result"]["rows"][0]
         cell = row["comment"]
         _assert_fenced_core(cell)  # includes exact-equality on the sanitized sentence
         record_id = cell["provenance"]["record_id"]
@@ -281,9 +281,9 @@ async def test_search_sparql_raw_data_blob_is_fenced() -> None:
     finally:
         service_adapters.set_sparql_service(None)
     for payload in (structured, mirror):
-        _assert_fenced_core(payload["data"])  # exact-equality on the sanitized blob
-        assert payload["data"]["provenance"]["record_id"].startswith("sparql:")
-        assert payload["byte_length"] == len(HOSTILE)  # raw serialized length preserved
+        _assert_fenced_core(payload["result"]["data"])  # exact-equality on the sanitized blob
+        assert payload["result"]["data"]["provenance"]["record_id"].startswith("sparql:")
+        assert payload["result"]["byte_length"] == len(HOSTILE)  # raw serialized length preserved
         _assert_no_synthesized_sibling(payload)
 
 

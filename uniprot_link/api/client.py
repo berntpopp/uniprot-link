@@ -28,6 +28,7 @@ from uniprot_link.exceptions import (
     RateLimitError,
     ServiceUnavailableError,
 )
+from uniprot_link.provenance import note_fetch
 
 if TYPE_CHECKING:
     import types
@@ -239,6 +240,7 @@ class SparqlClient:
                     elapsed_ms=round(elapsed_ms, 1),
                 )
 
+            note_fetch()
             parsed = json.loads(body) if is_json else None
             return SparqlResult(
                 format=result_format,
