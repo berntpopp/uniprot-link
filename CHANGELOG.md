@@ -6,6 +6,12 @@ versioning.
 
 ## [Unreleased]
 
+## [6.0.1] - 2026-11-26
+
+### Fixed
+
+- `find_proteins_batch` called with only identifier forms it cannot take (for example `["ENSG00000133703"]`) no longer returns a success with no proteins. Nothing was looked up, so that read as "no such proteins". The call now returns `invalid_input` with `field`, `allowed_values` and the converters in `_meta.next_commands`, as `find_proteins` does (Response-Envelope Standard v1 §2b). A batch with at least one supported item is unchanged: the unsupported items are listed in `unresolved_reasons`.
+
 ## [6.0.0] - 2026-11-26
 
 ### Changed

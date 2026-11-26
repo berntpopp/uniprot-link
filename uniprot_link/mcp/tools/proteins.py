@@ -156,7 +156,7 @@ def _register_find_and_summary(mcp: FastMCP) -> None:
             "(gene -> accessions, reviewed-first), a flat proteins list tagged "
             "with matched_gene, resolved_genes, unresolved_genes and unresolved_reasons "
             "(not_found, or unsupported_identifier with its converter in next_commands; "
-            "HGNC:<n> and NCBIGene:<n> are accepted). Optionally "
+            "HGNC:<n>, NCBIGene:<n> accepted; no supported item at all = invalid_input). Optionally "
             "scope by organism_taxon (a positive NCBI taxon id or an exact "
             "common/scientific organism name) and reviewed. next_commands fan out to "
             "get_protein on each resolved gene's top hit. For a single gene use "
